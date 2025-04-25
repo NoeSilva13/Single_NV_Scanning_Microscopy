@@ -97,17 +97,6 @@ class GalvoScannerController:
     def connect_pm400(self, visa_address=None):
         """Initialize connection to Thorlabs PM400 power meter."""
         rm = pyvisa.ResourceManager()
-        
-        if visa_address is None:
-            # Auto-detect PM400 (use first Thorlabs device found)
-            resources = rm.list_resources()
-            for res in resources:
-                if "Thorlabs" in res or "PM400" in res:
-                    visa_address = res
-                    break
-            if visa_address is None:
-                raise ValueError("No Thorlabs PM400 detected!")
-
         self.pm400 = rm.open_resource(visa_address)
         print(f"Connected to PM400: {self.pm400.query('*IDN?')}")
 
@@ -123,7 +112,7 @@ class GalvoScannerController:
             float: Power in specified unit.
         """
         if self.pm400 is None:
-            self.connect_pm400()  # Auto-connect if not already done
+            self.connect_pm400('USB0::0x1313::0x8075::P5006633::INSTR')  # Auto-connect if not already done
 
         if wavelength is not None:
             self.pm400.write(f"SENS:CORR:WAV {wavelength}")  # Set wavelength

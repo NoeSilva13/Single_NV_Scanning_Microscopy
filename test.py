@@ -11,7 +11,8 @@ def two_dimensional_scan(scanner):
     x_points = np.linspace(-0.5, 0.5, 20)
     y_points = np.linspace(-0.5, 0.5, 20)
     
-    scan_data = scanner.scan_pattern(x_points, y_points, dwell_time=0.05)
+    #scan_data = scanner.scan_pattern(x_points, y_points, dwell_time=0.05)
+    scan_data = scanner.scan_pattern_opm(x_points, y_points, dwell_time=0.05)
     plot_scan_results(scan_data)
     return scan_data
 
