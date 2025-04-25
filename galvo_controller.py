@@ -3,6 +3,7 @@ import numpy as np
 import nidaqmx
 from nidaqmx.constants import (TerminalConfiguration, Edge, CountDirection)
 
+
 class GalvoScannerController:
     def __init__(self):
         self.spd_counter = "Dev1/ctr0"
@@ -42,6 +43,7 @@ class GalvoScannerController:
             count = counter_task.read()
             counter_task.stop()
         return count
+    
 
     def scan_pattern(self, x_points, y_points, dwell_time=0.01):
         scan_data = {'x': [], 'y': [], 'x_act': [], 'y_act': [], 'counts': []}
@@ -57,6 +59,21 @@ class GalvoScannerController:
                 scan_data['y_act'].append(y_act)
                 scan_data['counts'].append(counts)
         return scan_data
+    
+    def scan_single_axis(self, axis='x', start=-5.0, end=5.0, points=20, 
+                        fixed_voltage=0.0, dwell_time=1):
+        
+        voltages = np.linspace(start, end, points)
+        
+        for v in voltages:
+            if axis.lower() == 'x':
+                self.set_voltages(v, fixed_voltage)
+            else:
+                self.set_voltages(fixed_voltage, v)
+                    
+            time.sleep(dwell_time)
+                    
+        return 
 
     def close(self):
         self.set_voltages(0, 0)

@@ -5,8 +5,8 @@ from scan_visualizer import plot_scan_results
 def main():
     scanner = GalvoScannerController()
     try:
-        x_points = np.linspace(-5, 5, 20)
-        y_points = np.linspace(-5, 5, 20)
+        x_points = np.linspace(-0.5, 0.5, 20)
+        y_points = np.linspace(0, 0, 20)
         
         # Run scan and get data
         scan_data = scanner.scan_pattern(x_points, y_points, dwell_time=0.05)
@@ -16,6 +16,7 @@ def main():
         
     finally:
         scanner.close()
-
+        
+        
 if __name__ == "__main__":
     main()
