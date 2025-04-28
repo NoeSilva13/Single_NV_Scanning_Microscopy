@@ -3,7 +3,7 @@ from galvo_controller import GalvoScannerController
 from scan_visualizer import plot_scan_results
 
 def single_axis_scan(scanner, axis='x'):
-    scanner.scan_single_axis(axis, start=-0.5, end=0.5, points=20, fixed_voltage=0.0, dwell_time=1)
+    scanner.scan_single_axis(axis, start=-1, end=1, points=200, fixed_voltage=0.0, dwell_time=0.05)
     return 
 
 def two_dimensional_scan(scanner):
@@ -33,10 +33,12 @@ def main():
             
             if choice == '1':
                 print("\nStarting X-axis scan...")
-                single_axis_scan(scanner, axis='x')
+                while True:
+                    single_axis_scan(scanner, axis='x')
             elif choice == '2':
                 print("\nStarting Y-axis scan...")
-                single_axis_scan(scanner, axis='y')
+                while True:
+                    single_axis_scan(scanner, axis='y')
             elif choice == '3':
                 print("\nStarting 2D raster scan...")
                 two_dimensional_scan(scanner)
