@@ -35,6 +35,12 @@ class GalvoScannerController:
             ai_task.ai_channels.add_ai_voltage_chan(self.yout_voltage, terminal_config=TerminalConfiguration.RSE)
             voltages = ai_task.read()
             return voltages[0], voltages[1]
+        
+    def read_voltages_2(self):
+        with nidaqmx.Task() as ai_task:
+            ai_task.ai_channels.add_ai_voltage_chan(self.yout_voltage, terminal_config=TerminalConfiguration.RSE)
+            voltage = ai_task.read(number_of_samples_per_channel=1)
+            return voltage
 
     def read_spd_count(self, sampling_time=0.1):
         with nidaqmx.Task() as counter_task:
@@ -76,6 +82,21 @@ class GalvoScannerController:
                 scan_data['y'].append(y)
                 scan_data['x_act'].append(x_act)
                 scan_data['y_act'].append(y_act)
+                scan_data['counts'].append(counts)
+        return scan_data
+    
+    def scan_pattern_pd(self, x_points, y_points, dwell_time=0.01):
+        scan_data = {'x': [], 'y': [], 'x_act': [], 'y_act': [], 'counts': []}
+        for y in y_points:
+            for x in x_points:
+                self.set_voltages(x, y)
+                time.sleep(dwell_time)
+                #x_act, y_act = self.read_voltages()
+                counts = self.read_voltages_2()
+                scan_data['x'].append(x)
+                scan_data['y'].append(y)
+                #scan_data['x_act'].append(x_act)
+                #scan_data['y_act'].append(y_act)
                 scan_data['counts'].append(counts)
         return scan_data
     
