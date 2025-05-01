@@ -8,12 +8,12 @@ def single_axis_scan(scanner, axis='x'):
 
 def two_dimensional_scan(scanner):
     """Perform a full 2D raster scan"""
-    x_points = np.linspace(-0.1, 0.1, 40)
-    y_points = np.linspace(-0.1, 0.1, 40)
+    x_points = np.linspace(-0.05, 0.05, 10)
+    y_points = np.linspace(-0.1, 0.1, 10)
     
-    #scan_data = scanner.scan_pattern(x_points, y_points, dwell_time=0.05)
+    scan_data = scanner.scan_pattern(x_points, y_points, dwell_time=1)
     #scan_data = scanner.scan_pattern_opm(x_points, y_points, dwell_time=0.05)
-    scan_data = scanner.scan_pattern_pd(x_points, y_points, dwell_time=0.01)
+    #scan_data = scanner.scan_pattern_pd(x_points, y_points, dwell_time=0.01)
     plot_scan_results(scan_data)
     return scan_data
 
@@ -23,8 +23,9 @@ def show_menu():
     print("1. Perform X-axis scan (Y=0)")
     print("2. Perform Y-axis scan (X=0)")
     print("3. Perform 2D raster scan")
-    print("4. Reset to (0,0)")
-    print("5. Exit")
+    print("4. Set to (x,y)")
+    print("5. Reset to (0,0)")
+    print("6. Exit")
     return input("Select an option (1-4): ")
 
 def main():
@@ -45,9 +46,13 @@ def main():
                 print("\nStarting 2D raster scan...")
                 two_dimensional_scan(scanner)
             elif choice == '4':
+                x=input("Input x:")
+                y=input("Input y:")
+                scanner.set(float(x), float(y))
+            elif choice == '5':
                 scanner.close()
                 print("Scanner safely reset to (0,0)")
-            elif choice == '5':
+            elif choice == '6':
                 print("Exiting program...")
                 break
             else:

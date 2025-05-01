@@ -3,6 +3,8 @@ import numpy as np
 import nidaqmx
 from nidaqmx.constants import (TerminalConfiguration, Edge, CountDirection)
 import pyvisa
+import csv
+
 
 class GalvoScannerController:
     def __init__(self):
@@ -55,19 +57,89 @@ class GalvoScannerController:
         return count
     
 
+    # def scan_pattern(self, x_points, y_points, dwell_time=0.01):
+    #     scan_data = {'x': [], 'y': [], 'x_act': [], 'y_act': [], 'counts': []}
+    #     for y in y_points:
+    #         for x in x_points:
+    #             self.set_voltages(x, y)
+    #             time.sleep(dwell_time)
+    #             x_act, y_act = self.read_voltages()
+    #             counts = self.read_spd_count(dwell_time)
+    #             scan_data['x'].append(x)
+    #             scan_data['y'].append(y)
+    #             scan_data['x_act'].append(x_act)
+    #             scan_data['y_act'].append(y_act)
+    #             scan_data['counts'].append(counts)
+    #     return scan_data
+    
+    def save_scan_data(self, scan_data, filename="scan_data.csv"):
+        with open(filename, mode='w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(['x', 'y', 'counts'])  # Header without x_act and y_act
+
+            for x, y, counts in zip(scan_data['x'], scan_data['y'], scan_data['counts']):
+                writer.writerow([x, y, counts])
+        
+        
+        
+    def save_scan_data_2d(self, scan_data, x_points, y_points, filename="scan_data_2d.csv"):
+        # Initialize a 2D list for counts data (rows: y, columns: x)
+        # Map counts into a 2D array (row-major by y, then x)
+        count_matrix = []
+        index = 0
+        for _ in y_points:
+            row = []
+            for _ in x_points:
+                row.append(scan_data['counts'][index])
+                index += 1
+            count_matrix.append(row)
+
+        # Write to CSV
+        with open(filename, mode='w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            # Write header: empty cell followed by x_points
+            writer.writerow(['y \\ x'] + x_points)
+            # Write each row: y_value followed by corresponding row of counts
+            for y_val, row in zip(y_points, count_matrix):
+                writer.writerow([y_val] + row)
+    
     def scan_pattern(self, x_points, y_points, dwell_time=0.01):
         scan_data = {'x': [], 'y': [], 'x_act': [], 'y_act': [], 'counts': []}
-        for y in y_points:
-            for x in x_points:
-                self.set_voltages(x, y)
-                time.sleep(dwell_time)
-                x_act, y_act = self.read_voltages()
-                counts = self.read_spd_count(dwell_time)
-                scan_data['x'].append(x)
-                scan_data['y'].append(y)
-                scan_data['x_act'].append(x_act)
-                scan_data['y_act'].append(y_act)
-                scan_data['counts'].append(counts)
+        
+        with nidaqmx.Task() as ao_task, nidaqmx.Task() as ai_task, nidaqmx.Task() as counter_task:
+            # AO: set X/Y voltages
+            ao_task.ao_channels.add_ao_voltage_chan(self.xin_control)
+            ao_task.ao_channels.add_ao_voltage_chan(self.yin_control)
+
+            # AI: read feedback Xout/Yout
+            ai_task.ai_channels.add_ai_voltage_chan(self.xout_voltage, terminal_config=TerminalConfiguration.RSE)
+            ai_task.ai_channels.add_ai_voltage_chan(self.yout_voltage, terminal_config=TerminalConfiguration.RSE)
+
+            # Counter: SPD counts
+            ci = counter_task.ci_channels.add_ci_count_edges_chan(self.spd_counter, edge=Edge.RISING, initial_count=0)
+            ci.ci_count_edges_term = self.spd_edge_source
+            
+
+            for y in y_points:
+                for x in x_points:
+                    ao_task.write([x, y])
+                    time.sleep(0.01)
+                    
+                    #x_act, y_act = ai_task.read()
+                    counter_task.start()
+                    time.sleep(dwell_time)
+                    counts = counter_task.read()
+                    counter_task.stop()
+                    #counter_task.ci_channels[0].initial_count = 0  # Reset count for next step
+
+                    scan_data['x'].append(x)
+                    scan_data['y'].append(y)
+                    #scan_data['x_act'].append(x_act)
+                    #scan_data['y_act'].append(y_act)
+                    scan_data['counts'].append(counts)
+                    
+        self.save_scan_data(scan_data)
+        #self.save_scan_data_2d(scan_data, x_points, y_points)
         return scan_data
     
     def scan_pattern_opm(self, x_points, y_points, dwell_time=0.01):
@@ -86,19 +158,25 @@ class GalvoScannerController:
         return scan_data
     
     def scan_pattern_pd(self, x_points, y_points, dwell_time=0.01):
-        scan_data = {'x': [], 'y': [], 'x_act': [], 'y_act': [], 'counts': []}
-        for y in y_points:
-            for x in x_points:
-                self.set_voltages(x, y)
-                time.sleep(dwell_time)
-                #x_act, y_act = self.read_voltages()
-                counts = self.read_voltages_2()
-                scan_data['x'].append(x)
-                scan_data['y'].append(y)
-                #scan_data['x_act'].append(x_act)
-                #scan_data['y_act'].append(y_act)
-                scan_data['counts'].append(counts)
+        scan_data = {'x': [], 'y': [], 'counts': []}
+        
+        with nidaqmx.Task() as ao_task, nidaqmx.Task() as ai_task:
+            ao_task.ao_channels.add_ao_voltage_chan(self.xin_control)
+            ao_task.ao_channels.add_ao_voltage_chan(self.yin_control)
+
+            ai_task.ai_channels.add_ai_voltage_chan(self.yout_voltage, terminal_config=TerminalConfiguration.RSE)
+
+            for y in y_points:
+                for x in x_points:
+                    ao_task.write([x, y])
+                    time.sleep(dwell_time)
+                    voltage = ai_task.read()
+                    scan_data['x'].append(x)
+                    scan_data['y'].append(y)
+                    scan_data['counts'].append(voltage)
+                    
         return scan_data
+
     
     def scan_single_axis(self, axis='x', start=-5.0, end=5.0, points=20, 
                         fixed_voltage=0.0, dwell_time=1):
@@ -151,3 +229,7 @@ class GalvoScannerController:
 
     def close(self):
         self.set_voltages(0, 0)
+        
+    def set(self, x=0, y=0):
+        self.set_voltages(x, y)
+        print(f"Scanner safely set to ({x},{y})")
