@@ -42,6 +42,15 @@ class RealTimeScanVisualizer:
         
         # Initialize animation
         self.animation = None
+        self.scan_complete = False
+        self.current_scan = 0
+        
+    def reset_data(self):
+        """Reset the data array for a new scan."""
+        self.data = np.zeros((self.n_y, self.n_x))
+        self.scan_complete = False
+        self.current_scan += 1
+        self.ax.set_title(f'Real-time Scan Visualization - Scan {self.current_scan}')
         
     def update(self, frame_data):
         """
@@ -51,7 +60,17 @@ class RealTimeScanVisualizer:
             frame_data (tuple): (x_idx, y_idx, count) for the current point
         """
         x_idx, y_idx, count = frame_data
+        
+        # If we've completed a scan, reset the data
+        if self.scan_complete:
+            self.reset_data()
+        
+        # Update the data
         self.data[y_idx, x_idx] = count
+        
+        # Check if we've completed a scan
+        if x_idx == self.n_x - 1 and y_idx == self.n_y - 1:
+            self.scan_complete = True
         
         # Update the image data
         self.im.set_data(self.data)

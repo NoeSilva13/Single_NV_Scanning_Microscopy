@@ -139,6 +139,7 @@ class GalvoScannerController:
                             dwell_time: float = 0.01) -> Generator[Tuple[int, int, int], None, None]:
         """
         Perform a 2D raster scan with real-time data acquisition.
+        This generator will continuously yield scan points, allowing for continuous scanning.
         
         Args:
             x_points: X-axis voltage points
@@ -161,19 +162,20 @@ class GalvoScannerController:
             )
             counter_task.ci_channels[0].ci_count_edges_term = self.spd_edge_source
             
-            # Perform scan
-            for x_idx, y_idx, x, y in self.generate_scan_points(x_points, y_points):
-                # Set mirror position
-                ao_task.write([x, y])
-                time.sleep(self.settling_time)
-                
-                # Count photons
-                counter_task.start()
-                time.sleep(dwell_time)
-                counts = counter_task.read()
-                counter_task.stop()
-                
-                yield x_idx, y_idx, counts
+            while True:  # Continuous scanning loop
+                # Perform scan
+                for x_idx, y_idx, x, y in self.generate_scan_points(x_points, y_points):
+                    # Set mirror position
+                    ao_task.write([x, y])
+                    time.sleep(self.settling_time)
+                    
+                    # Count photons
+                    counter_task.start()
+                    time.sleep(dwell_time)
+                    counts = counter_task.read()
+                    counter_task.stop()
+                    
+                    yield x_idx, y_idx, counts
 
     def scan_pattern_buffered(self, x_points: np.ndarray, y_points: np.ndarray, 
                             dwell_time: float = 0.01) -> Dict[str, Any]:

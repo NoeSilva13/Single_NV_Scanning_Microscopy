@@ -97,7 +97,10 @@ class ScanningMicroscope:
                     self.x_points, self.y_points, self.config['dwell_time']
                 ):
                     yield x_idx, y_idx, counts
+                    # Allow for keyboard interrupt between points
+                    time.sleep(0.001)
             
+            print("Starting continuous scanning. Press Ctrl+C to stop.")
             self.visualizer.start_animation(data_generator())
         except Exception as e:
             print(f"Error during real-time scan: {str(e)}")
