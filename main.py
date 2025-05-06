@@ -1,115 +1,113 @@
 import numpy as np
+import time
 from galvo_controller import GalvoScannerController
-from scan_visualizer import plot_scan_results
+from scan_visualizer import RealTimeScanVisualizer, plot_scan_results
+import argparse
+import json
+import os
 
-def single_axis_scan(scanner, axis='x'):
-    """
-    Perform a single axis scan (either X or Y) with fixed voltage on the other axis.
+class ScanningMicroscope:
+    def __init__(self, config_file=None):
+        """
+        Initialize the scanning microscope system.
+        
+        Args:
+            config_file (str): Path to configuration file (optional)
+        """
+        self.controller = GalvoScannerController()
+        self.config = self._load_config(config_file) if config_file else self._default_config()
+        self.visualizer = None
+        
+    def _load_config(self, config_file):
+        """Load configuration from file."""
+        with open(config_file, 'r') as f:
+            return json.load(f)
     
-    Args:
-        scanner (GalvoScannerController): The galvo scanner controller instance
-        axis (str): Which axis to scan ('x' or 'y')
-    """
-    # Scan from 0V to 0.5V with 2 points (coarse scan for testing)
-    # Other axis is fixed at 0V with 100ms dwell time at each point
-    scanner.scan_single_axis(axis, start=0, end=0.5, points=2, fixed_voltage=0.0, dwell_time=0.1)
-    return 
-
-def two_dimensional_scan(scanner):
-    """
-    Perform a full 2D raster scan over a defined area.
+    def _default_config(self):
+        """Return default configuration."""
+        return {
+            'scan_range': {
+                'x': [-5.0, 5.0],
+                'y': [-5.0, 5.0]
+            },
+            'resolution': {
+                'x': 100,
+                'y': 100
+            },
+            'dwell_time': 0.01,
+            'scan_mode': 'realtime'  # or 'buffered'
+        }
     
-    Args:
-        scanner (GalvoScannerController): The galvo scanner controller instance
+    def save_config(self, filename):
+        """Save current configuration to file."""
+        with open(filename, 'w') as f:
+            json.dump(self.config, f, indent=4)
     
-    Returns:
-        dict: The collected scan data containing positions and measurements
-    """
-    # Define scan area: 
-    # X-axis: -0.05V to 0.05V with 10 points
-    # Y-axis: -0.1V to 0.1V with 10 points
-    x_points = np.linspace(-0.05, 0.05, 10)
-    y_points = np.linspace(-0.1, 0.1, 10)
+    def setup_scan(self):
+        """Set up scan parameters based on configuration."""
+        x_range = self.config['scan_range']['x']
+        y_range = self.config['scan_range']['y']
+        x_res = self.config['resolution']['x']
+        y_res = self.config['resolution']['y']
+        
+        self.x_points = np.linspace(x_range[0], x_range[1], x_res)
+        self.y_points = np.linspace(y_range[0], y_range[1], y_res)
+        
+        # Initialize visualizer
+        self.visualizer = RealTimeScanVisualizer(self.x_points, self.y_points)
     
-    # Perform the scan with 1 second dwell time per point
-    scan_data = scanner.scan_pattern(x_points, y_points, dwell_time=1)
-
-    #scan_data = scanner.scan_pattern_pd(x_points, y_points, dwell_time=0.01) # Using photodiode
-
-    # Visualize the results
-    plot_scan_results(scan_data)
-    return scan_data
-
-def show_menu():
-    """
-    Display the interactive menu for scanner control.
+    def run_scan(self):
+        """Run the scan with current configuration."""
+        if not self.visualizer:
+            self.setup_scan()
+        
+        if self.config['scan_mode'] == 'realtime':
+            self._run_realtime_scan()
+        else:
+            self._run_buffered_scan()
     
-    Returns:
-        str: User's menu selection
-    """
-    print("\nGalvo Scanner Control Menu")
-    print("1. Perform X-axis scan (Y=0)")
-    print("2. Perform Y-axis scan (X=0)")
-    print("3. Perform 2D raster scan")
-    print("4. Set to (x,y)") # Manually set specific position
-    print("5. Reset to (0,0)") # Zero position
-    print("6. Exit")
-    return input("Select an option (1-6): ")
+    def _run_realtime_scan(self):
+        """Run scan with real-time visualization."""
+        def data_generator():
+            for x_idx, y_idx, counts in self.controller.scan_pattern_realtime(
+                self.x_points, self.y_points, self.config['dwell_time']
+            ):
+                yield x_idx, y_idx, counts
+        
+        self.visualizer.start_animation(data_generator())
+    
+    def _run_buffered_scan(self):
+        """Run scan with buffered acquisition."""
+        scan_data = self.controller.scan_pattern_buffered(
+            self.x_points, self.y_points, self.config['dwell_time']
+        )
+        plot_scan_results(scan_data)
+    
+    def close(self):
+        """Safely close the system."""
+        if self.visualizer:
+            self.visualizer.stop_animation()
+        self.controller.close()
 
 def main():
-    """
-    Main program loop for interactive galvo scanner control.
-    """
-    # Initialize the scanner controller
-    scanner = GalvoScannerController()
+    parser = argparse.ArgumentParser(description='Single NV Scanning Microscope Control')
+    parser.add_argument('--config', type=str, help='Path to configuration file')
+    parser.add_argument('--mode', choices=['realtime', 'buffered'], help='Scanning mode')
+    args = parser.parse_args()
+    
+    # Initialize microscope
+    microscope = ScanningMicroscope(args.config)
+    
+    if args.mode:
+        microscope.config['scan_mode'] = args.mode
+    
     try:
-        # Main program loop
-        while True:
-            # Show menu and get user choice
-            choice = show_menu()
-            
-            # Process user selection
-            if choice == '1':
-                print("\nStarting X-axis scan...")
-                # Continuous X-axis scanning until interrupted
-                while True:
-                    single_axis_scan(scanner, axis='x')
-
-            elif choice == '2':
-                print("\nStarting Y-axis scan...")
-                # Continuous Y-axis scanning until interrupted
-                while True:
-                    single_axis_scan(scanner, axis='y')
-
-            elif choice == '3':
-                print("\nStarting 2D raster scan...")
-                # Perform single 2D scan
-                two_dimensional_scan(scanner)
-
-            elif choice == '4':
-                # Manual position setting
-                x=input("Input x:")
-                y=input("Input y:")
-                scanner.set(float(x), float(y))
-
-            elif choice == '5':
-                 # Reset to zero position
-                scanner.close() # This sets voltages to (0,0)
-                print("Scanner safely reset to (0,0)")
-
-            elif choice == '6':
-                # Exit program
-                print("Exiting program...")
-                break
-
-            else:
-                print("Invalid option. Please try again.")
-                
+        # Run scan
+        microscope.run_scan()
+    except KeyboardInterrupt:
+        print("\nScan interrupted by user")
     finally:
-        # Ensure scanner is properly closed on exit
-        scanner.close()
-        print("Scanner safely reset to (0,0)")
+        microscope.close()
 
-if __name__ == "__main__":
-    # Entry point for the program
+if __name__ == '__main__':
     main()

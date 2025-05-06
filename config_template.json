@@ -1,0 +1,21 @@
+{
+    "scan_range": {
+        "x": [-5.0, 5.0],
+        "y": [-5.0, 5.0]
+    },
+    "resolution": {
+        "x": 100,
+        "y": 100
+    },
+    "dwell_time": 0.01,
+    "scan_mode": "realtime",
+    "hardware": {
+        "sample_rate": 1000,
+        "samples_per_point": 10,
+        "settling_time": 0.001
+    },
+    "visualization": {
+        "colormap": "viridis",
+        "update_interval": 50
+    }
+} 

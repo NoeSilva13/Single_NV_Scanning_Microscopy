@@ -1,9 +1,10 @@
 import time
 import numpy as np
 import nidaqmx
-from nidaqmx.constants import (TerminalConfiguration, Edge, CountDirection)
+from nidaqmx.constants import (TerminalConfiguration, Edge, CountDirection, AcquisitionType, SampleTimingType)
 import pyvisa
 import csv
+from typing import Generator, Tuple, Dict, Any
 
 
 class GalvoScannerController:
@@ -14,7 +15,8 @@ class GalvoScannerController:
     - Voltage control for X/Y galvo mirrors
     - Position feedback reading
     - SPD photon counting
-    - Various scanning patterns and data saving options
+    - Real-time scanning with visualization
+    - Buffered scanning for improved performance
     """
     def __init__(self):
         """Initialize the controller with default DAQ channels and ranges."""
@@ -33,6 +35,11 @@ class GalvoScannerController:
         # Calibration factors
         self.x_calibration = 1.0
         self.y_calibration = 1.0
+        
+        # Scanning parameters
+        self.sample_rate = 1000  # Hz
+        self.samples_per_point = 10
+        self.settling_time = 0.001  # seconds
 
     # --------------------------
     # Basic Control Methods
@@ -92,57 +99,135 @@ class GalvoScannerController:
     # Scanning Methods
     # --------------------------
 
-    def scan_pattern(self, x_points, y_points, dwell_time=0.01):
+    def generate_scan_points(self, x_points: np.ndarray, y_points: np.ndarray) -> Generator[Tuple[int, int, float, float], None, None]:
         """
-        Perform a 2D raster scan with SPD counting.
+        Generate scan points for real-time scanning.
         
         Args:
-            x_points (array-like): X-axis voltage points
-            y_points (array-like): Y-axis voltage points
-            dwell_time (float): Time at each point in seconds
+            x_points: Array of X-axis voltage points
+            y_points: Array of Y-axis voltage points
             
-        Returns:
-            dict: Scan data containing positions and counts
+        Yields:
+            Tuple of (x_idx, y_idx, x_voltage, y_voltage)
         """
-        scan_data = {'x': [], 'y': [], 'x_act': [], 'y_act': [], 'counts': []}
-        
-        with nidaqmx.Task() as ao_task, nidaqmx.Task() as ai_task, nidaqmx.Task() as counter_task:
-            # Configure tasks once for efficiency
+        for y_idx, y in enumerate(y_points):
+            for x_idx, x in enumerate(x_points):
+                yield x_idx, y_idx, x, y
 
-            # AO: set X/Y voltages
+    def scan_pattern_realtime(self, x_points: np.ndarray, y_points: np.ndarray, 
+                            dwell_time: float = 0.01) -> Generator[Tuple[int, int, int], None, None]:
+        """
+        Perform a 2D raster scan with real-time data acquisition.
+        
+        Args:
+            x_points: X-axis voltage points
+            y_points: Y-axis voltage points
+            dwell_time: Time at each point in seconds
+            
+        Yields:
+            Tuple of (x_idx, y_idx, counts) for real-time visualization
+        """
+        with nidaqmx.Task() as ao_task, nidaqmx.Task() as counter_task:
+            # Configure analog output task
             ao_task.ao_channels.add_ao_voltage_chan(self.xin_control)
             ao_task.ao_channels.add_ao_voltage_chan(self.yin_control)
-
-            # AI: read feedback Xout/Yout
-            ai_task.ai_channels.add_ai_voltage_chan(self.xout_voltage, terminal_config=TerminalConfiguration.RSE)
-            ai_task.ai_channels.add_ai_voltage_chan(self.yout_voltage, terminal_config=TerminalConfiguration.RSE)
-
-            # Counter: SPD counts
-            ci = counter_task.ci_channels.add_ci_count_edges_chan(self.spd_counter, edge=Edge.RISING, initial_count=0)
-            ci.ci_count_edges_term = self.spd_edge_source
+            
+            # Configure counter task for SPD
+            counter_task.ci_channels.add_ci_count_edges_chan(
+                self.spd_counter,
+                edge=Edge.RISING,
+                initial_count=0
+            )
+            counter_task.ci_channels[0].ci_count_edges_term = self.spd_edge_source
             
             # Perform scan
-            for y in y_points:
-                for x in x_points:
-                    ao_task.write([x, y])
-                    time.sleep(0.01)    # Settling time
-                    
-                    #x_act, y_act = ai_task.read()
-                    counter_task.start()
-                    time.sleep(dwell_time)
-                    counts = counter_task.read()
-                    counter_task.stop()
-                    
+            for x_idx, y_idx, x, y in self.generate_scan_points(x_points, y_points):
+                # Set mirror position
+                ao_task.write([x, y])
+                time.sleep(self.settling_time)
+                
+                # Count photons
+                counter_task.start()
+                time.sleep(dwell_time)
+                counts = counter_task.read()
+                counter_task.stop()
+                
+                yield x_idx, y_idx, counts
 
-                    scan_data['x'].append(x)
-                    scan_data['y'].append(y)
-                    #scan_data['x_act'].append(x_act)
-                    #scan_data['y_act'].append(y_act)
-                    scan_data['counts'].append(counts)
-                    
-        self.save_scan_data(scan_data)
-        return scan_data
-    
+    def scan_pattern_buffered(self, x_points: np.ndarray, y_points: np.ndarray, 
+                            dwell_time: float = 0.01) -> Dict[str, Any]:
+        """
+        Perform a 2D raster scan using buffered DAQ operations for improved performance.
+        
+        Args:
+            x_points: X-axis voltage points
+            y_points: Y-axis voltage points
+            dwell_time: Time at each point in seconds
+            
+        Returns:
+            Dictionary containing scan data
+        """
+        n_x = len(x_points)
+        n_y = len(y_points)
+        total_points = n_x * n_y
+        
+        # Generate voltage waveforms
+        x_waveform = np.tile(x_points, n_y)
+        y_waveform = np.repeat(y_points, n_x)
+        
+        # Calculate timing parameters
+        samples_per_point = int(dwell_time * self.sample_rate)
+        total_samples = total_points * samples_per_point
+        
+        with nidaqmx.Task() as ao_task, nidaqmx.Task() as counter_task:
+            # Configure analog output task
+            ao_task.ao_channels.add_ao_voltage_chan(self.xin_control)
+            ao_task.ao_channels.add_ao_voltage_chan(self.yin_control)
+            
+            # Configure counter task
+            counter_task.ci_channels.add_ci_count_edges_chan(
+                self.spd_counter,
+                edge=Edge.RISING,
+                initial_count=0
+            )
+            counter_task.ci_channels[0].ci_count_edges_term = self.spd_edge_source
+            
+            # Configure timing
+            ao_task.timing.cfg_samp_clk_timing(
+                rate=self.sample_rate,
+                sample_mode=AcquisitionType.FINITE,
+                samps_per_chan=total_samples
+            )
+            
+            # Write voltage waveforms
+            ao_task.write(np.column_stack((x_waveform, y_waveform)))
+            
+            # Start tasks
+            ao_task.start()
+            counter_task.start()
+            
+            # Read data
+            counts = counter_task.read(number_of_samples_per_channel=total_points)
+            
+            # Stop tasks
+            ao_task.stop()
+            counter_task.stop()
+            
+            # Reshape data
+            counts_grid = np.array(counts).reshape(n_y, n_x)
+            
+            return {
+                'x': x_points,
+                'y': y_points,
+                'counts': counts_grid
+            }
+
+    def scan_pattern(self, x_points, y_points, dwell_time=0.01):
+        """
+        Legacy scan pattern method for backward compatibility.
+        """
+        return self.scan_pattern_buffered(x_points, y_points, dwell_time)
+
     def scan_pattern_pd(self, x_points, y_points, dwell_time=0.01):
         """
         Perform a 2D raster scan with photodiode voltage readings.
