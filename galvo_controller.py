@@ -136,10 +136,11 @@ class GalvoScannerController:
                 yield x_idx, y_idx, x, y
 
     def scan_pattern_realtime(self, x_points: np.ndarray, y_points: np.ndarray, 
-                            dwell_time: float = 0.01) -> Generator[Tuple[int, int, int], None, None]:
+                            dwell_time: float = 0.01) -> Generator[Tuple[int, int, float], None, None]:
         """
         Perform a 2D raster scan with real-time data acquisition.
         This generator will continuously yield scan points, allowing for continuous scanning.
+        Returns counts per second for each point.
         
         Args:
             x_points: X-axis voltage points
@@ -147,7 +148,7 @@ class GalvoScannerController:
             dwell_time: Time at each point in seconds
             
         Yields:
-            Tuple of (x_idx, y_idx, counts) for real-time visualization
+            Tuple of (x_idx, y_idx, counts_per_second) for real-time visualization
         """
         with nidaqmx.Task() as ao_task, nidaqmx.Task() as counter_task:
             # Configure analog output task
@@ -175,12 +176,16 @@ class GalvoScannerController:
                     counts = counter_task.read()
                     counter_task.stop()
                     
-                    yield x_idx, y_idx, counts
+                    # Calculate counts per second
+                    counts_per_second = counts / dwell_time
+                    
+                    yield x_idx, y_idx, counts_per_second
 
     def scan_pattern_buffered(self, x_points: np.ndarray, y_points: np.ndarray, 
                             dwell_time: float = 0.01) -> Dict[str, Any]:
         """
         Perform a 2D raster scan using buffered DAQ operations for improved performance.
+        Returns counts per second for each point.
         
         Args:
             x_points: X-axis voltage points
@@ -188,7 +193,7 @@ class GalvoScannerController:
             dwell_time: Time at each point in seconds
             
         Returns:
-            Dictionary containing scan data
+            Dictionary containing scan data with counts per second
         """
         n_x = len(x_points)
         n_y = len(y_points)
@@ -236,8 +241,11 @@ class GalvoScannerController:
             ao_task.stop()
             counter_task.stop()
             
+            # Convert to counts per second
+            counts_per_second = np.array(counts) / dwell_time
+            
             # Reshape data
-            counts_grid = np.array(counts).reshape(n_y, n_x)
+            counts_grid = counts_per_second.reshape(n_y, n_x)
             
             return {
                 'x': x_points,

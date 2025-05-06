@@ -33,7 +33,7 @@ class RealTimeScanVisualizer:
         
         # Add colorbar
         self.cbar = self.fig.colorbar(self.im, ax=self.ax)
-        self.cbar.set_label('Counts')
+        self.cbar.set_label('Counts per Second')
         
         # Set labels and title
         self.ax.set_xlabel('X Position (V)')
@@ -57,16 +57,16 @@ class RealTimeScanVisualizer:
         Update the visualization with new data.
         
         Args:
-            frame_data (tuple): (x_idx, y_idx, count) for the current point
+            frame_data (tuple): (x_idx, y_idx, counts_per_second) for the current point
         """
-        x_idx, y_idx, count = frame_data
+        x_idx, y_idx, counts_per_second = frame_data
         
         # If we've completed a scan, reset the data
         if self.scan_complete:
             self.reset_data()
         
         # Update the data
-        self.data[y_idx, x_idx] = count
+        self.data[y_idx, x_idx] = counts_per_second
         
         # Check if we've completed a scan
         if x_idx == self.n_x - 1 and y_idx == self.n_y - 1:
@@ -85,7 +85,7 @@ class RealTimeScanVisualizer:
         Start real-time animation using the provided data generator.
         
         Args:
-            data_generator: Generator function that yields (x_idx, y_idx, count)
+            data_generator: Generator function that yields (x_idx, y_idx, counts_per_second)
         """
         self.animation = FuncAnimation(
             self.fig,
@@ -114,7 +114,7 @@ def plot_scan_results(scan_data):
         scan_data (dict): Dictionary containing scan results with keys:
             - 'x': Array of x-axis positions (voltage values)
             - 'y': Array of y-axis positions (voltage values)
-            - 'counts': Array of measurement values (SPD counts)
+            - 'counts': Array of measurement values (counts per second)
     """
     # Convert data to numpy arrays for easier manipulation
     x = np.array(scan_data['x'])
@@ -122,21 +122,15 @@ def plot_scan_results(scan_data):
     counts = np.array(scan_data['counts'])
     
     # Reshape 1D arrays into 2D grids for visualization
-    # Determine number of unique points in each dimension
-    n_x = len(np.unique(x))  # Number of x-axis points
-    n_y = len(np.unique(y))  # Number of y-axis points
+    n_x = len(np.unique(x))
+    n_y = len(np.unique(y))
     
-    # Reshape into 2D grids matching the scan pattern
-    x_grid = x.reshape(n_y, n_x)  # X positions in grid format
-    y_grid = y.reshape(n_y, n_x)  # Y positions in grid format
-    counts_grid = counts.reshape(n_y, n_x)  # Measurement values in grid format
+    x_grid = x.reshape(n_y, n_x)
+    y_grid = y.reshape(n_y, n_x)
+    counts_grid = counts.reshape(n_y, n_x)
 
-    # Create the plot figure with specified size
     plt.figure(figsize=(10, 8))
     
-    # Create a pseudocolor plot (heatmap) of the measurement data
-    # - shading='auto' automatically determines shading type
-    # - Normalize ensures consistent color scaling between plots
     plt.pcolormesh(
         x_grid, 
         y_grid, 
@@ -145,27 +139,18 @@ def plot_scan_results(scan_data):
         norm=Normalize(vmin=counts.min(), vmax=counts.max())
     )
     
-    # Add colorbar with label
-    plt.colorbar(label='SPD Counts')
-    
-    # Axis labels
+    plt.colorbar(label='Counts per Second')
     plt.xlabel("X Position (V)")
     plt.ylabel("Y Position (V)")
-    
-    # Title
     plt.title("SPD Counts Heatmap")
     
-    # Overlay actual measurement positions as red dots
     plt.scatter(
         x, 
         y, 
         c='red', 
-        s=10,  # Dot size
-        label='Positions'  # For legend
+        s=10,
+        label='Positions'
     )
     
-    # Add legend to identify the position markers
     plt.legend()
-    
-    # Display the plot
     plt.show()
