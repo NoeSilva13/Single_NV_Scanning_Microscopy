@@ -39,12 +39,12 @@ class ScanningMicroscope:
         """Return default configuration."""
         return {
             'scan_range': {
-                'x': [-5.0, 5.0],
-                'y': [-5.0, 5.0]
+                'x': [-1.0, 1.0],
+                'y': [-1.0, 1.0]
             },
             'resolution': {
-                'x': 100,
-                'y': 100
+                'x': 10,
+                'y': 10
             },
             'dwell_time': 0.01,
             'scan_mode': 'realtime'  # or 'buffered'

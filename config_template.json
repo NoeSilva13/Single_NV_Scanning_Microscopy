@@ -1,13 +1,13 @@
 {
     "scan_range": {
-        "x": [-5.0, 5.0],
-        "y": [-5.0, 5.0]
+        "x": [-2.0, 2.0],
+        "y": [-2.0, 2.0]
     },
     "resolution": {
-        "x": 100,
-        "y": 100
+        "x": 10,
+        "y": 10
     },
-    "dwell_time": 0.01,
+    "dwell_time": 1,
     "scan_mode": "realtime",
     "hardware": {
         "sample_rate": 1000,
