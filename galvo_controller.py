@@ -2,6 +2,7 @@ import time
 import numpy as np
 import nidaqmx
 from nidaqmx.constants import (TerminalConfiguration, Edge, CountDirection, AcquisitionType, SampleTimingType)
+from nidaqmx.errors import DaqNotFoundError, DaqError
 import pyvisa
 import csv
 from typing import Generator, Tuple, Dict, Any
@@ -20,26 +21,43 @@ class GalvoScannerController:
     """
     def __init__(self):
         """Initialize the controller with default DAQ channels and ranges."""
-        # DAQ channel configuration
-        self.spd_counter = "Dev1/ctr0"
-        self.spd_edge_source = "/Dev1/PFI8"
-        self.xin_control = "Dev1/ao0"
-        self.yin_control = "Dev1/ao1"
-        self.xout_voltage = "Dev1/ai14"
-        self.yout_voltage = "Dev1/ai15"
+        try:
+            # Test DAQ connection
+            with nidaqmx.Task() as test_task:
+                test_task.ao_channels.add_ao_voltage_chan("Dev1/ao0")
+            
+            # DAQ channel configuration
+            self.spd_counter = "Dev1/ctr0"
+            self.spd_edge_source = "/Dev1/PFI8"
+            self.xin_control = "Dev1/ao0"
+            self.yin_control = "Dev1/ao1"
+            self.xout_voltage = "Dev1/ai14"
+            self.yout_voltage = "Dev1/ai15"
 
-        # Voltage ranges
-        self.control_range = (-10.0, 10.0)      # Output voltage range
-        self.output_range = (-3.75, 3.75)       # Input voltage range
+            # Voltage ranges
+            self.control_range = (-10.0, 10.0)      # Output voltage range
+            self.output_range = (-3.75, 3.75)       # Input voltage range
 
-        # Calibration factors
-        self.x_calibration = 1.0
-        self.y_calibration = 1.0
-        
-        # Scanning parameters
-        self.sample_rate = 1000  # Hz
-        self.samples_per_point = 10
-        self.settling_time = 0.001  # seconds
+            # Calibration factors
+            self.x_calibration = 1.0
+            self.y_calibration = 1.0
+            
+            # Scanning parameters
+            self.sample_rate = 1000  # Hz
+            self.samples_per_point = 10
+            self.settling_time = 0.001  # seconds
+            
+            print("Successfully initialized DAQ connection")
+            
+        except DaqNotFoundError:
+            raise RuntimeError(
+                "NI-DAQmx not found. Please install NI-DAQmx from National Instruments website: "
+                "https://www.ni.com/en/support/downloads/drivers/download.ni-daqmx.html"
+            )
+        except DaqError as e:
+            raise RuntimeError(f"Error initializing DAQ: {str(e)}")
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error during initialization: {str(e)}")
 
     # --------------------------
     # Basic Control Methods
@@ -53,13 +71,16 @@ class GalvoScannerController:
             x_voltage (float): X-axis voltage (-10 to 10V)
             y_voltage (float): Y-axis voltage (-10 to 10V)
         """
-        x_voltage = np.clip(x_voltage, *self.control_range)
-        y_voltage = np.clip(y_voltage, *self.control_range)
+        try:
+            x_voltage = np.clip(x_voltage, *self.control_range)
+            y_voltage = np.clip(y_voltage, *self.control_range)
 
-        with nidaqmx.Task() as ao_task:
-            ao_task.ao_channels.add_ao_voltage_chan(self.xin_control)
-            ao_task.ao_channels.add_ao_voltage_chan(self.yin_control)
-            ao_task.write([x_voltage, y_voltage], auto_start=True)
+            with nidaqmx.Task() as ao_task:
+                ao_task.ao_channels.add_ao_voltage_chan(self.xin_control)
+                ao_task.ao_channels.add_ao_voltage_chan(self.yin_control)
+                ao_task.write([x_voltage, y_voltage], auto_start=True)
+        except DaqError as e:
+            raise RuntimeError(f"Error setting voltages: {str(e)}")
 
     def read_voltages(self):
         """
@@ -307,7 +328,11 @@ class GalvoScannerController:
     
     def close(self):
         """Safely close the scanner by setting voltages to zero."""
-        self.set_voltages(0, 0)
+        try:
+            self.set_voltages(0, 0)
+        except Exception as e:
+            print(f"Warning: Error during shutdown: {str(e)}")
+            print("Please ensure the scanner is manually set to a safe position.")
         
     def set(self, x=0, y=0):
         """
