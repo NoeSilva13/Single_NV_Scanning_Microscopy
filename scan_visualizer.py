@@ -22,33 +22,9 @@ class RealTimeScanVisualizer:
         # Initialize data array
         self.data = np.zeros((self.n_y, self.n_x))
         
-        # Create figure with subplots for sliders
+        # Create figure
         self.fig = plt.figure(figsize=(10, 10))
-        gs = self.fig.add_gridspec(3, 1, height_ratios=[0.1, 0.1, 0.8])
-        
-        # Create slider axes
-        self.ax_x_slider = self.fig.add_subplot(gs[0])
-        self.ax_y_slider = self.fig.add_subplot(gs[1])
-        self.ax = self.fig.add_subplot(gs[2])
-        
-        # Create range sliders
-        self.x_slider = RangeSlider(
-            self.ax_x_slider,
-            'X Range',
-            x_points[0],
-            x_points[-1],
-            valinit=(x_points[0], x_points[-1]),
-            valstep=0.1
-        )
-        
-        self.y_slider = RangeSlider(
-            self.ax_y_slider,
-            'Y Range',
-            y_points[0],
-            y_points[-1],
-            valinit=(y_points[0], y_points[-1]),
-            valstep=0.1
-        )
+        self.ax = self.fig.add_subplot(111)
         
         # Create image plot
         self.im = self.ax.imshow(
@@ -73,22 +49,8 @@ class RealTimeScanVisualizer:
         self.scan_complete = False
         self.current_scan = 0
         
-        # Connect slider events
-        self.x_slider.on_changed(self.update_x_range)
-        self.y_slider.on_changed(self.update_y_range)
-        
         # Adjust layout
         self.fig.tight_layout()
-        
-    def update_x_range(self, val):
-        """Update X-axis range when slider changes."""
-        self.ax.set_xlim(val)
-        self.fig.canvas.draw_idle()
-        
-    def update_y_range(self, val):
-        """Update Y-axis range when slider changes."""
-        self.ax.set_ylim(val)
-        self.fig.canvas.draw_idle()
         
     def reset_data(self):
         """Reset the data array for a new scan."""
