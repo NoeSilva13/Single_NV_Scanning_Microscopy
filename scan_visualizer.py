@@ -122,6 +122,7 @@ class RealTimeScanVisualizer:
         
         # Update colorbar limits
         self.im.set_clim(vmin=self.data.min(), vmax=self.data.max())
+        self.fig.canvas.draw_idle()
         
         return [self.im]
     
