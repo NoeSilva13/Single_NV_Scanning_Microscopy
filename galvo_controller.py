@@ -237,10 +237,42 @@ class GalvoScannerController:
             }
 
     def scan_pattern(self, x_points, y_points, dwell_time=0.01):
-        """
-        Legacy scan pattern method for backward compatibility.
-        """
-        return self.scan_pattern_buffered(x_points, y_points, dwell_time)
+        n_x = len(x_points)
+        n_y = len(y_points)
+        counts_grid = np.zeros((n_y, n_x))  # Initialize with correct shape
+        
+        with nidaqmx.Task() as ao_task, nidaqmx.Task() as counter_task:
+            # Configure analog output task
+            ao_task.ao_channels.add_ao_voltage_chan(self.xin_control)
+            ao_task.ao_channels.add_ao_voltage_chan(self.yin_control)
+            
+            # Configure counter task
+            counter_task.ci_channels.add_ci_count_edges_chan(
+                self.spd_counter,
+                edge=Edge.RISING,
+                initial_count=0
+            )
+            counter_task.ci_channels[0].ci_count_edges_term = self.spd_edge_source
+            
+            # Perform scan point by point
+            for y_idx, y in enumerate(y_points):
+                for x_idx, x in enumerate(x_points):
+                    # Set mirror position
+                    ao_task.write([x, y])
+                    time.sleep(self.settling_time)
+                    
+                    # Count photons
+                    counter_task.start()
+                    time.sleep(dwell_time)
+                    counts = counter_task.read()
+                    counter_task.stop()
+                    
+                    # Calculate counts per second and store in grid
+                    counts_per_second = counts / dwell_time
+                    counts_grid[y_idx, x_idx] = counts_per_second
+            
+            # Return data in the format expected by the visualizer
+            return x_points, y_points, counts_grid
 
     def scan_pattern_pd(self, x_points, y_points, dwell_time=0.01):
         """
