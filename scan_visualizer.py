@@ -159,27 +159,26 @@ def plot_scan_results(scan_data):
         scan_data (dict): Dictionary containing scan results with keys:
             - 'x': Array of x-axis positions (voltage values)
             - 'y': Array of y-axis positions (voltage values)
-            - 'counts': Array of measurement values (counts per second)
+            - 'counts': 2D array of measurement values (counts per second)
     """
-    # Convert data to numpy arrays for easier manipulation
-    x = np.array(scan_data['x'])
-    y = np.array(scan_data['y'])
-    counts = np.array(scan_data['counts'])
+    # Close any existing figures
+    plt.close('all')
     
-    # Reshape 1D arrays into 2D grids for visualization
-    n_x = len(np.unique(x))
-    n_y = len(np.unique(y))
-    
-    x_grid = x.reshape(n_y, n_x)
-    y_grid = y.reshape(n_y, n_x)
-    counts_grid = counts.reshape(n_y, n_x)
+    # Get the data
+    x = scan_data['x']
+    y = scan_data['y']
+    counts = scan_data['counts']  # This is already a 2D array
 
-    plt.figure(figsize=(10, 8))
+    # Create new figure
+    fig = plt.figure(figsize=(10, 8))
+    
+    # Create meshgrid for plotting
+    X, Y = np.meshgrid(x, y)
     
     plt.pcolormesh(
-        x_grid, 
-        y_grid, 
-        counts_grid, 
+        X, 
+        Y, 
+        counts, 
         shading='auto', 
         norm=Normalize(vmin=counts.min(), vmax=counts.max())
     )
@@ -189,13 +188,10 @@ def plot_scan_results(scan_data):
     plt.ylabel("Y Position (V)")
     plt.title("SPD Counts Heatmap")
     
-    plt.scatter(
-        x, 
-        y, 
-        c='red', 
-        s=10,
-        label='Positions'
-    )
+    # Plot measurement positions
+    for i in range(len(y)):
+        for j in range(len(x)):
+            plt.scatter(x[j], y[i], c='red', s=10, alpha=0.5)
     
     plt.legend()
-    plt.show()
+    plt.show(block=True)  # Use block=True to ensure only one figure is shown

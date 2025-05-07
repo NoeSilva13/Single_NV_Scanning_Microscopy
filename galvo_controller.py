@@ -184,7 +184,7 @@ class GalvoScannerController:
     def scan_pattern_buffered(self, x_points: np.ndarray, y_points: np.ndarray, 
                             dwell_time: float = 0.01) -> Dict[str, Any]:
         """
-        Perform a 2D raster scan using buffered DAQ operations for improved performance.
+        Perform a 2D raster scan using point-by-point scanning.
         Returns counts per second for each point.
         
         Args:
@@ -197,15 +197,7 @@ class GalvoScannerController:
         """
         n_x = len(x_points)
         n_y = len(y_points)
-        total_points = n_x * n_y
-        
-        # Generate voltage waveforms
-        x_waveform = np.tile(x_points, n_y)
-        y_waveform = np.repeat(y_points, n_x)
-        
-        # Calculate timing parameters
-        samples_per_point = int(dwell_time * self.sample_rate)
-        total_samples = total_points * samples_per_point
+        counts_grid = np.zeros((n_y, n_x))  # Initialize with correct shape
         
         with nidaqmx.Task() as ao_task, nidaqmx.Task() as counter_task:
             # Configure analog output task
@@ -220,37 +212,28 @@ class GalvoScannerController:
             )
             counter_task.ci_channels[0].ci_count_edges_term = self.spd_edge_source
             
-            # Configure timing
-            ao_task.timing.cfg_samp_clk_timing(
-                rate=self.sample_rate,
-                sample_mode=AcquisitionType.FINITE,
-                samps_per_chan=total_samples
-            )
+            # Perform scan point by point
+            for y_idx, y in enumerate(y_points):
+                for x_idx, x in enumerate(x_points):
+                    # Set mirror position
+                    ao_task.write([x, y])
+                    time.sleep(self.settling_time)
+                    
+                    # Count photons
+                    counter_task.start()
+                    time.sleep(dwell_time)
+                    counts = counter_task.read()
+                    counter_task.stop()
+                    
+                    # Calculate counts per second and store in grid
+                    counts_per_second = counts / dwell_time
+                    counts_grid[y_idx, x_idx] = counts_per_second
             
-            # Write voltage waveforms
-            ao_task.write(np.column_stack((x_waveform, y_waveform)))
-            
-            # Start tasks
-            ao_task.start()
-            counter_task.start()
-            
-            # Read data
-            counts = counter_task.read(number_of_samples_per_channel=total_points)
-            
-            # Stop tasks
-            ao_task.stop()
-            counter_task.stop()
-            
-            # Convert to counts per second
-            counts_per_second = np.array(counts) / dwell_time
-            
-            # Reshape data
-            counts_grid = counts_per_second.reshape(n_y, n_x)
-            
+            # Return data in the format expected by the visualizer
             return {
                 'x': x_points,
                 'y': y_points,
-                'counts': counts_grid
+                'counts': counts_grid  # This is already a 2D array with shape (n_y, n_x)
             }
 
     def scan_pattern(self, x_points, y_points, dwell_time=0.01):

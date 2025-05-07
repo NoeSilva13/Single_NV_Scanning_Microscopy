@@ -109,10 +109,17 @@ class ScanningMicroscope:
     def _run_buffered_scan(self):
         """Run scan with buffered acquisition."""
         try:
+            # Ensure no visualizer is created for buffered mode
+            self.visualizer = None
+            
+            # Run the scan
             scan_data = self.controller.scan_pattern_buffered(
                 self.x_points, self.y_points, self.config['dwell_time']
             )
+            
+            # Plot results
             plot_scan_results(scan_data)
+            
         except Exception as e:
             print(f"Error during buffered scan: {str(e)}")
             raise
