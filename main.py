@@ -117,6 +117,12 @@ class ScanningMicroscope:
                 self.x_points, self.y_points, self.config['dwell_time']
             )
             
+            # Save scan data
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = f"scan_data_{timestamp}.csv"
+            self.controller.save_scan_data(scan_data, filename)
+            print(f"Scan data saved to {filename}")
+            
             # Plot results
             plot_scan_results(scan_data)
             
