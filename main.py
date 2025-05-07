@@ -117,9 +117,14 @@ class ScanningMicroscope:
                 self.x_points, self.y_points, self.config['dwell_time']
             )
             
-            # Save scan data
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = f"scan_data_{timestamp}.csv"
+            # Create daily folder for data
+            daily_folder = time.strftime("%m%d%y")
+            if not os.path.exists(daily_folder):
+                os.makedirs(daily_folder)
+            
+            # Save scan data in daily folder
+            timestamp = time.strftime("%H%M%S")
+            filename = os.path.join(daily_folder, f"scan_data_{timestamp}.csv")
             self.controller.save_scan_data(scan_data, filename)
             print(f"Scan data saved to {filename}")
             
