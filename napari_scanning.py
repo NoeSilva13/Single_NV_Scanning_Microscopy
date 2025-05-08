@@ -25,7 +25,7 @@ image = np.zeros((height, width), dtype=np.float32)
 
 # Crear el visor
 viewer = napari.Viewer()
-layer = viewer.add_image(image, name="escaneo en vivo", colormap="gray")
+layer = viewer.add_image(image, name="escaneo en vivo", colormap="viridis")
 
 def scan_pattern(x_points, y_points):
     global image, layer
