@@ -7,6 +7,8 @@ from nidaqmx.constants import (TerminalConfiguration, Edge, CountDirection, Acqu
 from nidaqmx.errors import DaqNotFoundError, DaqError
 from galvo_controller import GalvoScannerController
 import threading
+from napari.qt.threading import thread_worker
+from qtpy.QtWidgets import QPushButton
 
 config = json.load(open("config_template.json"))
 galvo_controller = GalvoScannerController()
@@ -85,5 +87,16 @@ def on_shape_added(event):
 
         # Inicia nuevo escaneo con la zona seleccionada
         threading.Thread(target=lambda: scan_pattern(x_zoom_range, y_zoom_range), daemon=True).start()
+
+# Add reset button
+reset_button = QPushButton("Reset Scan")
+reset_button.setToolTip('Reset to full scan area')
+reset_button.clicked.connect(
+    lambda: threading.Thread(
+        target=lambda: scan_pattern(x_points, y_points), 
+        daemon=True
+    ).start()
+)
+viewer.window.add_dock_widget(reset_button, name="Reset Control")
 
 napari.run() 
