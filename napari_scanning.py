@@ -28,7 +28,7 @@ image = np.zeros((y_res, x_res), dtype=np.float32)
 
 # --------------------- VISOR NAPARI ---------------------
 viewer = napari.Viewer()
-layer = viewer.add_image(image, name="escaneo en vivo", colormap="viridis")
+layer = viewer.add_image(image, name="escaneo en vivo", colormap="viridis", scale=(-1, 1))
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
 # --------------------- ESCANEO ---------------------
