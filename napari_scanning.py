@@ -28,7 +28,7 @@ image = np.zeros((y_res, x_res), dtype=np.float32)
 
 # --------------------- VISOR NAPARI ---------------------
 viewer = napari.Viewer()
-layer = viewer.add_image(image, name="escaneo en vivo", colormap="viridis", scale=(-1, 1))
+layer = viewer.add_image(image, name="escaneo en vivo", colormap="viridis", scale=(1, 1), contrast_limits=(0, 10000))
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
 # --------------------- ESCANEO ---------------------
@@ -63,7 +63,7 @@ def scan_pattern(x_points, y_points):
                 counts_per_second = counts / config['dwell_time']
                 
                 image[y_idx, x_idx] = counts_per_second
-                layer.refresh()
+                layer.data = image
 
     return x_points, y_points  # Devuelve para historial
 
