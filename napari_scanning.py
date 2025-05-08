@@ -64,6 +64,7 @@ def scan_pattern(x_points, y_points):
                 
                 image[y_idx, x_idx] = counts_per_second
                 layer.data = image
+    layer.contrast_limits = (np.min(image), np.max(image))
 
     return x_points, y_points  # Devuelve para historial
 
