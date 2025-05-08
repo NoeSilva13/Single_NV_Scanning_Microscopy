@@ -1,15 +1,14 @@
-import numpy as np
+import numpy as np 
 import napari
 import time
 import json
 import nidaqmx
-from nidaqmx.constants import (TerminalConfiguration, Edge, CountDirection, AcquisitionType, SampleTimingType)
-from nidaqmx.errors import DaqNotFoundError, DaqError
+from nidaqmx.constants import Edge
 from galvo_controller import GalvoScannerController
 import threading
-from napari.qt.threading import thread_worker
-from qtpy.QtWidgets import QPushButton
+from magicgui import magicgui
 
+# --------------------- CONFIGURACIÓN INICIAL ---------------------
 config = json.load(open("config_template.json"))
 galvo_controller = GalvoScannerController()
 
@@ -18,23 +17,27 @@ y_range = config['scan_range']['y']
 x_res = config['resolution']['x']
 y_res = config['resolution']['y']
 
-x_points = np.linspace(x_range[0], x_range[1], x_res)
-y_points = np.linspace(y_range[0], y_range[1], y_res)       
+original_x_points = np.linspace(x_range[0], x_range[1], x_res)
+original_y_points = np.linspace(y_range[0], y_range[1], y_res)
 
-# Tamaño de la imagen inicial
-width, height = x_res, y_res
-image = np.zeros((height, width), dtype=np.float32)
+# Estado global
+zoom_level = 0
+max_zoom = 3
+scan_history = []  # Para volver atrás
+image = np.zeros((y_res, x_res), dtype=np.float32)
 
-# Crear el visor
+# --------------------- VISOR NAPARI ---------------------
 viewer = napari.Viewer()
-layer = viewer.add_image(image, name="escaneo en vivo", colormap="viridis")
+layer = viewer.add_image(image, name="escaneo en vivo", colormap="gray")
+shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent')
 
+# --------------------- ESCANEO ---------------------
 def scan_pattern(x_points, y_points):
     global image, layer
 
     height, width = len(y_points), len(x_points)
     image = np.zeros((height, width), dtype=np.float32)
-    layer.data = image  # <-- CAMBIO: actualiza la capa con nueva imagen vacía
+    layer.data = image  # actualiza capa
 
     with nidaqmx.Task() as ao_task, nidaqmx.Task() as counter_task:
         ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
@@ -61,42 +64,70 @@ def scan_pattern(x_points, y_points):
                 image[y_idx, x_idx] = counts_per_second
                 layer.refresh()
 
-# Primer escaneo (completo)
-threading.Thread(target=lambda: scan_pattern(x_points, y_points), daemon=True).start()
+    return x_points, y_points  # Devuelve para historial
 
-# Capa de selección
-shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent')
-
+# --------------------- ZOOM POR REGIÓN ---------------------
 @shapes.events.data.connect
 def on_shape_added(event):
+    global zoom_level, max_zoom, scan_history, original_x_points, original_y_points
+
+    if zoom_level >= max_zoom:
+        print("⚠️ Zoom máximo alcanzado (3 niveles).")
+        return
+
     if len(shapes.data) > 0:
         rect = shapes.data[-1]
         min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
         max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
-        print(f"Seleccionado: X={min_x}:{max_x}, Y={min_y}:{max_y}")
 
-        # Limita los índices al tamaño original
+        # Limita a tamaño actual de la imagen
+        height, width = layer.data.shape
         min_x = max(0, min_x)
         max_x = min(width, max_x)
         min_y = max(0, min_y)
         max_y = min(height, max_y)
 
-        # Calcula las nuevas coordenadas físicas (voltajes)
-        x_zoom_range = np.linspace(x_points[min_x], x_points[max_x-1], max_x - min_x)
-        y_zoom_range = np.linspace(y_points[min_y], y_points[max_y-1], max_y - min_y)
+        # Historial: guarda estado actual antes de zoom
+        scan_history.append((original_x_points, original_y_points))
 
-        # Inicia nuevo escaneo con la zona seleccionada
-        threading.Thread(target=lambda: scan_pattern(x_zoom_range, y_zoom_range), daemon=True).start()
+        # Ajusta resolución al nuevo rango
+        x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], max_x - min_x)
+        y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], max_y - min_y)
 
-# Add reset button
-reset_button = QPushButton("Reset Scan")
-reset_button.setToolTip('Reset to full scan area')
-reset_button.clicked.connect(
-    lambda: threading.Thread(
-        target=lambda: scan_pattern(x_points, y_points), 
-        daemon=True
-    ).start()
-)
-viewer.window.add_dock_widget(reset_button, name="Reset Control")
+        # Aplica nuevo escaneo
+        def run_zoom():
+            global original_x_points, original_y_points, zoom_level
+            original_x_points, original_y_points = scan_pattern(x_zoom, y_zoom)
+            zoom_level += 1
+            shapes.data = []  # Limpia rectángulo
 
-napari.run() 
+        threading.Thread(target=run_zoom, daemon=True).start()
+
+# --------------------- BOTÓN RESET ---------------------
+@magicgui(call_button="🔄 Reset Zoom")
+def reset_zoom():
+    global zoom_level, scan_history, original_x_points, original_y_points
+
+    if zoom_level == 0:
+        print("🔁 Ya estás en la vista original.")
+        return
+
+    # Recupera la vista original (última guardada)
+    original_x_points = np.linspace(x_range[0], x_range[1], x_res)
+    original_y_points = np.linspace(y_range[0], y_range[1], y_res)
+    scan_history.clear()
+    zoom_level = 0
+
+    def run_reset():
+        scan_pattern(original_x_points, original_y_points)
+        shapes.data = []
+
+    threading.Thread(target=run_reset, daemon=True).start()
+
+# Añade el botón a la interfaz
+viewer.window.add_dock_widget(reset_zoom, area="right")
+
+# --------------------- PRIMER ESCANEO COMPLETO ---------------------
+threading.Thread(target=lambda: scan_pattern(original_x_points, original_y_points), daemon=True).start()
+
+napari.run()
