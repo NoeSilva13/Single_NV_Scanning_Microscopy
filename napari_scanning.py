@@ -61,6 +61,7 @@ def scan_pattern(x_points, y_points):
                 counter_task.stop()
 
                 counts_per_second = counts / config['dwell_time']
+                
                 image[y_idx, x_idx] = counts_per_second
                 layer.refresh()
 
@@ -124,8 +125,19 @@ def reset_zoom():
 
     threading.Thread(target=run_reset, daemon=True).start()
 
-# Añade el botón a la interfaz
+@magicgui(call_button="📷 New Scan")
+def new_scan():
+    global original_x_points, original_y_points
+    
+    def run_new_scan():
+        scan_pattern(original_x_points, original_y_points)
+        shapes.data = []
+    
+    threading.Thread(target=run_new_scan, daemon=True).start()
+
+# Añade los botones a la interfaz
 viewer.window.add_dock_widget(reset_zoom, area="right")
+viewer.window.add_dock_widget(new_scan, area="right")
 
 # --------------------- PRIMER ESCANEO COMPLETO ---------------------
 threading.Thread(target=lambda: scan_pattern(original_x_points, original_y_points), daemon=True).start()
