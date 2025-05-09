@@ -8,7 +8,7 @@ from galvo_controller import GalvoScannerController
 import threading
 from magicgui import magicgui
 
-# --------------------- CONFIGURACIÓN INICIAL ---------------------
+# --------------------- INITIAL CONFIGURATION ---------------------
 config = json.load(open("config_template.json"))
 galvo_controller = GalvoScannerController()
 
@@ -29,7 +29,7 @@ image = np.zeros((y_res, x_res), dtype=np.float32)
 
 # --------------------- VISOR NAPARI ---------------------
 viewer = napari.Viewer()
-layer = viewer.add_image(image, name="escaneo en vivo", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
+layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
 # --------------------- ESCANEO ---------------------
@@ -107,20 +107,20 @@ def on_shape_added(event):
 
     def run_zoom():
         global original_x_points, original_y_points, zoom_level, zoom_in_progress
-        zoom_in_progress = True  # Activa flag
+        zoom_in_progress = True  # Activate flag
         original_x_points, original_y_points = scan_pattern(x_zoom, y_zoom)
         zoom_level += 1
-        shapes.data = []  # Limpia rectángulo
-        zoom_in_progress = False  # Libera flag
+        shapes.data = []  # Clear rectangle
+        zoom_in_progress = False  # Release flag
 
     threading.Thread(target=run_zoom, daemon=True).start()
 # --------------------- BOTÓN RESET ---------------------
 @magicgui(call_button="🔄 Reset Zoom")
 def reset_zoom():
     global zoom_level, scan_history, original_x_points, original_y_points
-    shapes.data = []  # Limpia rectángulo
+    shapes.data = []  # Clear rectangle
     if zoom_level == 0:
-        print("🔁 Ya estás en la vista original.")
+        print("🔁 You are already in the original view.")
         return
 
     # Recupera la vista original (última guardada)
