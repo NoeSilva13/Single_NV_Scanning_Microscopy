@@ -20,11 +20,11 @@ y_res = config['resolution']['y']
 original_x_points = np.linspace(x_range[0], x_range[1], x_res)
 original_y_points = np.linspace(y_range[0], y_range[1], y_res)
 
-# Estado global
+# Global state
 zoom_level = 0
 max_zoom = 3
 contrast_limits = (0, 10000)
-scan_history = []  # Para volver atrás
+scan_history = []  # For going back
 image = np.zeros((y_res, x_res), dtype=np.float32)
 
 # --------------------- VISOR NAPARI ---------------------
@@ -32,13 +32,13 @@ viewer = napari.Viewer()
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
-# --------------------- ESCANEO ---------------------
+# --------------------- SCANNING ---------------------
 def scan_pattern(x_points, y_points):
     global image, layer
 
     height, width = len(y_points), len(x_points)
     image = np.zeros((height, width), dtype=np.float32)
-    layer.data = image  # actualiza capa
+    layer.data = image  # update layer
     layer.contrast_limits = contrast_limits
     with nidaqmx.Task() as ao_task, nidaqmx.Task() as counter_task:
         ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
@@ -67,9 +67,9 @@ def scan_pattern(x_points, y_points):
                 layer.data = image
     layer.contrast_limits = (np.min(image), np.max(image))
 
-    return x_points, y_points  # Devuelve para historial
+    return x_points, y_points  # Returns for history
 
-# --------------------- ZOOM POR REGIÓN ---------------------
+# --------------------- ZOOM BY REGION ---------------------
 
 zoom_in_progress = False  # Flag global
 @shapes.events.data.connect
@@ -78,7 +78,7 @@ def on_shape_added(event):
     global original_x_points, original_y_points, zoom_in_progress
 
     if zoom_in_progress:
-        return  # Ignora si ya se está ejecutando
+        return  # Ignore if already running
 
     if zoom_level >= max_zoom:
         print(f"⚠️ Max zoom reached ({max_zoom} levels).")
@@ -91,17 +91,17 @@ def on_shape_added(event):
     min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
     max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
 
-    # Limita a tamaño actual de la imagen
+    # Limit to current image size
     height, width = layer.data.shape
     min_x = max(0, min_x)
     max_x = min(width, max_x)
     min_y = max(0, min_y)
     max_y = min(height, max_y)
 
-    # Historial: guarda estado actual antes de zoom
+    # History: save current state before zoom
     scan_history.append((original_x_points, original_y_points))
 
-    # Ajusta resolución al nuevo rango
+    # Adjust resolution to new range
     #x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], max_x - min_x)
     #y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], max_y - min_y)
 
@@ -117,7 +117,7 @@ def on_shape_added(event):
         zoom_in_progress = False  # Release flag
 
     threading.Thread(target=run_zoom, daemon=True).start()
-# --------------------- BOTÓN RESET ---------------------
+# --------------------- RESET BUTTON ---------------------
 @magicgui(call_button="🔄 Reset Zoom")
 def reset_zoom():
     global zoom_level, scan_history, original_x_points, original_y_points
@@ -126,7 +126,7 @@ def reset_zoom():
         print("🔁 You are already in the original view.")
         return
 
-    # Recupera la vista original (última guardada)
+    # Restore original view (last saved)
     original_x_points = np.linspace(x_range[0], x_range[1], x_res)
     original_y_points = np.linspace(y_range[0], y_range[1], y_res)
     scan_history.clear()
@@ -148,11 +148,11 @@ def new_scan():
     
     threading.Thread(target=run_new_scan, daemon=True).start()
 
-# Añade los botones a la interfaz
+# Add buttons to the interface
 viewer.window.add_dock_widget(reset_zoom, area="right")
 viewer.window.add_dock_widget(new_scan, area="right")
 
-# --------------------- PRIMER ESCANEO COMPLETO ---------------------
+# --------------------- First full scan ---------------------
 threading.Thread(target=lambda: scan_pattern(original_x_points, original_y_points), daemon=True).start()
 
 napari.run()
