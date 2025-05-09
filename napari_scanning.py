@@ -102,11 +102,11 @@ def on_shape_added(event):
     scan_history.append((original_x_points, original_y_points))
 
     # Ajusta resolución al nuevo rango
+    #x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], max_x - min_x)
+    #y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], max_y - min_y)
+
     x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], x_res)
     y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], y_res)
-
-    print(x_zoom)
-    print(y_zoom)
 
     def run_zoom():
         global original_x_points, original_y_points, zoom_level, zoom_in_progress
