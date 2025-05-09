@@ -118,7 +118,7 @@ def on_shape_added(event):
 @magicgui(call_button="🔄 Reset Zoom")
 def reset_zoom():
     global zoom_level, scan_history, original_x_points, original_y_points
-
+    shapes.data = []  # Limpia rectángulo
     if zoom_level == 0:
         print("🔁 Ya estás en la vista original.")
         return
