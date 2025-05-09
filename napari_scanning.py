@@ -101,10 +101,10 @@ def on_shape_added(event):
     # History: save current state before zoom
     scan_history.append((original_x_points, original_y_points))
 
-    # Adjust resolution to new range
+    # Adjust resolution to new range (keep original resolution)
     #x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], max_x - min_x)
     #y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], max_y - min_y)
-
+    # Same resolution as original but zoom in
     x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], x_res)
     y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], y_res)
 
