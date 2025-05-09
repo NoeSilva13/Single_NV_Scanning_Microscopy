@@ -70,42 +70,50 @@ def scan_pattern(x_points, y_points):
     return x_points, y_points  # Devuelve para historial
 
 # --------------------- ZOOM POR REGIÓN ---------------------
+
+zoom_in_progress = False  # Flag global
 @shapes.events.data.connect
 def on_shape_added(event):
-    global zoom_level, max_zoom, scan_history, original_x_points, original_y_points
+    global zoom_level, max_zoom, scan_history
+    global original_x_points, original_y_points, zoom_in_progress
+
+    if zoom_in_progress:
+        return  # Ignora si ya se está ejecutando
 
     if zoom_level >= max_zoom:
         print("⚠️ Zoom máximo alcanzado (3 niveles).")
         return
 
-    if len(shapes.data) > 0:
-        rect = shapes.data[-1]
-        min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
-        max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
+    if len(shapes.data) == 0:
+        return
 
-        # Limita a tamaño actual de la imagen
-        height, width = layer.data.shape
-        min_x = max(0, min_x)
-        max_x = min(width, max_x)
-        min_y = max(0, min_y)
-        max_y = min(height, max_y)
+    rect = shapes.data[-1]
+    min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
+    max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
 
-        # Historial: guarda estado actual antes de zoom
-        scan_history.append((original_x_points, original_y_points))
+    # Limita a tamaño actual de la imagen
+    height, width = layer.data.shape
+    min_x = max(0, min_x)
+    max_x = min(width, max_x)
+    min_y = max(0, min_y)
+    max_y = min(height, max_y)
 
-        # Ajusta resolución al nuevo rango
-        x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], max_x - min_x)
-        y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], max_y - min_y)
+    # Historial: guarda estado actual antes de zoom
+    scan_history.append((original_x_points, original_y_points))
 
-        # Aplica nuevo escaneo
-        def run_zoom():
-            global original_x_points, original_y_points, zoom_level
-            original_x_points, original_y_points = scan_pattern(x_zoom, y_zoom)
-            zoom_level += 1
-            shapes.data = []  # Limpia rectángulo
+    # Ajusta resolución al nuevo rango
+    x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], max_x - min_x)
+    y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], max_y - min_y)
 
-        threading.Thread(target=run_zoom, daemon=True).start()
+    def run_zoom():
+        global original_x_points, original_y_points, zoom_level, zoom_in_progress
+        zoom_in_progress = True  # Activa flag
+        original_x_points, original_y_points = scan_pattern(x_zoom, y_zoom)
+        zoom_level += 1
+        shapes.data = []  # Limpia rectángulo
+        zoom_in_progress = False  # Libera flag
 
+    threading.Thread(target=run_zoom, daemon=True).start()
 # --------------------- BOTÓN RESET ---------------------
 @magicgui(call_button="🔄 Reset Zoom")
 def reset_zoom():
