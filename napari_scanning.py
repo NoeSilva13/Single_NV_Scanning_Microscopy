@@ -81,7 +81,7 @@ def on_shape_added(event):
         return  # Ignora si ya se está ejecutando
 
     if zoom_level >= max_zoom:
-        print("⚠️ Zoom máximo alcanzado (3 niveles).")
+        print(f"⚠️ Max zoom reached ({max_zoom} levels).")
         return
 
     if len(shapes.data) == 0:
