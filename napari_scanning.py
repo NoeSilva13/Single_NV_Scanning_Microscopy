@@ -23,12 +23,13 @@ original_y_points = np.linspace(y_range[0], y_range[1], y_res)
 # Estado global
 zoom_level = 0
 max_zoom = 3
+contrast_limits = (0, 10000)
 scan_history = []  # Para volver atrás
 image = np.zeros((y_res, x_res), dtype=np.float32)
 
 # --------------------- VISOR NAPARI ---------------------
 viewer = napari.Viewer()
-layer = viewer.add_image(image, name="escaneo en vivo", colormap="viridis", scale=(1, 1), contrast_limits=(0, 10000))
+layer = viewer.add_image(image, name="escaneo en vivo", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
 # --------------------- ESCANEO ---------------------
@@ -38,7 +39,7 @@ def scan_pattern(x_points, y_points):
     height, width = len(y_points), len(x_points)
     image = np.zeros((height, width), dtype=np.float32)
     layer.data = image  # actualiza capa
-
+    layer.contrast_limits = contrast_limits
     with nidaqmx.Task() as ao_task, nidaqmx.Task() as counter_task:
         ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
         ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
