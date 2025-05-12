@@ -138,9 +138,17 @@ def new_scan():
     
     threading.Thread(target=run_new_scan, daemon=True).start()
 
+@magicgui(call_button="🎯 Set to Zero")
+def close_scanner():
+    def run_close():
+        galvo_controller.close()
+    
+    threading.Thread(target=run_close, daemon=True).start()
+
 # Add buttons to the interface
 viewer.window.add_dock_widget(reset_zoom, area="right")
 viewer.window.add_dock_widget(new_scan, area="right")
+viewer.window.add_dock_widget(close_scanner, area="right")
 
 # --------------------- First full scan ---------------------
 threading.Thread(target=lambda: scan_pattern(original_x_points, original_y_points), daemon=True).start()
