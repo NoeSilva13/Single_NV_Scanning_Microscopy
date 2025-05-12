@@ -7,7 +7,7 @@ from nidaqmx.constants import Edge
 from galvo_controller import GalvoScannerController
 import threading
 from magicgui import magicgui
-import random
+#import random
 # --------------------- INITIAL CONFIGURATION ---------------------
 config = json.load(open("config_template.json"))
 galvo_controller = GalvoScannerController()
@@ -63,8 +63,8 @@ def scan_pattern(x_points, y_points):
 
                 counts_per_second = counts / config['dwell_time']
                 
-                #image[y_idx, x_idx] = counts_per_second
-                image[y_idx, x_idx] = random.randint(0, 10000) # for testing
+                image[y_idx, x_idx] = counts_per_second
+                #image[y_idx, x_idx] = random.randint(0, 10000) # for testing
                 layer.data = image
     layer.contrast_limits = (np.min(image), np.max(image))
 
