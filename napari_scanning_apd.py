@@ -5,12 +5,14 @@ import json
 import nidaqmx
 from nidaqmx.constants import (TerminalConfiguration, Edge, CountDirection, AcquisitionType, SampleTimingType)
 from galvo_controller import GalvoScannerController
+from data_manager import DataManager
 import threading
 from magicgui import magicgui
 #import random
 # --------------------- INITIAL CONFIGURATION ---------------------
 config = json.load(open("config_template.json"))
 galvo_controller = GalvoScannerController()
+data_manager = DataManager()
 
 x_range = config['scan_range']['x']
 y_range = config['scan_range']['y']
@@ -56,7 +58,7 @@ def scan_pattern(x_points, y_points):
                 image[y_idx, x_idx] = voltage
                 layer.data = image
     layer.contrast_limits = (np.min(image), np.max(image))
-
+    data_manager.save_scan_data(image)
     return x_points, y_points  # Returns for history
 
 # --------------------- ZOOM BY REGION ---------------------
