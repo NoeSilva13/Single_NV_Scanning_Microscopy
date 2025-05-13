@@ -39,3 +39,26 @@ class DataManager:
         print(f"Scan data saved to {filename}")
         
         return filename
+    
+    def save_viewer_screenshot(self, viewer):
+        """
+        Save a screenshot of the napari viewer to the same folder as scan data.
+        
+        Args:
+            viewer (napari.Viewer): The napari viewer instance.
+        Returns:
+            str: The path to the saved screenshot.
+        """
+        folder = time.strftime("%m%d%y")
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        
+        # Generate screenshot filename
+        timestamp = time.strftime("%H%M%S")
+        screenshot_filename = os.path.join(folder, f"screenshot_{timestamp}.png")
+        
+        # Save the screenshot
+        viewer.screenshot(screenshot_filename)
+        print(f"Viewer screenshot saved to {screenshot_filename}")
+        
+        return screenshot_filename
