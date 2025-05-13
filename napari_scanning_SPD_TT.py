@@ -9,6 +9,7 @@ from data_manager import DataManager
 import threading
 from magicgui import magicgui
 from napari.utils.notifications import show_info
+from TimeTagger import TimeTagger, Countrate  # Swabian TimeTagger API
 #import random
 # --------------------- INITIAL CONFIGURATION ---------------------
 config = json.load(open("config_template.json"))
@@ -43,32 +44,36 @@ def scan_pattern(x_points, y_points):
     image = np.zeros((height, width), dtype=np.float32)
     layer.data = image  # update layer
     layer.contrast_limits = contrast_limits
-    with nidaqmx.Task() as ao_task, nidaqmx.Task() as counter_task:
+    
+    # Initialize Timetagger
+    tagger = TimeTagger.createTimeTagger()
+    tagger.reset()
+    
+    # Set up counter channel (assuming channel 1 is used for SPD input)
+    counter = TimeTagger.Countrate(tagger, [1])
+    
+    with nidaqmx.Task() as ao_task:  # Only need AO task for galvo control now
         ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
         ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
-
-        counter_task.ci_channels.add_ci_count_edges_chan(
-            galvo_controller.spd_counter,
-            edge=Edge.RISING,
-            initial_count=0
-        )
-        counter_task.ci_channels[0].ci_count_edges_term = galvo_controller.spd_edge_source
 
         for y_idx, y in enumerate(y_points):
             for x_idx, x in enumerate(x_points):
                 ao_task.write([x, y])
-                time.sleep(0.001)
-
-                counter_task.start()
+                time.sleep(0.001)  # Settling time for galvos
+                
+                # Clear and start counting
+                counter.clear()
                 time.sleep(config['dwell_time'])
-                counts = counter_task.read()
-                counter_task.stop()
-
-                counts_per_second = counts / config['dwell_time']
+                counts = counter.getData()
+                
+                counts_per_second = counts[0] / config['dwell_time']
                 
                 image[y_idx, x_idx] = counts_per_second
-                #image[y_idx, x_idx] = random.randint(0, 10000) # for testing
                 layer.data = image
+    
+    # Clean up Timetagger
+    TimeTagger.freeTimeTagger(tagger)
+    
     layer.contrast_limits = (np.min(image), np.max(image))
     data_path = data_manager.save_scan_data(image)
     return x_points, y_points  # Returns for history

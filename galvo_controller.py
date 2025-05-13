@@ -116,6 +116,31 @@ class GalvoScannerController:
             counter_task.stop()
         return count
     
+    def read_spd_count_tt(self, sampling_time=0.1):
+        """
+        Read photon counts from SPD using Swabian TimeTagger.
+    
+        Args:
+            sampling_time (float): Time to count photons in seconds
+        
+        Returns:
+            int: Number of counts during sampling period
+        """
+        # Initialize TimeTagger if not already done
+        if not hasattr(self, 'tagger'):
+            self.tagger = TimeTagger.createTimeTagger()
+            self.tagger.reset()
+    
+        # Set up counter on the SPD channel (assuming channel 1)
+        counter = Countrate(self.tagger, [1])  # Replace [1] with your actual SPD channel
+    
+        # Clear and measure counts
+        counter.clear()
+        time.sleep(sampling_time)
+        counts = counter.getData()[0]  # Get counts from channel 1
+    
+        return int(counts * sampling_time)  # Return total counts
+    
     # --------------------------
     # Scanning Methods
     # --------------------------
