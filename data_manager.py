@@ -26,7 +26,7 @@ class DataManager:
         
         # Save scan data in daily folder
         timestamp = time.strftime("%H%M%S")
-        filename = os.path.join(daily_folder, f"scan_data_{timestamp}.csv")
+        filename = os.path.join(daily_folder, f"scan_data_{daily_folder}_{timestamp}.csv")
         
         # Convert data to DataFrame if it's not already
         if not isinstance(scan_data, pd.DataFrame):
