@@ -116,7 +116,7 @@ class GalvoScannerController:
             counter_task.stop()
         return count
     
-    def read_spd_count(self, sampling_time=0.1):
+    def read_spd_count_tt(self, sampling_time=0.1):
         """
         Read photon counts from SPD using Swabian TimeTagger.
     
