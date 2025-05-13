@@ -55,7 +55,7 @@ def scan_pattern(x_points, y_points):
                 ao_task.write([x, y])
                 time.sleep(0.01)
                 voltage = ai_task.read()
-                print(voltage)
+                #print(voltage)
                 image[y_idx, x_idx] = voltage
                 layer.data = image
     layer.contrast_limits = (np.min(image), np.max(image))
