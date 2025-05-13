@@ -21,7 +21,8 @@ class DataManager:
             str: The path to the saved file
         """
         # Load configuration
-        config = json.load(open("config_template.json"))
+        with open("config_template.json", "r", encoding="utf-8") as f:
+            config = json.load(f)
         
         # Create daily folder for data
         daily_folder = time.strftime("%m%d%y")
@@ -38,12 +39,13 @@ class DataManager:
         else:
             df = scan_data
             
-        # Save configuration as header comments, then data
+        # Write config as a single JSON string in a comment block
         with open(filename, 'w', encoding='utf-8') as f:
-            f.write("# Experiment Configuration:\n")
-            for key, value in config.items():
-                f.write(f"# {key}: {value}\n")
-            f.write("#\n")  # Empty line to separate config from data
+            config_json_str = json.dumps(config, ensure_ascii=False, indent=2)
+            f.write("# Experiment Configuration (JSON):\n")
+            for line in config_json_str.splitlines():
+                f.write(f"# {line}\n")
+            f.write("#\n")  # Empty line to separate header from data
             df.to_csv(f, index=False)
         
         return filename
