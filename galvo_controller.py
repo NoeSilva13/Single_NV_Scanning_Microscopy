@@ -6,8 +6,7 @@ from nidaqmx.errors import DaqNotFoundError, DaqError
 import pyvisa
 import csv
 from typing import Generator, Tuple, Dict, Any
-from TimeTagger import TimeTagger, Countrate  # Swabian TimeTagger API
-
+from TimeTagger import createTimeTagger, Countrate  # Import createTimeTagger instead
 class GalvoScannerController:
     """
     Controller for galvo mirror scanning system with NI DAQ.
@@ -48,6 +47,12 @@ class GalvoScannerController:
             self.settling_time = 0.001  # seconds
             
             print("Successfully initialized DAQ connection")
+            
+            # Initialize TimeTagger20 (replace 'TimeTagger' with 'createTimeTagger')
+            self.tagger = createTimeTagger()  # Automatically detects TimeTagger20
+            if not self.tagger:
+                raise RuntimeError("TimeTagger device not found!")
+            self.tagger.reset()  # Reset to default state
             
         except DaqNotFoundError:
             raise RuntimeError(
@@ -127,9 +132,7 @@ class GalvoScannerController:
             int: Number of counts during sampling period
         """
         # Initialize TimeTagger if not already done
-        if not hasattr(self, 'tagger'):
-            self.tagger = TimeTagger.createTimeTagger()  # <-- Correct initialization
-            self.tagger.reset()
+        
     
         # Set up counter on SPD channel (replace [1] with your actual channel)
         counter = Countrate(self.tagger, channels=[1])  # <-- 'channels' is explicit
