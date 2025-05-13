@@ -8,6 +8,8 @@ from galvo_controller import GalvoScannerController
 from data_manager import DataManager
 import threading
 from magicgui import magicgui
+from qtpy.QtCore import QTimer
+
 #import random
 # --------------------- INITIAL CONFIGURATION ---------------------
 config = json.load(open("config_template.json"))
@@ -28,7 +30,7 @@ max_zoom = 3
 contrast_limits = (0, 10)
 scan_history = []  # For going back
 image = np.zeros((y_res, x_res), dtype=np.float32)
-
+data_path = None
 # --------------------- VISOR NAPARI ---------------------
 viewer = napari.Viewer()
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
@@ -36,7 +38,7 @@ shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color=
 
 # --------------------- SCANNING ---------------------
 def scan_pattern(x_points, y_points):
-    global image, layer
+    global image, layer, data_path
 
     height, width = len(y_points), len(x_points)
     image = np.zeros((height, width), dtype=np.float32)
@@ -58,8 +60,8 @@ def scan_pattern(x_points, y_points):
                 image[y_idx, x_idx] = voltage
                 layer.data = image
     layer.contrast_limits = (np.min(image), np.max(image))
-    data_manager.save_scan_data(image)
-    return x_points, y_points  # Returns for history
+    data_path=data_manager.save_scan_data(image)
+    return x_points, y_points # Returns for history
 
 # --------------------- ZOOM BY REGION ---------------------
 
@@ -132,13 +134,13 @@ def reset_zoom():
 
 @magicgui(call_button="📷 New Scan")
 def new_scan():
-    global original_x_points, original_y_points
+    global original_x_points, original_y_points, data_path
     
     def run_new_scan():
         scan_pattern(original_x_points, original_y_points)
         shapes.data = []
-    
     threading.Thread(target=run_new_scan, daemon=True).start()
+    
 
 @magicgui(call_button="🎯 Set to Zero")
 def close_scanner():
@@ -151,8 +153,5 @@ def close_scanner():
 viewer.window.add_dock_widget(reset_zoom, area="right")
 viewer.window.add_dock_widget(new_scan, area="right")
 viewer.window.add_dock_widget(close_scanner, area="right")
-
-# --------------------- First full scan ---------------------
-threading.Thread(target=lambda: scan_pattern(original_x_points, original_y_points), daemon=True).start()
 
 napari.run()
