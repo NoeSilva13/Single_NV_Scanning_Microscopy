@@ -128,7 +128,7 @@ class GalvoScannerController:
         """
         # Initialize TimeTagger if not already done
         if not hasattr(self, 'tagger'):
-            self.tagger = TimeTagger()  # <-- Correct initialization
+            self.tagger = TimeTagger.createTimeTagger()  # <-- Correct initialization
             self.tagger.reset()
     
         # Set up counter on SPD channel (replace [1] with your actual channel)
