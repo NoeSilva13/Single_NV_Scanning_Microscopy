@@ -40,7 +40,7 @@ class DataManager:
             df = scan_data
             
         # Write config as a single JSON string in a comment block
-        with open(filename, 'w', encoding='utf-8') as f:
+        with open(filename, 'w', encoding='utf-8', newline='') as f:
             config_json_str = json.dumps(config, ensure_ascii=False, indent=2)
             f.write("# Experiment Configuration (JSON):\n")
             for line in config_json_str.splitlines():
