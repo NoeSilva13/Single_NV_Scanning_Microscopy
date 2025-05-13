@@ -3,14 +3,17 @@ import napari
 import time
 import json
 import nidaqmx
-from nidaqmx.constants import Edge
+from nidaqmx.constants import (TerminalConfiguration, Edge, CountDirection, AcquisitionType, SampleTimingType)
 from galvo_controller import GalvoScannerController
+from data_manager import DataManager
 import threading
 from magicgui import magicgui
+from napari.utils.notifications import show_info
 #import random
 # --------------------- INITIAL CONFIGURATION ---------------------
 config = json.load(open("config_template.json"))
 galvo_controller = GalvoScannerController()
+data_manager = DataManager()
 
 x_range = config['scan_range']['x']
 y_range = config['scan_range']['y']
@@ -26,7 +29,7 @@ max_zoom = 3
 contrast_limits = (0, 10000)
 scan_history = []  # For going back
 image = np.zeros((y_res, x_res), dtype=np.float32)
-
+data_path = None
 # --------------------- VISOR NAPARI ---------------------
 viewer = napari.Viewer()
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
@@ -34,7 +37,7 @@ shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color=
 
 # --------------------- SCANNING ---------------------
 def scan_pattern(x_points, y_points):
-    global image, layer
+    global image, layer, data_path
 
     height, width = len(y_points), len(x_points)
     image = np.zeros((height, width), dtype=np.float32)
@@ -67,7 +70,7 @@ def scan_pattern(x_points, y_points):
                 #image[y_idx, x_idx] = random.randint(0, 10000) # for testing
                 layer.data = image
     layer.contrast_limits = (np.min(image), np.max(image))
-
+    data_path = data_manager.save_scan_data(image)
     return x_points, y_points  # Returns for history
 
 # --------------------- ZOOM BY REGION ---------------------
@@ -148,12 +151,26 @@ def new_scan():
         shapes.data = []
     
     threading.Thread(target=run_new_scan, daemon=True).start()
+    show_info("New scan started")
+
+@magicgui(call_button="🎯 Set to Zero")
+def close_scanner():
+    def run_close():
+        galvo_controller.close()
+    
+    threading.Thread(target=run_close, daemon=True).start()
+    show_info("Scanner set to zero")
+
+@magicgui(call_button="📷 Save Image")
+def save_image():
+    viewer.screenshot(path=f"{data_path}.png", canvas_only=True, flash=True)
+    show_info("Image saved")
 
 # Add buttons to the interface
 viewer.window.add_dock_widget(reset_zoom, area="right")
 viewer.window.add_dock_widget(new_scan, area="right")
+viewer.window.add_dock_widget(save_image, area="right")
+viewer.window.add_dock_widget(close_scanner, area="right")
 
-# --------------------- First full scan ---------------------
-threading.Thread(target=lambda: scan_pattern(original_x_points, original_y_points), daemon=True).start()
 
 napari.run()
