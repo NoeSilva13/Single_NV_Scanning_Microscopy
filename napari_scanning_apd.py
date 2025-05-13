@@ -148,7 +148,7 @@ def close_scanner():
         galvo_controller.close()
     
     threading.Thread(target=run_close, daemon=True).start()
-
+    show_info("Scanner set to zero")
 # Add buttons to the interface
 viewer.window.add_dock_widget(reset_zoom, area="right")
 viewer.window.add_dock_widget(new_scan, area="right")
