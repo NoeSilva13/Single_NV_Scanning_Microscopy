@@ -1,6 +1,7 @@
 import os
 import time
 import pandas as pd
+import json
 
 class DataManager:
     def __init__(self):
@@ -19,6 +20,9 @@ class DataManager:
         Returns:
             str: The path to the saved file
         """
+        # Load configuration
+        config = json.load(open("config_template.json"))
+        
         # Create daily folder for data
         daily_folder = time.strftime("%m%d%y")
         if not os.path.exists(daily_folder):
@@ -34,9 +38,13 @@ class DataManager:
         else:
             df = scan_data
             
-        # Save the data
-        df.to_csv(filename, index=False)
-        print(f"Scan data saved to {filename}")
+        # Save configuration as header comments, then data
+        with open(filename, 'w', encoding='utf-8') as f:
+            f.write("# Experiment Configuration:\n")
+            for key, value in config.items():
+                f.write(f"# {key}: {value}\n")
+            f.write("#\n")  # Empty line to separate config from data
+            df.to_csv(f, index=False)
         
         return filename
     
