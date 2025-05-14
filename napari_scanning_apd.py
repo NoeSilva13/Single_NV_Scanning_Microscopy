@@ -10,6 +10,7 @@ import threading
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
+
 # --------------------- INITIAL CONFIGURATION ---------------------
 config = json.load(open("config_template.json"))
 galvo_controller = GalvoScannerController()
@@ -30,6 +31,12 @@ contrast_limits = (0, 10)
 scan_history = []  # For going back
 image = np.zeros((y_res, x_res), dtype=np.float32)
 data_path = None
+
+# Global tasks for DAQ
+monitor_task = nidaqmx.Task()
+monitor_task.ai_channels.add_ai_voltage_chan(galvo_controller.xout_voltage, terminal_config=TerminalConfiguration.RSE)
+monitor_task.start()
+
 # --------------------- VISOR NAPARI ---------------------
 viewer = napari.Viewer()
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
@@ -38,7 +45,7 @@ shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color=
 # --------------------- MPL WIDGET ---------------------
 
 # Create and add the MPL widget to the viewer with a slower update rate for stability
-mpl_widget = live_plot(measure_function=galvo_controller.read_voltage, histogram_range=100, dt=0.2)
+mpl_widget = live_plot(measure_function=lambda: monitor_task.read(), histogram_range=100, dt=0.2)
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING ---------------------
@@ -49,21 +56,20 @@ def scan_pattern(x_points, y_points):
     image = np.zeros((height, width), dtype=np.float32)
     layer.data = image  # update layer
     layer.contrast_limits = contrast_limits
-    with nidaqmx.Task() as ao_task, nidaqmx.Task() as ai_task:
+    
+    with nidaqmx.Task() as ao_task:
         ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
         ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
-
-        ai_task.ai_channels.add_ai_voltage_chan(galvo_controller.yout_voltage, terminal_config=TerminalConfiguration.RSE)
-        
 
         for y_idx, y in enumerate(y_points):
             for x_idx, x in enumerate(x_points):
                 ao_task.write([x, y])
                 time.sleep(0.001)
-                voltage = ai_task.read()
+                voltage = monitor_task.read()
                 print(voltage)
                 image[y_idx, x_idx] = voltage
                 layer.data = image
+    
     layer.contrast_limits = (np.min(image), np.max(image))
     data_path = data_manager.save_scan_data(image)
     return x_points, y_points # Returns for history
@@ -219,7 +225,6 @@ viewer.window.add_dock_widget(new_scan, area="right")
 viewer.window.add_dock_widget(save_image, area="right")
 viewer.window.add_dock_widget(close_scanner, area="right")
 viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan Parameters")
-
 
 
 
