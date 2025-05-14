@@ -122,6 +122,15 @@ def save_image():
     show_info("Image saved")
 
 # --------------------- SCAN PARAMETERS WIDGET ---------------------
+def update_scan_parameters_widget():
+    """Update the scan parameters widget with current values."""
+    update_scan_parameters.x_min.value = x_range[0]
+    update_scan_parameters.x_max.value = x_range[1]
+    update_scan_parameters.y_min.value = y_range[0]
+    update_scan_parameters.y_max.value = y_range[1]
+    update_scan_parameters.x_resolution.value = x_res
+    update_scan_parameters.y_resolution.value = y_res
+
 @magicgui(
     x_min={"widget_type": "FloatSpinBox", "value": x_range[0], "min": -10, "max": 10, "step": 0.1},
     x_max={"widget_type": "FloatSpinBox", "value": x_range[1], "min": -10, "max": 10, "step": 0.1},
@@ -215,6 +224,7 @@ def on_shape_added(event):
         original_x_points, original_y_points = scan_pattern(x_zoom, y_zoom)
         zoom_level += 1
         shapes.data = []  # Clear rectangle
+        update_scan_parameters_widget()  # Update widget values to match current zoom
         zoom_in_progress = False  # Release flag
 
     threading.Thread(target=run_zoom, daemon=True).start()
