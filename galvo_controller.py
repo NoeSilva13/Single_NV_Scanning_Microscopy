@@ -6,7 +6,6 @@ from nidaqmx.errors import DaqNotFoundError, DaqError
 import pyvisa
 import csv
 from typing import Generator, Tuple, Dict, Any
-from TimeTagger import createTimeTagger, Countrate  # Import createTimeTagger instead
 
 class GalvoScannerController:
     """
@@ -48,16 +47,7 @@ class GalvoScannerController:
             self.settling_time = 0.001  # seconds
             
             print("Successfully initialized DAQ connection")
-            
-            # Initialize TimeTagger20 (replace 'TimeTagger' with 'createTimeTagger')
-            self.tagger = createTimeTagger()  # Automatically detects TimeTagger20
-            if not self.tagger:
-                raise RuntimeError("TimeTagger device not found!")
-            self.tagger.reset()  # Reset to default state
-            
-            # Initialize TimeTagger counter for SPD
-            self.spd_counter_tt = Countrate(self.tagger, channels=[1])
-            
+                        
         except DaqNotFoundError:
             raise RuntimeError(
                 "NI-DAQmx not found. Please install NI-DAQmx from National Instruments website: "
@@ -125,23 +115,6 @@ class GalvoScannerController:
             counter_task.stop()
         return count
     
-    def read_spd_count_tt(self, sampling_time=0.1):
-        """
-        Read photon counts from SPD using Swabian TimeTagger.
-
-        Args:
-            sampling_time (float): Time to count photons in seconds
-        
-        Returns:
-            int: Number of counts during sampling period
-        """
-        # Clear and measure counts
-        self.spd_counter_tt.clear()
-        time.sleep(sampling_time)
-        counts = self.spd_counter_tt.getData()[0]  # Extract counts from channel 1
-
-        return int(counts)  # Return count during sampling period
-
     # --------------------------
     # Scanning Methods
     # --------------------------
