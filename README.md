@@ -1,154 +1,193 @@
 # Single NV Scanning Microscopy
 
-This Python project provides software control for a Single Nitrogen-Vacancy (NV) Scanning Microscopy system. The setup is based on the **Thorlabs LSKGG4 Galvo-Galvo Scanner** and the **NI USB-6453 Data Acquisition (DAQ) device**.
+![NV Scanning Microscopy](https://img.shields.io/badge/Microscopy-NV%20Centers-brightgreen)
+![Python](https://img.shields.io/badge/python-3.7+-blue.svg)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-## Overview
+A Python-based control system for Single Nitrogen-Vacancy (NV) Scanning Microscopy, featuring integration with Thorlabs LSKGG4 Galvo-Galvo Scanner, NI USB-6453 DAQ, and Swabian TimeTagger for high-precision photon counting.
 
-The system enables two-dimensional imaging of samples by scanning with high precision and detecting single photons emitted by NV centers in diamond. Two types of detectors are supported:
+## 🔍 Key Features
 
-- **Avalanche Photodiode (APD)**
-- **Excelitas SPCM-AQRH-10-FC Single Photon Counting Module**
+- **High-Precision Scanning**:
+  - Two-dimensional sample imaging with nanoscale precision
+  - Real-time and buffered scanning modes
+  - Configurable scan parameters and hardware settings
+  
+- **Advanced Detection**:
+  - Dual detector support (APD and SPCM)
+  - Swabian TimeTagger integration for precise photon counting
+  - High temporal resolution measurements
+  
+- **Interactive Visualization**:
+  - Real-time image display with Napari viewer
+  - Live scan preview and zooming capabilities
+  - Interactive region selection and scanning
+  - Multiple visualization modes (2D plot, histogram)
 
-These detectors are used to collect fluorescence data from the sample as it is scanned, enabling high-resolution image reconstruction.
+## 💻 System Requirements
 
-## Features
+### Hardware
+- Thorlabs LSKGG4 Galvo-Galvo Scanner
+- National Instruments USB-6453 DAQ device
+- One of the supported detectors:
+  - Avalanche Photodiode (APD)
+  - Excelitas SPCM-AQRH-10-FC Single Photon Counting Module
+- Swabian TimeTagger device
+- Computer with USB 3.0+ ports
 
-- Real-time control of galvo scanners
-- Synchronization with single-photon detectors
-- Real-time image acquisition and visualization
-- Support for both real-time and buffered scanning modes
-- Configurable scan parameters and hardware settings
-- Interactive visualization with live updates
+### Software
+- Python 3.7 or higher
+- Operating System: Windows 10/11
+- Dependencies:
+  ```
+  numpy>=1.20.0
+  matplotlib>=3.4.0
+  nidaqmx>=0.6.0
+  pyvisa>=1.11.0
+  napari>=0.4.17
+  magicgui>=0.3.0
+  TimeTagger>=0.9.0
+  ```
 
-## Requirements
+## 📦 Installation
 
-- **Hardware**:
-  - Thorlabs LSKGG4 Galvo-Galvo Scanner
-  - NI USB-6453 DAQ
-  - APD or Excelitas SPCM-AQRH-10-FC detector
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/NoeSilva13/Single_NV_Scannig_Microscopy.git
+   cd Single_NV_Scannig_Microscopy
+   ```
 
-- **Software**:
-  - Python 3.7 or higher
-  - Required Python packages:
-    - numpy
-    - matplotlib
-    - nidaqmx
-    - pyvisa
+2. **Create and Activate Virtual Environment**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
 
-## Installation
+3. **Install Dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-1. Clone this repository:
-```bash
-git clone https://github.com/yourusername/Single_NV_Scanning_Microscopy.git
-cd Single_NV_Scanning_Microscopy
-```
+4. **Install Hardware Drivers**
+   - [NI-DAQmx](https://www.ni.com/en/support/downloads/drivers/download.ni-daqmx.html)
+   - [Swabian TimeTagger Software](https://www.swabianinstruments.com/time-tagger/downloads/)
 
-2. Install required packages:
-```bash
-pip install -r requirements.txt
-```
+## 🚀 Usage
 
-## Usage
+### Napari-based Interface
 
-### Basic Usage
+1. **Launch the Napari Interface**
+   ```bash
+   python napari_scanning.py  # For APD-based scanning
+   # or
+   python napari_scanning_SPD_TT.py  # For TimeTagger-based scanning
+   ```
 
-1. **Real-time Scanning Mode**:
-```bash
-python main.py --mode realtime
-```
-This mode provides live visualization of the scan as it progresses.
+2. **Interface Features**:
+   - 🔄 Reset Zoom: Return to original view
+   - 📷 New Scan: Start a new scanning sequence
+   - 💾 Save Image: Save the current scan
+   - 🎯 Set to Zero: Reset scanner position
 
-2. **Buffered Scanning Mode**:
-```bash
-python main.py --mode buffered
-```
-This mode is faster but only shows the final result.
+### Command-Line Interface
 
-### Configuration
+1. **Real-time Scanning Mode**
+   ```bash
+   python main.py --mode realtime
+   ```
 
-The system can be configured using a JSON configuration file. A template is provided in `config_template.json`. Key configuration options include:
+2. **Buffered Scanning Mode**
+   ```bash
+   python main.py --mode buffered
+   ```
 
-- Scan range and resolution
-- Dwell time per point
-- Hardware settings (sample rate, settling time)
-- Visualization preferences
+### Jupyter Notebook Interface
+Use `microscope_control.ipynb` for interactive control and visualization:
+- Real-time photon counting
+- Live scan visualization
+- Parameter adjustment
+- Data analysis
 
-To use a custom configuration:
-```bash
-python main.py --config your_config.json
-```
+## ⚙️ Configuration
 
-### Configuration Options
-
+### Configuration File (config_template.json)
 ```json
 {
     "scan_range": {
-        "x": [-5.0, 5.0],  // X-axis voltage range
-        "y": [-5.0, 5.0]   // Y-axis voltage range
+        "x": [-5.0, 5.0],
+        "y": [-5.0, 5.0]
     },
     "resolution": {
-        "x": 100,          // Number of points in X
-        "y": 100           // Number of points in Y
+        "x": 100,
+        "y": 100
     },
-    "dwell_time": 0.01,    // Time per point in seconds
-    "scan_mode": "realtime", // or "buffered"
+    "dwell_time": 0.01,
+    "scan_mode": "realtime",
     "hardware": {
         "sample_rate": 1000,
         "samples_per_point": 10,
         "settling_time": 0.001
-    },
-    "visualization": {
-        "colormap": "viridis",
-        "update_interval": 50
     }
 }
 ```
 
-## Operation
+### Advanced Settings
+- **Scan Resolution**: 16x16 to 512x512 pixels
+- **Dwell Time**: 0.1ms to 1000ms per point
+- **Voltage Range**: ±10V maximum
+- **TimeTagger Settings**: 
+  - Channel 1: SPD input
+  - Adjustable sampling time
+  - Configurable binning
 
-1. **Starting a Scan**:
-   - Choose the scanning mode (realtime or buffered)
-   - Configure scan parameters in the config file
-   - Run the appropriate command
+## 📊 Data Management
 
-2. **During Scanning**:
-   - Real-time mode: Watch the live visualization update
-   - Buffered mode: Wait for the scan to complete
-   - Press Ctrl+C to safely stop the scan
+### Data Structure
+- Raw scan data: `.npy` files
+- Processed images: `.png`, `.tiff`
+- Metadata: `.json`
+- Daily folders: `MMDDYY/scan_data_HHMMSS.csv`
 
-3. **After Scanning**:
-   - The system will automatically save the scan data
-   - The visualization will remain available for analysis
+### Data Analysis Features
+- Real-time count rate monitoring
+- 2D scan visualization
+- Region-of-interest selection
+- Time trace analysis
 
-## Safety Features
+## 🔧 Troubleshooting
 
-- Automatic voltage range limiting
-- Safe shutdown on interruption
-- Position feedback monitoring
-- Emergency stop capability
-
-## Troubleshooting
-
-1. **No Signal Detection**:
-   - Check detector connections
-   - Verify DAQ channel configuration
+1. **No Signal Detection**
+   - Check detector power and connections
+   - Verify DAQ/TimeTagger channel configuration
    - Ensure proper voltage ranges
 
-2. **Scanner Not Responding**:
-   - Verify DAQ connections
-   - Check voltage ranges
-   - Ensure proper initialization
+2. **Scanner Issues**
+   - Check USB connections
+   - Verify DAQ device in NI MAX
+   - Check voltage limits (±10V)
 
-3. **Visualization Issues**:
-   - Check matplotlib backend
-   - Verify data format
-   - Ensure proper configuration
+3. **TimeTagger Problems**
+   - Verify USB connection
+   - Check channel assignments
+   - Update TimeTagger software
 
-## Contributing
+## 📚 References
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+- [NV Center Physics Documentation](https://quantum-diamond.physics.org)
+- [Thorlabs LSKGG4 Manual](https://www.thorlabs.com)
+- [NI USB-6453 Specifications](https://www.ni.com)
+- [Swabian TimeTagger Documentation](https://www.swabianinstruments.com/time-tagger/)
+- [Napari Documentation](https://napari.org/stable/)
 
-## License
+## 📧 Contact
 
-[Add your license information here]
+For questions and support:
+- **Email**: jramossi@uci.edu
+- **Lab Website**: [[lab-website-url](https://www.burkelab.com/)]
 
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+*Last updated: May 2025*
