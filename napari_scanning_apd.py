@@ -191,6 +191,14 @@ def on_shape_added(event):
     def run_zoom():
         global original_x_points, original_y_points, zoom_level, zoom_in_progress
         zoom_in_progress = True  # Activate flag
+        update_scan_parameters(
+            x_min=x_zoom[0],
+            x_max=x_zoom[-1],
+            y_min=y_zoom[0],
+            y_max=y_zoom[-1],
+            x_resolution=x_res,
+            y_resolution=y_res
+        )
         original_x_points, original_y_points = scan_pattern(x_zoom, y_zoom)
         zoom_level += 1
         shapes.data = []  # Clear rectangle
