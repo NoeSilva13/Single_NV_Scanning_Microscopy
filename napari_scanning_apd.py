@@ -9,6 +9,7 @@ from data_manager import DataManager
 import threading
 from magicgui import magicgui
 from napari.utils.notifications import show_info
+
 #import random
 # --------------------- INITIAL CONFIGURATION ---------------------
 config = json.load(open("config_template.json"))
@@ -157,10 +158,10 @@ def save_image():
 
 # --------------------- SCAN PARAMETERS WIDGET ---------------------
 @magicgui(
-    x_min={"widget_type": "FloatSpinBox", "value": x_range[0], "step": 0.1},
-    x_max={"widget_type": "FloatSpinBox", "value": x_range[1], "step": 0.1},
-    y_min={"widget_type": "FloatSpinBox", "value": y_range[0], "step": 0.1},
-    y_max={"widget_type": "FloatSpinBox", "value": y_range[1], "step": 0.1},
+    x_min={"widget_type": "FloatSpinBox", "value": x_range[0], "min": -10, "max": 10, "step": 0.1},
+    x_max={"widget_type": "FloatSpinBox", "value": x_range[1], "min": -10, "max": 10, "step": 0.1},
+    y_min={"widget_type": "FloatSpinBox", "value": y_range[0], "min": -10, "max": 10, "step": 0.1},
+    y_max={"widget_type": "FloatSpinBox", "value": y_range[1], "min": -10, "max": 10, "step": 0.1},
     x_resolution={"widget_type": "SpinBox", "value": x_res, "min": 2, "max": 100},
     y_resolution={"widget_type": "SpinBox", "value": y_res, "min": 2, "max": 100},
     call_button="Apply Changes"
@@ -203,5 +204,8 @@ viewer.window.add_dock_widget(new_scan, area="right")
 viewer.window.add_dock_widget(save_image, area="right")
 viewer.window.add_dock_widget(close_scanner, area="right")
 viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan Parameters")
+
+
+
 
 napari.run()
