@@ -99,7 +99,7 @@ class GalvoScannerController:
         Read voltage
         """
         with nidaqmx.Task() as ai_task:
-            ai_task.ai_channels.add_ai_voltage_chan(self.yout_voltage, terminal_config=TerminalConfiguration.RSE)
+            ai_task.ai_channels.add_ai_voltage_chan(self.xout_voltage, terminal_config=TerminalConfiguration.RSE)
             voltage = ai_task.read()
             return voltage
 
