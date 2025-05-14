@@ -155,10 +155,53 @@ def save_image():
     viewer.screenshot(path=f"{data_path}.png", canvas_only=True, flash=True)
     show_info("Image saved")
 
+# --------------------- SCAN PARAMETERS WIDGET ---------------------
+@magicgui(
+    x_min={"widget_type": "FloatSpinBox", "value": x_range[0], "step": 0.1},
+    x_max={"widget_type": "FloatSpinBox", "value": x_range[1], "step": 0.1},
+    y_min={"widget_type": "FloatSpinBox", "value": y_range[0], "step": 0.1},
+    y_max={"widget_type": "FloatSpinBox", "value": y_range[1], "step": 0.1},
+    x_resolution={"widget_type": "SpinBox", "value": x_res, "min": 2, "max": 100},
+    y_resolution={"widget_type": "SpinBox", "value": y_res, "min": 2, "max": 100},
+    call_button="Apply Changes"
+)
+def update_scan_parameters(
+    x_min: float,
+    x_max: float,
+    y_min: float,
+    y_max: float,
+    x_resolution: int,
+    y_resolution: int,
+) -> None:
+    global x_range, y_range, x_res, y_res, original_x_points, original_y_points, config
+    
+    # Update global variables
+    x_range = [x_min, x_max]
+    y_range = [y_min, y_max]
+    x_res = x_resolution
+    y_res = y_resolution
+    
+    # Update config
+    config['scan_range']['x'] = x_range
+    config['scan_range']['y'] = y_range
+    config['resolution']['x'] = x_res
+    config['resolution']['y'] = y_res
+    
+    # Update scan points
+    original_x_points = np.linspace(x_range[0], x_range[1], x_res)
+    original_y_points = np.linspace(y_range[0], y_range[1], y_res)
+    
+    # Save updated config
+    with open("config_template.json", 'w') as f:
+        json.dump(config, f, indent=4)
+    
+    show_info('Scan parameters updated successfully!')
+
 # Add buttons to the interface
 viewer.window.add_dock_widget(reset_zoom, area="right")
 viewer.window.add_dock_widget(new_scan, area="right")
 viewer.window.add_dock_widget(save_image, area="right")
 viewer.window.add_dock_widget(close_scanner, area="right")
+viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan Parameters")
 
 napari.run()
