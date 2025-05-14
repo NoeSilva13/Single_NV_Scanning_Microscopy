@@ -7,6 +7,7 @@ import pyvisa
 import csv
 from typing import Generator, Tuple, Dict, Any
 from TimeTagger import createTimeTagger, Countrate  # Import createTimeTagger instead
+
 class GalvoScannerController:
     """
     Controller for galvo mirror scanning system with NI DAQ.
