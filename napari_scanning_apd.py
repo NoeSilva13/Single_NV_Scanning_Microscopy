@@ -63,54 +63,6 @@ def scan_pattern(x_points, y_points):
     data_path = data_manager.save_scan_data(image)
     return x_points, y_points # Returns for history
 
-# --------------------- ZOOM BY REGION ---------------------
-
-zoom_in_progress = False  # Flag global
-@shapes.events.data.connect
-def on_shape_added(event):
-    global zoom_level, max_zoom, scan_history
-    global original_x_points, original_y_points, zoom_in_progress
-
-    if zoom_in_progress:
-        return  # Ignore if already running
-
-    if zoom_level >= max_zoom:
-        print(f"⚠️ Max zoom reached ({max_zoom} levels).")
-        return
-
-    if len(shapes.data) == 0:
-        return
-
-    rect = shapes.data[-1]
-    min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
-    max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
-
-    # Limit to current image size
-    height, width = layer.data.shape
-    min_x = max(0, min_x)
-    max_x = min(width, max_x)
-    min_y = max(0, min_y)
-    max_y = min(height, max_y)
-
-    # History: save current state before zoom
-    scan_history.append((original_x_points, original_y_points))
-
-    # Adjust resolution to new range (keep original resolution)
-    #x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], max_x - min_x)
-    #y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], max_y - min_y)
-    # Same resolution as original but zoom in
-    x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], x_res)
-    y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], y_res)
-
-    def run_zoom():
-        global original_x_points, original_y_points, zoom_level, zoom_in_progress
-        zoom_in_progress = True  # Activate flag
-        original_x_points, original_y_points = scan_pattern(x_zoom, y_zoom)
-        zoom_level += 1
-        shapes.data = []  # Clear rectangle
-        zoom_in_progress = False  # Release flag
-
-    threading.Thread(target=run_zoom, daemon=True).start()
 # --------------------- RESET BUTTON ---------------------
 @magicgui(call_button="🔄 Reset Zoom")
 def reset_zoom():
@@ -197,6 +149,56 @@ def update_scan_parameters(
         json.dump(config, f, indent=4)
     
     show_info('Scan parameters updated successfully!')
+# --------------------- ZOOM BY REGION ---------------------
+
+zoom_in_progress = False  # Flag global
+@shapes.events.data.connect
+def on_shape_added(event):
+    global zoom_level, max_zoom, scan_history
+    global original_x_points, original_y_points, zoom_in_progress
+
+    if zoom_in_progress:
+        return  # Ignore if already running
+
+    if zoom_level >= max_zoom:
+        print(f"⚠️ Max zoom reached ({max_zoom} levels).")
+        return
+
+    if len(shapes.data) == 0:
+        return
+
+    rect = shapes.data[-1]
+    min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
+    max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
+
+    # Limit to current image size
+    height, width = layer.data.shape
+    min_x = max(0, min_x)
+    max_x = min(width, max_x)
+    min_y = max(0, min_y)
+    max_y = min(height, max_y)
+
+    # History: save current state before zoom
+    scan_history.append((original_x_points, original_y_points))
+
+    # Adjust resolution to new range (keep original resolution)
+    #x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], max_x - min_x)
+    #y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], max_y - min_y)
+    # Same resolution as original but zoom in
+    x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], x_res)
+    y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], y_res)
+
+    def run_zoom():
+        global original_x_points, original_y_points, zoom_level, zoom_in_progress
+        zoom_in_progress = True  # Activate flag
+        original_x_points, original_y_points = scan_pattern(x_zoom, y_zoom)
+        zoom_level += 1
+        shapes.data = []  # Clear rectangle
+        zoom_in_progress = False  # Release flag
+
+    threading.Thread(target=run_zoom, daemon=True).start()
+
+
 
 # Add buttons to the interface
 viewer.window.add_dock_widget(reset_zoom, area="right")
