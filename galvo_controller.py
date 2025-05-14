@@ -54,6 +54,9 @@ class GalvoScannerController:
                 raise RuntimeError("TimeTagger device not found!")
             self.tagger.reset()  # Reset to default state
             
+            # Initialize TimeTagger counter for SPD
+            self.spd_counter_tt = Countrate(self.tagger, channels=[1])
+            
         except DaqNotFoundError:
             raise RuntimeError(
                 "NI-DAQmx not found. Please install NI-DAQmx from National Instruments website: "
@@ -124,26 +127,20 @@ class GalvoScannerController:
     def read_spd_count_tt(self, sampling_time=0.1):
         """
         Read photon counts from SPD using Swabian TimeTagger.
-    
+
         Args:
             sampling_time (float): Time to count photons in seconds
         
         Returns:
             int: Number of counts during sampling period
         """
-        # Initialize TimeTagger if not already done
-        
-    
-        # Set up counter on SPD channel (replace [1] with your actual channel)
-        counter = Countrate(self.tagger, channels=[1])  # <-- 'channels' is explicit
-    
         # Clear and measure counts
-        counter.clear()
+        self.spd_counter_tt.clear()
         time.sleep(sampling_time)
-        counts = counter.getData()[0]  # Extract counts from channel 1
-    
-        return int(counts)  # Return averga count rate in counts per second
-    
+        counts = self.spd_counter_tt.getData()[0]  # Extract counts from channel 1
+
+        return int(counts)  # Return count during sampling period
+
     # --------------------------
     # Scanning Methods
     # --------------------------
