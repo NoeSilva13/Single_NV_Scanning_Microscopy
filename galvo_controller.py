@@ -142,7 +142,7 @@ class GalvoScannerController:
         time.sleep(sampling_time)
         counts = counter.getData()[0]  # Extract counts from channel 1
     
-        return int(counts * sampling_time)  # Return total counts
+        return int(counts)  # Return averga count rate in counts per second
     
     # --------------------------
     # Scanning Methods
