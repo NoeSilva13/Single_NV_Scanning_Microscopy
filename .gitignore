@@ -2,6 +2,7 @@
 *.csv
 *.dat
 *.txt
+*.json
 scan_data_*.csv
 
 # Data folders (keep folder structure but ignore contents)
