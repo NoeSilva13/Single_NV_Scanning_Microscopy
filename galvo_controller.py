@@ -94,6 +94,15 @@ class GalvoScannerController:
             voltages = ai_task.read()
             return voltages[0], voltages[1]
 
+    def read_voltage(self):
+        """
+        Read voltage
+        """
+        with nidaqmx.Task() as ai_task:
+            ai_task.ai_channels.add_ai_voltage_chan(self.yout_voltage, terminal_config=TerminalConfiguration.RSE)
+            voltage = ai_task.read()
+            return voltage
+
     def read_spd_count(self, sampling_time=0.1):
         """
         Read photon counts from SPD.

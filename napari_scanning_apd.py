@@ -9,8 +9,7 @@ from data_manager import DataManager
 import threading
 from magicgui import magicgui
 from napari.utils.notifications import show_info
-
-#import random
+from live_plot_napari_widget import live_plot
 # --------------------- INITIAL CONFIGURATION ---------------------
 config = json.load(open("config_template.json"))
 galvo_controller = GalvoScannerController()
@@ -37,41 +36,9 @@ layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
 # --------------------- MPL WIDGET ---------------------
-from qtpy.QtWidgets import QWidget, QVBoxLayout
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
 
-class BaseNapariMPLWidget(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.figure = Figure(figsize=(4, 10))
-        self.canvas = FigureCanvas(self.figure)
-        layout = QVBoxLayout()
-        layout.addWidget(self.canvas)
-        self.setLayout(layout)
-        self.ax = self.figure.add_subplot(111)
-        self.ax.set_xlabel('Time (s)')
-        self.ax.set_ylabel('Signal')
-        self.line = None
-        self.initialize_plot()
-
-    def initialize_plot(self):
-        self.ax.clear()
-        self.line, = self.ax.plot([], [], 'b-')
-        self.ax.set_xlim(0, 10)
-        self.ax.set_ylim(-1, 1)
-        self.canvas.draw()
-
-    def update_plot(self, x_data, y_data):
-        if self.line is None:
-            self.initialize_plot()
-        self.line.set_data(x_data, y_data)
-        self.ax.relim()
-        self.ax.autoscale_view()
-        self.canvas.draw()
-
-# Create and add the MPL widget to the viewer
-mpl_widget = BaseNapariMPLWidget()
+# Create and add the MPL widget to the viewer with a slower update rate for stability
+mpl_widget = live_plot(measure_function=galvo_controller.read_voltage, histogram_range=100, dt=0.2)
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING ---------------------
