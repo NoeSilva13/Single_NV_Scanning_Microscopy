@@ -31,8 +31,8 @@ A Python-based control system for Single Nitrogen-Vacancy (NV) Scanning Microsco
 - National Instruments USB-6453 DAQ device
 - One of the supported detectors:
   - Avalanche Photodiode (APD)
-  - Excelitas SPCM-AQRH-10-FC Single Photon Counting Module
-- Swabian TimeTagger device
+  - Excelitas SPCM-AQRH-10-FC Single Photon Counting Module (SPD)
+- Swabian TimeTagger device (if using SPD)
 - Computer with USB 3.0+ ports
 
 ### Software
@@ -46,7 +46,7 @@ A Python-based control system for Single Nitrogen-Vacancy (NV) Scanning Microsco
   pyvisa>=1.11.0
   napari>=0.4.17
   magicgui>=0.3.0
-  TimeTagger>=0.9.0
+  TimeTagger>=0.9.0 (if using SPD)
   ```
 
 ## 📦 Installation
@@ -143,8 +143,7 @@ Use `microscope_control.ipynb` for interactive control and visualization:
 ## 📊 Data Management
 
 ### Data Structure
-- Raw scan data: `.npy` files
-- Processed images: `.png`, `.tiff`
+- Processed images: `.png`
 - Metadata: `.json`
 - Daily folders: `MMDDYY/scan_data_HHMMSS.csv`
 
@@ -173,7 +172,6 @@ Use `microscope_control.ipynb` for interactive control and visualization:
 
 ## 📚 References
 
-- [NV Center Physics Documentation](https://quantum-diamond.physics.org)
 - [Thorlabs LSKGG4 Manual](https://www.thorlabs.com)
 - [NI USB-6453 Specifications](https://www.ni.com)
 - [Swabian TimeTagger Documentation](https://www.swabianinstruments.com/time-tagger/)
@@ -183,7 +181,7 @@ Use `microscope_control.ipynb` for interactive control and visualization:
 
 For questions and support:
 - **Email**: jramossi@uci.edu
-- **Lab Website**: [[lab-website-url](https://www.burkelab.com/)]
+- **Lab Website**: [[Burkelab](https://www.burkelab.com/)]
 
 ## 📄 License
 
