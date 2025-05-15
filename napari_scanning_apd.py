@@ -70,7 +70,7 @@ shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color=
 # --------------------- MPL WIDGET ---------------------
 
 # Create and add the MPL widget to the viewer with a slower update rate for stability
-mpl_widget = live_plot(measure_function=lambda: monitor_task.read(), histogram_range=100, dt=0.2)
+mpl_widget = live_plot(measure_function=lambda: monitor_task.read(), histogram_range=100, dt=0.1)
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING ---------------------
@@ -261,7 +261,7 @@ def reset_zoom():
     global zoom_level, scan_history, original_x_points, original_y_points, x_range, y_range, x_res, y_res
     shapes.data = []  # Clear rectangle
     if zoom_level == 0:
-        print("🔁 You are already in the original view.")
+        show_info("🔁 You are already in the original view.")
         return
     
     
