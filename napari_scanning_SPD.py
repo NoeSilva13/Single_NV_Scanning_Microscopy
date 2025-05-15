@@ -48,10 +48,16 @@ viewer.window.resize(1200, 800)
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
+tagger = TimeTagger.createTimeTagger()
+tagger.reset()
+
+# Set up counter channel (assuming channel 1 is used for SPD input)
+counter = TimeTagger.Countrate(tagger, [1])
+
 # --------------------- MPL WIDGET ---------------------
 
 # Create and add the MPL widget to the viewer with a slower update rate for stability
-mpl_widget = live_plot(measure_function=lambda: monitor_task.read(), histogram_range=100, dt=0.2)
+mpl_widget = live_plot(measure_function=lambda: counter.getData(), histogram_range=100, dt=0.2)
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING ---------------------
