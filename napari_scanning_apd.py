@@ -60,11 +60,13 @@ original_scan_params = {
     'y_res': None
 }
 
-# --------------------- VISOR NAPARI ---------------------
-viewer = napari.Viewer()
+# --------------------- NAPARI VIEWER SETUP ---------------------
+viewer = napari.Viewer() # Initialize Napari viewer
 # Set window size (width, height)
 viewer.window.resize(1200, 800)
+# Add an image layer to display the live scan. Data is initialized as an empty array 'image'.
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
+# Add a shapes layer to display the zoom area. Initially empty.
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
 # --------------------- MPL WIDGET ---------------------
