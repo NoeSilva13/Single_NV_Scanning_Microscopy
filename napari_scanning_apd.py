@@ -37,6 +37,14 @@ monitor_task = nidaqmx.Task()
 monitor_task.ai_channels.add_ai_voltage_chan(galvo_controller.xout_voltage, terminal_config=TerminalConfiguration.RSE)
 monitor_task.start()
 
+# Add these variables to store original parameters
+original_scan_params = {
+    'x_range': None,
+    'y_range': None,
+    'x_res': None,
+    'y_res': None
+}
+
 # --------------------- VISOR NAPARI ---------------------
 viewer = napari.Viewer()
 # Set window size (width, height)
@@ -79,13 +87,19 @@ def scan_pattern(x_points, y_points):
 # --------------------- RESET BUTTON ---------------------
 @magicgui(call_button="🔄 Reset Zoom")
 def reset_zoom():
-    global zoom_level, scan_history, original_x_points, original_y_points
+    global zoom_level, scan_history, original_x_points, original_y_points, x_range, y_range, x_res, y_res
     shapes.data = []  # Clear rectangle
     if zoom_level == 0:
         print("🔁 You are already in the original view.")
         return
 
-    # Restore original view (last saved)
+    # Restore original parameters
+    x_range = original_scan_params['x_range']
+    y_range = original_scan_params['y_range']
+    x_res = original_scan_params['x_res']
+    y_res = original_scan_params['y_res']
+    
+    # Restore original points
     original_x_points = np.linspace(x_range[0], x_range[1], x_res)
     original_y_points = np.linspace(y_range[0], y_range[1], y_res)
     scan_history.clear()
@@ -94,6 +108,7 @@ def reset_zoom():
     def run_reset():
         scan_pattern(original_x_points, original_y_points)
         shapes.data = []
+        update_scan_parameters_widget()
 
     threading.Thread(target=run_reset, daemon=True).start()
 
@@ -188,6 +203,13 @@ def on_shape_added(event):
 
     if len(shapes.data) == 0:
         return
+
+    # Save current parameters before zooming
+    if zoom_level == 0:
+        original_scan_params['x_range'] = x_range.copy()
+        original_scan_params['y_range'] = y_range.copy()
+        original_scan_params['x_res'] = x_res
+        original_scan_params['y_res'] = y_res
 
     rect = shapes.data[-1]
     min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
