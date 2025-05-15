@@ -215,9 +215,9 @@ def on_shape_added(event):
             x_resolution=x_res,
             y_resolution=y_res
         )
+        shapes.data = []  # Clear rectangle
         original_x_points, original_y_points = scan_pattern(x_zoom, y_zoom)
         zoom_level += 1
-        shapes.data = []  # Clear rectangle
         update_scan_parameters_widget()  # Update widget values to match current zoom
         zoom_in_progress = False  # Release flag
 
