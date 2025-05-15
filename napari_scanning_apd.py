@@ -119,6 +119,9 @@ def scan_pattern(x_points, y_points):
 
 @magicgui(call_button="🔬 New Scan")
 def new_scan():
+    """Initiates a new scan using the original (full-range) scan parameters.
+    Runs the scan in a separate thread to prevent UI freezing.
+    """
     global original_x_points, original_y_points
     
     def run_new_scan():
@@ -130,6 +133,9 @@ def new_scan():
 
 @magicgui(call_button="🎯 Set to Zero")
 def close_scanner():
+    """Sets the Galvo scanner controller to its zero position.
+    Runs in a separate thread.
+    """
     def run_close():
         galvo_controller.close()
     
@@ -138,6 +144,9 @@ def close_scanner():
 
 @magicgui(call_button="📷 Save Image")
 def save_image():
+    """Saves the current view of the Napari canvas as a PNG image.
+    The filename is derived from the data_path of the scan.
+    """
     viewer.screenshot(path=f"{data_path}.png", canvas_only=True, flash=True)
     show_info("📷 Image saved")
 
