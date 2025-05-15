@@ -54,7 +54,6 @@ tagger.reset()
 
 # Set up counter channel (assuming channel 1 is used for SPD input)
 counter = Countrate(tagger, [1])
-
 # --------------------- MPL WIDGET ---------------------
 
 # Create and add the MPL widget to the viewer with a slower update rate for stability
@@ -78,9 +77,8 @@ def scan_pattern(x_points, y_points):
             for x_idx, x in enumerate(x_points):
                 ao_task.write([x, y])
                 time.sleep(0.001)
-
-                counter.clear()
                 counts = counter.getData()
+                print(f"{counts}")
                 image[y_idx, x_idx] = counts
                 layer.data = image
     
