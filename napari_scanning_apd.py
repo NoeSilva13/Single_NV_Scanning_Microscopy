@@ -69,9 +69,12 @@ layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 
 # Add a shapes layer to display the zoom area. Initially empty.
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
-# --------------------- MPL WIDGET ---------------------
+# --------------------- MPL WIDGET (SIGNAL LIVE PLOT) ---------------------
 
-# Create and add the MPL widget to the viewer with a slower update rate for stability
+# Create and add the MPL widget to the viewer for live signal monitoring.
+# 'measure_function' is a lambda function that returns the current APD signal value (voltage).
+# 'histogram_range' is the number of data points to plot before overwriting.
+# 'dt' is the time between data points in seconds (converted to milliseconds internally).
 mpl_widget = live_plot(measure_function=lambda: monitor_task.read(), histogram_range=100, dt=0.1)
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
