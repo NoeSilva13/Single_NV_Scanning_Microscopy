@@ -203,7 +203,7 @@ def on_shape_added(event):
         return  # Prevent multiple simultaneous zoom operations
 
     if zoom_level >= max_zoom:
-        print(f"⚠️ Max zoom reached ({max_zoom} levels).")
+        show_info(f"⚠️ Max zoom reached ({max_zoom} levels).")
         return
 
     if len(shapes.data) == 0:
