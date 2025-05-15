@@ -24,6 +24,3 @@ time.sleep(recording_time)
 # Stop recording and close the file
 file_writer.stop()
 print("Recording stopped.")
-
-# Free resources
-tagger.free()
