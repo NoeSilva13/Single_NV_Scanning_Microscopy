@@ -48,6 +48,7 @@ viewer.window.resize(1200, 800)
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
+# --------------------- TIMETAGGER ---------------------
 tagger = TimeTagger.createTimeTagger()
 tagger.reset()
 
