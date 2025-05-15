@@ -28,15 +28,10 @@ original_y_points = np.linspace(y_range[0], y_range[1], y_res)
 # Global state
 zoom_level = 0
 max_zoom = 3
-contrast_limits = (0, 10)
+contrast_limits = (0, 10000)
 scan_history = []  # For going back
 image = np.zeros((y_res, x_res), dtype=np.float32)
 data_path = None
-
-# Global tasks for DAQ
-monitor_task = nidaqmx.Task()
-monitor_task.ai_channels.add_ai_voltage_chan(galvo_controller.xout_voltage, terminal_config=TerminalConfiguration.RSE)
-monitor_task.start()
 
 # Add these variables to store original parameters
 original_scan_params = {
