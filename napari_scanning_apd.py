@@ -120,7 +120,7 @@ def new_scan():
         scan_pattern(original_x_points, original_y_points)
         shapes.data = []
     threading.Thread(target=run_new_scan, daemon=True).start()
-    show_info("New scan started")
+    show_info("🔬 New scan started")
     
 
 @magicgui(call_button="🎯 Set to Zero")
@@ -129,12 +129,12 @@ def close_scanner():
         galvo_controller.close()
     
     threading.Thread(target=run_close, daemon=True).start()
-    show_info("Scanner set to zero")
+    show_info("🎯 Scanner set to zero")
 
 @magicgui(call_button="📷 Save Image")
 def save_image():
     viewer.screenshot(path=f"{data_path}.png", canvas_only=True, flash=True)
-    show_info("Image saved")
+    show_info("📷 Image saved")
 
 # --------------------- SCAN PARAMETERS WIDGET ---------------------
 def update_scan_parameters_widget():
@@ -185,7 +185,7 @@ def update_scan_parameters(
     with open("config_template.json", 'w') as f:
         json.dump(config, f, indent=4)
     
-    show_info('Scan parameters updated successfully!')
+    show_info('⚠️ Scan parameters updated successfully!')
 # --------------------- ZOOM BY REGION ---------------------
 
 zoom_in_progress = False  # Flag global
