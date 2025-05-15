@@ -84,34 +84,6 @@ def scan_pattern(x_points, y_points):
     data_path = data_manager.save_scan_data(image)
     return x_points, y_points # Returns for history
 
-# --------------------- RESET BUTTON ---------------------
-@magicgui(call_button="🔄 Reset Zoom")
-def reset_zoom():
-    global zoom_level, scan_history, original_x_points, original_y_points, x_range, y_range, x_res, y_res
-    shapes.data = []  # Clear rectangle
-    if zoom_level == 0:
-        print("🔁 You are already in the original view.")
-        return
-
-    # Restore original parameters
-    x_range = original_scan_params['x_range']
-    y_range = original_scan_params['y_range']
-    x_res = original_scan_params['x_res']
-    y_res = original_scan_params['y_res']
-    
-    # Restore original points
-    original_x_points = np.linspace(x_range[0], x_range[1], x_res)
-    original_y_points = np.linspace(y_range[0], y_range[1], y_res)
-    scan_history.clear()
-    zoom_level = 0
-
-    def run_reset():
-        scan_pattern(original_x_points, original_y_points)
-        shapes.data = []
-        update_scan_parameters_widget()
-
-    threading.Thread(target=run_reset, daemon=True).start()
-
 @magicgui(call_button="🔬 New Scan")
 def new_scan():
     global original_x_points, original_y_points
@@ -252,6 +224,34 @@ def on_shape_added(event):
     threading.Thread(target=run_zoom, daemon=True).start()
 
 
+# --------------------- RESET BUTTON ---------------------
+@magicgui(call_button="🔄 Reset Zoom")
+def reset_zoom():
+    global zoom_level, scan_history, original_x_points, original_y_points, x_range, y_range, x_res, y_res
+    shapes.data = []  # Clear rectangle
+    if zoom_level == 0:
+        print("🔁 You are already in the original view.")
+        return
+    
+    
+    original_x_points, original_y_points = scan_history[0]
+    scan_history.clear()
+    zoom_level = 0
+
+    def run_reset():
+        update_scan_parameters(
+            x_min=original_x_points[0],
+            x_max=original_x_points[-1],
+            y_min=original_y_points[0],
+            y_max=original_y_points[-1],
+            x_resolution=x_res,
+            y_resolution=y_res
+        )
+        scan_pattern(original_x_points, original_y_points)
+        shapes.data = []
+        update_scan_parameters_widget()
+        
+    threading.Thread(target=run_reset, daemon=True).start()
 
 # Add buttons to the interface
 viewer.window.add_dock_widget(reset_zoom, area="right")
