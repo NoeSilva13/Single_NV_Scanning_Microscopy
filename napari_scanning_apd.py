@@ -1,3 +1,14 @@
+"""
+Confocal Single-NV Microscopy Control Software
+-------------------------------------------
+This software controls a confocal microscope setup for single NV center imaging using:
+- Thorlabs LSKGG4 Galvo-Galvo Scanner
+- National Instruments USB-6453 DAQ
+- Avalanche Photo Diode APD
+
+The system provides real-time visualization and control through a Napari-based GUI.
+"""
+
 import numpy as np 
 import napari
 import time
@@ -12,32 +23,36 @@ from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
 
 # --------------------- INITIAL CONFIGURATION ---------------------
+# Load scanning parameters from config file
 config = json.load(open("config_template.json"))
-galvo_controller = GalvoScannerController()
-data_manager = DataManager()
+galvo_controller = GalvoScannerController()  # Initialize galvo scanner control
+data_manager = DataManager()  # Initialize data saving system
 
-x_range = config['scan_range']['x']
-y_range = config['scan_range']['y']
-x_res = config['resolution']['x']
-y_res = config['resolution']['y']
+# Extract scan parameters from config
+x_range = config['scan_range']['x']  # X scanning range in volts
+y_range = config['scan_range']['y']  # Y scanning range in volts
+x_res = config['resolution']['x']    # X resolution in pixels
+y_res = config['resolution']['y']    # Y resolution in pixels
 
+# Create initial scanning grids
 original_x_points = np.linspace(x_range[0], x_range[1], x_res)
 original_y_points = np.linspace(y_range[0], y_range[1], y_res)
 
-# Global state
-zoom_level = 0
-max_zoom = 3
-contrast_limits = (0, 10)
-scan_history = []  # For going back
-image = np.zeros((y_res, x_res), dtype=np.float32)
-data_path = None
+# Global state variables
+zoom_level = 0          # Current zoom level
+max_zoom = 3           # Maximum allowed zoom levels
+contrast_limits = (0, 10)  # Initial image contrast range
+scan_history = []      # Store scan parameters for zoom history
+image = np.zeros((y_res, x_res), dtype=np.float32)  # Initialize empty image
+data_path = None       # Path for saving data
 
-# Global tasks for DAQ
+# Initialize DAQ monitoring task for APD signal
+# RSE (Referenced Single-Ended) configuration for voltage reading
 monitor_task = nidaqmx.Task()
 monitor_task.ai_channels.add_ai_voltage_chan(galvo_controller.xout_voltage, terminal_config=TerminalConfiguration.RSE)
 monitor_task.start()
 
-# Add these variables to store original parameters
+# Store original parameters for reset functionality
 original_scan_params = {
     'x_range': None,
     'y_range': None,
@@ -60,29 +75,42 @@ viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING ---------------------
 def scan_pattern(x_points, y_points):
+    """
+    Perform a raster scan pattern using the galvo mirrors and collect APD counts.
+    
+    Args:
+        x_points (array): Voltage values for X galvo positions
+        y_points (array): Voltage values for Y galvo positions
+    
+    Returns:
+        tuple: The x and y points used for scanning (for history tracking)
+    """
     global image, layer, data_path
 
     height, width = len(y_points), len(x_points)
     image = np.zeros((height, width), dtype=np.float32)
-    layer.data = image  # update layer
+    layer.data = image
     layer.contrast_limits = contrast_limits
     
+    # Configure analog output task for galvo control
     with nidaqmx.Task() as ao_task:
-        ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
-        ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
+        ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)  # X galvo
+        ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)  # Y galvo
 
+        # Perform raster scan
         for y_idx, y in enumerate(y_points):
             for x_idx, x in enumerate(x_points):
-                ao_task.write([x, y])
-                time.sleep(0.001)
-                voltage = monitor_task.read()
+                ao_task.write([x, y])  # Move galvos to position
+                time.sleep(0.001)      # Settling time for galvos
+                voltage = monitor_task.read()  # Read APD signal
                 print(voltage)
-                image[y_idx, x_idx] = voltage
-                layer.data = image
+                image[y_idx, x_idx] = voltage  # Store in image
+                layer.data = image  # Update display
     
+    # Adjust contrast and save data
     layer.contrast_limits = (np.min(image), np.max(image))
     data_path = data_manager.save_scan_data(image)
-    return x_points, y_points # Returns for history
+    return x_points, y_points
 
 @magicgui(call_button="🔬 New Scan")
 def new_scan():
@@ -163,11 +191,16 @@ def update_scan_parameters(
 zoom_in_progress = False  # Flag global
 @shapes.events.data.connect
 def on_shape_added(event):
+    """
+    Handle zoom region selection in the GUI.
+    Triggered when user draws a rectangle to zoom into a region.
+    Maintains aspect ratio and resolution while zooming into selected area.
+    """
     global zoom_level, max_zoom, scan_history
     global original_x_points, original_y_points, zoom_in_progress
 
     if zoom_in_progress:
-        return  # Ignore if already running
+        return  # Prevent multiple simultaneous zoom operations
 
     if zoom_level >= max_zoom:
         print(f"⚠️ Max zoom reached ({max_zoom} levels).")
@@ -176,31 +209,29 @@ def on_shape_added(event):
     if len(shapes.data) == 0:
         return
 
-    # Save current parameters before zooming
+    # Store original parameters on first zoom
     if zoom_level == 0:
         original_scan_params['x_range'] = x_range.copy()
         original_scan_params['y_range'] = y_range.copy()
         original_scan_params['x_res'] = x_res
         original_scan_params['y_res'] = y_res
 
+    # Calculate new scan region from selected rectangle
     rect = shapes.data[-1]
     min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
     max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
 
-    # Limit to current image size
+    # Ensure zoom region stays within image bounds
     height, width = layer.data.shape
     min_x = max(0, min_x)
     max_x = min(width, max_x)
     min_y = max(0, min_y)
     max_y = min(height, max_y)
 
-    # History: save current state before zoom
+    # Save current state for zoom history
     scan_history.append((original_x_points, original_y_points))
 
-    # Adjust resolution to new range (keep original resolution)
-    #x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], max_x - min_x)
-    #y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], max_y - min_y)
-    # Same resolution as original but zoom in
+    # Calculate new scan points maintaining original resolution
     x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], x_res)
     y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], y_res)
 
@@ -253,13 +284,11 @@ def reset_zoom():
         
     threading.Thread(target=run_reset, daemon=True).start()
 
-# Add buttons to the interface
-viewer.window.add_dock_widget(reset_zoom, area="right")
-viewer.window.add_dock_widget(new_scan, area="right")
-viewer.window.add_dock_widget(save_image, area="right")
-viewer.window.add_dock_widget(close_scanner, area="right")
-viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan Parameters")
+# Add interface elements to Napari viewer
+viewer.window.add_dock_widget(reset_zoom, area="right")         # Reset zoom button
+viewer.window.add_dock_widget(new_scan, area="right")          # Start new scan
+viewer.window.add_dock_widget(save_image, area="right")        # Save current image
+viewer.window.add_dock_widget(close_scanner, area="right")     # Set galvos to zero
+viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan Parameters")  # Scan parameter controls
 
-
-
-napari.run()
+napari.run()  # Start the Napari event loop
