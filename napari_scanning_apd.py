@@ -61,7 +61,7 @@ original_scan_params = {
 }
 
 # --------------------- NAPARI VIEWER SETUP ---------------------
-viewer = napari.Viewer() # Initialize Napari viewer
+viewer = napari.Viewer(title="NV Scanning Microscopy") # Initialize Napari viewer
 # Set window size (width, height)
 viewer.window.resize(1200, 800)
 # Add an image layer to display the live scan. Data is initialized as an empty array 'image'.
