@@ -10,7 +10,7 @@ import threading
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
-from TimeTagger import createTimeTagger, Countrate  # Swabian TimeTagger API
+from TimeTagger import createTimeTagger, Countrate, Counter  # Swabian TimeTagger API
 
 # --------------------- INITIAL CONFIGURATION ---------------------
 config = json.load(open("config_template.json"))
@@ -53,7 +53,7 @@ tagger = createTimeTagger()
 tagger.reset()
 
 # Set up counter channel (assuming channel 1 is used for SPD input)
-counter = Countrate(tagger, [1])
+counter = Counter(tagger, [1])
 # --------------------- MPL WIDGET ---------------------
 
 # Create and add the MPL widget to the viewer with a slower update rate for stability
