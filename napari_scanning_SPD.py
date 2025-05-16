@@ -53,7 +53,7 @@ tagger = createTimeTagger()
 tagger.reset()
 
 # Set up counter channel (assuming channel 1 is used for SPD input)
-counter = Counter(tagger, [1])
+counter = Counter(tagger, [1], 0.1e12, 1)
 # --------------------- MPL WIDGET ---------------------
 
 # Create and add the MPL widget to the viewer with a slower update rate for stability
