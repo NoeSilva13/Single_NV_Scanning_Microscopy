@@ -14,14 +14,5 @@
         "y": 12
     },
     "dwell_time": 0.1,
-    "scan_mode": "realtime",
-    "hardware": {
-        "sample_rate": 1000,
-        "samples_per_point": 10,
-        "settling_time": 0.001
-    },
-    "visualization": {
-        "colormap": "viridis",
-        "update_interval": 50
-    }
+    "acquisition_mode": "daq_voltage"
 }
