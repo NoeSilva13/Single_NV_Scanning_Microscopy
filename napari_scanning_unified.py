@@ -343,35 +343,51 @@ def acquisition_mode(dropdown: str):
     elif dropdown == "SPD DAQ":
         mode = "daq_counter"
     
-    def run_acquisition_mode():
-        # Update config file
-        config["acquisition_mode"] = mode
-        with open("config_template.json", 'w') as f:
-            json.dump(config, f, indent=4)
+    # Update config file
+    config["acquisition_mode"] = mode
+    with open("config_template.json", 'w') as f:
+        json.dump(config, f, indent=4)
+    
+    if mode == "daq_counter":
+        # Initialize DAQ counter task for SPD signal
+        counter_task = nidaqmx.Task()
+        counter_task.ci_channels.add_ci_count_edges_chan(
+            galvo_controller.spd_counter,
+            edge=Edge.RISING,
+            initial_count=0
+        )
+        counter_task.ci_channels[0].ci_count_edges_term = galvo_controller.spd_edge_source
+        def measure_function():
+            counter_task.start()
+            time.sleep(config["dwell_time"])
+            counts = counter_task.read()
+            counter_task.stop()
+            return counts / config["dwell_time"]
         
-        # Recreate the measure function based on new mode
-        if mode == "daq_counter":
-            def measure_function():
-                counter_task.start()
-                time.sleep(config["dwell_time"])
-                counts = counter_task.read()
-                counter_task.stop()
-                return counts / config["dwell_time"]
-        elif mode == "daq_voltage":
-            def measure_function():
-                return monitor_task.read()
-        elif mode == "timetagger":
-            def measure_function():
-                return counter.getData()
+    elif mode == "daq_voltage":
+        # Initialize DAQ monitoring task for APD signal
+        # RSE (Referenced Single-Ended) configuration for voltage reading
+        monitor_task = nidaqmx.Task()
+        monitor_task.ai_channels.add_ai_voltage_chan(galvo_controller.xout_voltage, terminal_config=TerminalConfiguration.RSE)
+        monitor_task.start()
+        def measure_function():
+            return monitor_task.read()
         
-        # Remove old widget and create new one with updated measure function
-        viewer.window.remove_dock_widget(mpl_widget)
-        mpl_widget = live_plot(measure_function=lambda: measure_function(), histogram_range=100, dt=0.1)
-        viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
-        
-        show_info(f"Acquisition mode set to: {dropdown}")
+    elif mode == "timetagger":
+        #Initialize TimeTagger
+        tagger = createTimeTagger()
+        tagger.reset()
+        #Set up counter channel (assuming channel 1 is used for SPD input)
+        counter = Countrate(tagger, [1])
+        def measure_function():
+            return counter.getData()
+                    
+    viewer.window.remove_dock_widget(viewer.window._dock_widgets['Signal Plot'])
+    mpl_widget = live_plot(measure_function=lambda: measure_function(), histogram_range=100, dt=0.1)
+    viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
+    
+    show_info(f"Acquisition mode set to: {dropdown}")
 
-    threading.Thread(target=run_acquisition_mode, daemon=True).start()
 
 # Add interface elements to Napari viewer
 viewer.window.add_dock_widget(reset_zoom, area="right", name="Reset Zoom")         # Reset zoom button
