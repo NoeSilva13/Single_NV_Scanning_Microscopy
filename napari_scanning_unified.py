@@ -1,76 +1,110 @@
-import sys
-import time
-import numpy as np
+"""
+Confocal Single-NV Microscopy Control Software
+-------------------------------------------
+This software controls a confocal microscope setup for single NV center imaging using:
+- Thorlabs LSKGG4 Galvo-Galvo Scanner
+- National Instruments USB-6453 DAQ
+- Avalanche Photo Diode APD
+- Single Photon Detector SPD
+- Swabian TimeTagger
+
+The system provides real-time visualization and control through a Napari-based GUI.
+"""
+
+import numpy as np 
 import napari
+import time
+import json
 import nidaqmx
-from nidaqmx.constants import TerminalConfiguration, Edge
-from magicgui import magicgui
-from magicgui.widgets import create_widget
-from qtpy.QtWidgets import QComboBox, QVBoxLayout
-from TimeTagger import createTimeTagger, Countrate
+from nidaqmx.constants import (TerminalConfiguration, Edge, CountDirection, AcquisitionType, SampleTimingType)
 from galvo_controller import GalvoScannerController
 from data_manager import DataManager
-from live_plot_napari_widget import LivePlotNapariWidget
+import threading
+from magicgui import magicgui
+from napari.utils.notifications import show_info
+from live_plot_napari_widget import live_plot
+from TimeTagger import createTimeTagger, Countrate
 
-# Initialize controller and data manager
-galvo_controller = GalvoScannerController()
-data_manager = DataManager()
+# --------------------- INITIAL CONFIGURATION ---------------------
+# Load scanning parameters from config file
+config = json.load(open("config_template.json"))
+galvo_controller = GalvoScannerController()  # Initialize galvo scanner control
+data_manager = DataManager()  # Initialize data saving system
 
-# Configuration
-config = {
-    "scan_range": {
-        "x": [-1.0, 1.0],
-        "y": [-1.0, 1.0]
-    },
-    "resolution": {
-        "x": 12,
-        "y": 12
-    },
-    "dwell_time": 0.1,
-    "acquisition_mode": "daq_counter"  # Default mode
+# Create initial scanning grids
+original_x_points = np.linspace(x_range[0], x_range[1], x_res)
+original_y_points = np.linspace(y_range[0], y_range[1], y_res)
+
+# Global state variables
+zoom_level = 0          # Current zoom level
+max_zoom = 3           # Maximum allowed zoom levels
+contrast_limits = (0, 10)  # Initial image contrast range
+scan_history = []      # Store scan parameters for zoom history
+image = np.zeros((y_res, x_res), dtype=np.float32)  # Initialize empty image
+data_path = None       # Path for saving data
+
+mode = config["acquisition_mode"]
+    
+if mode == "daq_counter":
+    # Initialize DAQ counter task for SPD signal
+    counter_task = nidaqmx.Task()
+    counter_task.ci_channels.add_ci_count_edges_chan(
+        galvo_controller.spd_counter,
+        edge=Edge.RISING,
+        initial_count=0
+    )
+    counter_task.ci_channels[0].ci_count_edges_term = galvo_controller.spd_edge_source
+    def measure_function():
+        counter_task.start()
+        time.sleep(config["dwell_time"])
+        counts = counter_task.read()
+        counter_task.stop()
+        return counts / config["dwell_time"]
+    
+elif mode == "daq_voltage":
+    # Initialize DAQ monitoring task for APD signal
+    # RSE (Referenced Single-Ended) configuration for voltage reading
+    monitor_task = nidaqmx.Task()
+    monitor_task.ai_channels.add_ai_voltage_chan(galvo_controller.xout_voltage, terminal_config=TerminalConfiguration.RSE)
+    monitor_task.start()
+    def measure_function():
+        return monitor_task.read()
+    
+elif mode == "timetagger":
+    #Initialize TimeTagger
+    tagger = createTimeTagger()
+    tagger.reset()
+    #Set up counter channel (assuming channel 1 is used for SPD input)
+    counter = Countrate(tagger, [1])
+    def measure_function():
+        return counter.getData()
+
+# Store original parameters for reset functionality
+original_scan_params = {
+    'x_range': None,
+    'y_range': None,
+    'x_res': None,
+    'y_res': None
 }
 
-def create_acquisition_selector():
-    """Create a widget for selecting acquisition mode."""
-    modes = ['DAQ Counter', 'DAQ Voltage', 'TimeTagger']
-    mode_selector = QComboBox()
-    mode_selector.addItems(modes)
-    mode_selector.currentTextChanged.connect(lambda text: config.update({"acquisition_mode": text.lower().replace(' ', '_')}))
-    return mode_selector
+# --------------------- NAPARI VIEWER SETUP ---------------------
+viewer = napari.Viewer(title="BurkeLab Single NV Scanner") # Initialize Napari viewer
+# Set window size (width, height)
+viewer.window.resize(1200, 800)
+# Add an image layer to display the live scan. Data is initialized as an empty array 'image'.
+layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
+# Add a shapes layer to display the zoom area. Initially empty.
+shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
-def get_signal_function():
-    """Return the appropriate signal measurement function based on selected mode."""
-    mode = config["acquisition_mode"]
-    
-    if mode == "daq_counter":
-        def measure_function():
-            with nidaqmx.Task() as counter_task:
-                counter_task.ci_channels.add_ci_count_edges_chan(
-                    galvo_controller.spd_counter,
-                    edge=Edge.RISING
-                )
-                counter_task.start()
-                time.sleep(config["dwell_time"])
-                counts = counter_task.read()
-                counter_task.stop()
-                return counts / config["dwell_time"]
-        return measure_function
-    
-    elif mode == "daq_voltage":
-        def measure_function():
-            with nidaqmx.Task() as monitor_task:
-                monitor_task.ai_channels.add_ai_voltage_chan(galvo_controller.xout_voltage)
-                return monitor_task.read()
-        return measure_function
-    
-    elif mode == "timetagger":
-        tagger = createTimeTagger()
-        counter = Countrate(tagger, [1])
-        def measure_function():
-            return counter.getData()
-        return measure_function
-    
-    return None
+# --------------------- MPL WIDGET (SIGNAL LIVE PLOT) ---------------------
+
+# Create and add the MPL widget to the viewer for live signal monitoring.
+# 'measure_function' is a lambda function that returns the current APD signal value (voltage).
+# 'histogram_range' is the number of data points to plot before overwriting.
+# 'dt' is the time between data points in seconds (converted to milliseconds internally).
+mpl_widget = live_plot(measure_function=lambda: monitor_task.read(), histogram_range=100, dt=0.1)
+viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
+
 
 def scan_pattern(x_points, y_points):
     """Unified scan pattern function that works with all acquisition modes."""
