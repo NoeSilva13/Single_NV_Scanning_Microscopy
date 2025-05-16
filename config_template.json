@@ -14,5 +14,5 @@
         "y": 12
     },
     "dwell_time": 0.1,
-    "acquisition_mode": "daq_voltage"
+    "acquisition_mode": "daq_counter"
 }

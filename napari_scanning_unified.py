@@ -333,18 +333,42 @@ def reset_zoom():
 # --------------------- ACQUISITION MODE SELECTOR ---------------------
 @magicgui(dropdown={"choices": ["APD", "SPD TT", "SPD DAQ"]})
 def acquisition_mode(dropdown: str):
-    global mode
+    global mode, mpl_widget
+    
+    # Update mode based on dropdown selection
     if dropdown == "APD":
         mode = "daq_voltage"
     elif dropdown == "SPD TT":
         mode = "timetagger"
     elif dropdown == "SPD DAQ":
         mode = "daq_counter"
-
+    
     def run_acquisition_mode():
+        # Update config file
         config["acquisition_mode"] = mode
         with open("config_template.json", 'w') as f:
             json.dump(config, f, indent=4)
+        
+        # Recreate the measure function based on new mode
+        if mode == "daq_counter":
+            def measure_function():
+                counter_task.start()
+                time.sleep(config["dwell_time"])
+                counts = counter_task.read()
+                counter_task.stop()
+                return counts / config["dwell_time"]
+        elif mode == "daq_voltage":
+            def measure_function():
+                return monitor_task.read()
+        elif mode == "timetagger":
+            def measure_function():
+                return counter.getData()
+        
+        # Remove old widget and create new one with updated measure function
+        viewer.window.remove_dock_widget(mpl_widget)
+        mpl_widget = live_plot(measure_function=lambda: measure_function(), histogram_range=100, dt=0.1)
+        viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
+        
         show_info(f"Acquisition mode set to: {dropdown}")
 
     threading.Thread(target=run_acquisition_mode, daemon=True).start()
