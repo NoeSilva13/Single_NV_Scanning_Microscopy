@@ -102,9 +102,52 @@ shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color=
 # 'measure_function' is a lambda function that returns the current APD signal value (voltage).
 # 'histogram_range' is the number of data points to plot before overwriting.
 # 'dt' is the time between data points in seconds (converted to milliseconds internally).
-mpl_widget = live_plot(measure_function=lambda: monitor_task.read(), histogram_range=100, dt=0.1)
+mpl_widget = live_plot(measure_function=lambda: measure_function(), histogram_range=100, dt=0.1)
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
+# ------------------- CONFIGURE ANALOG OUTPUT TASK -------------------
+with nidaqmx.Task() as ao_task:
+    ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)  # X galvo
+    ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)  # Y galvo
+
+# --------------------- SCANNING ---------------------
+def scan_pattern(x_points, y_points):
+    """
+    Perform a raster scan pattern using the galvo mirrors and collect APD counts.
+    
+    Args:
+        x_points (array): Voltage values for X galvo positions
+        y_points (array): Voltage values for Y galvo positions
+    
+    Returns:
+        tuple: The x and y points used for scanning (for history tracking)
+    """
+    global image, layer, data_path
+
+    height, width = len(y_points), len(x_points)
+    image = np.zeros((height, width), dtype=np.float32)
+    layer.data = image
+    layer.contrast_limits = contrast_limits
+    
+    # Configure analog output task for galvo control
+    with nidaqmx.Task() as ao_task:
+        ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)  # X galvo
+        ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)  # Y galvo
+
+        # Perform raster scan
+        for y_idx, y in enumerate(y_points):
+            for x_idx, x in enumerate(x_points):
+                ao_task.write([x, y])  # Move galvos to position
+                time.sleep(0.001)      # Settling time for galvos
+                voltage = monitor_task.read()  # Read APD signal
+                print(voltage)
+                image[y_idx, x_idx] = voltage  # Store in image
+                layer.data = image  # Update display
+    
+    # Adjust contrast and save data
+    layer.contrast_limits = (np.min(image), np.max(image))
+    data_path = data_manager.save_scan_data(image)
+    return x_points, y_points
 
 def scan_pattern(x_points, y_points):
     """Unified scan pattern function that works with all acquisition modes."""
