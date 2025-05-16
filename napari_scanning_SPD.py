@@ -51,9 +51,10 @@ shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color=
 # --------------------- TIMETAGGER ---------------------
 tagger = createTimeTagger() 
 tagger.reset()
-
+binwidth = int(5e9)
+n_values = 1
 # Set up counter channel (assuming channel 1 is used for SPD input)
-counter = Counter(tagger, [1], 0.1e12, 1)
+counter = Counter(tagger, [1], binwidth, n_values)
 # --------------------- MPL WIDGET ---------------------
 
 # Create and add the MPL widget to the viewer with a slower update rate for stability
@@ -77,7 +78,8 @@ def scan_pattern(x_points, y_points):
             for x_idx, x in enumerate(x_points):
                 ao_task.write([x, y])
                 time.sleep(0.001)
-                counts = counter.getData()
+                counts = counter.getData()[0][0]/(binwidth/1e12)
+                time.sleep(binwidth/1e12)
                 print(f"{counts}")
                 image[y_idx, x_idx] = counts
                 layer.data = image
