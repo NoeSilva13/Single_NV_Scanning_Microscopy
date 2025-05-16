@@ -344,10 +344,11 @@ def acquisition_mode(dropdown: str):
     threading.Thread(target=run_acquisition_mode, daemon=True).start()
 
 # Add interface elements to Napari viewer
-viewer.window.add_dock_widget(reset_zoom, area="right")         # Reset zoom button
-viewer.window.add_dock_widget(new_scan, area="right")          # Start new scan
-viewer.window.add_dock_widget(save_image, area="right")        # Save current image
-viewer.window.add_dock_widget(close_scanner, area="right")     # Set galvos to zero
+viewer.window.add_dock_widget(reset_zoom, area="right", name="Reset Zoom")         # Reset zoom button
+viewer.window.add_dock_widget(new_scan, area="right", name="New Scan")          # Start new scan
+viewer.window.add_dock_widget(save_image, area="right", name="Save Image")        # Save current image
+viewer.window.add_dock_widget(close_scanner, area="right", name="Close Scanner")     # Set galvos to zero
 viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan Parameters")  # Scan parameter controls
+viewer.window.add_dock_widget(acquisition_mode, area="right", name="Acquisition Mode")  # Acquisition mode selector
 
 napari.run()  # Start the Napari event loop
