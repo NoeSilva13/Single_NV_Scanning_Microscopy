@@ -31,6 +31,12 @@ config = json.load(open("config_template.json"))
 galvo_controller = GalvoScannerController()  # Initialize galvo scanner control
 data_manager = DataManager()  # Initialize data saving system
 
+# Extract scan parameters from config
+x_range = config['scan_range']['x']  # X scanning range in volts
+y_range = config['scan_range']['y']  # Y scanning range in volts
+x_res = config['resolution']['x']    # X resolution in pixels
+y_res = config['resolution']['y']    # Y resolution in pixels
+
 # Create initial scanning grids
 original_x_points = np.linspace(x_range[0], x_range[1], x_res)
 original_y_points = np.linspace(y_range[0], y_range[1], y_res)
