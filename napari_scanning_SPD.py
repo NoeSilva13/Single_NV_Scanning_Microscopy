@@ -72,6 +72,30 @@ binwidth = int(5e9)
 n_values = 1
 # Set up counter channel (assuming channel 1 is used for SPD input)
 counter = Counter(tagger, [1], binwidth, n_values)
+
+# --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
+def on_mouse_click(layer, event):
+    """
+    Handle mouse click events to move the galvo scanner to the clicked position.
+    """
+    # Get the clicked coordinates in data space
+    coords = layer.world_to_data(event.position)
+    x_idx, y_idx = int(round(coords[1])), int(round(coords[0]))  # Swap x,y and round to nearest integer
+    
+    # Convert from pixel coordinates to voltage values
+    x_voltage = np.interp(x_idx, [0, x_res-1], [x_range[0], x_range[1]])
+    y_voltage = np.interp(y_idx, [0, y_res-1], [y_range[0], y_range[1]])
+    
+    # Move the galvo scanner to the clicked position
+    try:
+        galvo_controller.set(x_voltage, y_voltage)
+        show_info(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
+    except Exception as e:
+        show_info(f"Error moving scanner: {str(e)}")
+
+# Connect the mouse click handler to the image layer
+layer.mouse_drag_callbacks.append(on_mouse_click)
+
 # --------------------- MPL WIDGET ---------------------
 
 # Create and add the MPL widget to the viewer with a slower update rate for stability
