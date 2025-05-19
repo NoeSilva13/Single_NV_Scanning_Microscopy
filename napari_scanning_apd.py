@@ -69,6 +69,30 @@ layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 
 # Add a shapes layer to display the zoom area. Initially empty.
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
+# --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
+def on_mouse_click(layer, event):
+    """
+    Handle mouse click events to move the galvo scanner to the clicked position.
+    """
+    if 'Shift' in event.modifiers:  # Only move scanner when Shift is held down
+        # Get the clicked coordinates in data space
+        coords = layer.world_to_data(event.position)
+        x_idx, y_idx = int(round(coords[1])), int(round(coords[0]))  # Swap x,y and round to nearest integer
+        
+        # Convert from pixel coordinates to voltage values
+        x_voltage = np.interp(x_idx, [0, x_res-1], [x_range[0], x_range[1]])
+        y_voltage = np.interp(y_idx, [0, y_res-1], [y_range[0], y_range[1]])
+        
+        # Move the galvo scanner to the clicked position
+        try:
+            galvo_controller.set(x_voltage, y_voltage)
+            print(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
+        except Exception as e:
+            print(f"Error moving scanner: {str(e)}")
+
+# Connect the mouse click handler to the image layer
+layer.mouse_drag_callbacks.append(on_mouse_click)
+
 # --------------------- MPL WIDGET (SIGNAL LIVE PLOT) ---------------------
 
 # Create and add the MPL widget to the viewer for live signal monitoring.
