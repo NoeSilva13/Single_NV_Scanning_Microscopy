@@ -29,10 +29,19 @@ class DataManager:
         if not os.path.exists(daily_folder):
             os.makedirs(daily_folder)
         
-        # Save scan data in daily folder
-        timestamp = time.strftime("%H%M%S")
-        filename = os.path.join(daily_folder, f"scan_data_{daily_folder}_{timestamp}.csv")
+        # Get list of existing files in the daily folder
+        existing_files = [f for f in os.listdir(daily_folder) if f.startswith(daily_folder)]
         
+        # Determine the next sequence number (001, 002, etc.)
+        seq_num = len(existing_files) + 1
+        
+        # Format the sequence number with leading zeros
+        seq_str = f"{seq_num:03d}"
+        
+        # Save scan data in daily folder with sequence number
+        timestamp = time.strftime("%H%M%S")
+        filename = os.path.join(daily_folder, f"{daily_folder}{seq_str}_scan{timestamp}.csv")
+
         # Convert data to DataFrame if it's not already
         if not isinstance(scan_data, pd.DataFrame):
             df = pd.DataFrame(scan_data)
