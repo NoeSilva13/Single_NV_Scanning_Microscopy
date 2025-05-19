@@ -46,6 +46,7 @@ class GalvoScannerController:
             self.samples_per_point = 10
             self.settling_time = 0.001  # seconds
             
+            self.set_voltages(0, 0)
             print("Successfully initialized DAQ connection")
                         
         except DaqNotFoundError:
