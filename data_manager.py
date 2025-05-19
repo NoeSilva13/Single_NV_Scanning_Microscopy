@@ -50,6 +50,11 @@ class DataManager:
             
         # Write config as a single JSON string in a comment block
         with open(filename, 'w', encoding='utf-8', newline='') as f:
+            # Write measurement date and time as the first line
+            measurement_time = time.strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"# Measurement Time: {measurement_time}\n")
+            
+            # Write configuration
             config_json_str = json.dumps(config, ensure_ascii=False, indent=2)
             f.write("# Experiment Configuration (JSON):\n")
             for line in config_json_str.splitlines():
@@ -58,4 +63,3 @@ class DataManager:
             df.to_csv(f, index=False)
         
         return filename
-    
