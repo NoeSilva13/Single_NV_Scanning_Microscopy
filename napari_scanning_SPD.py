@@ -96,14 +96,27 @@ def on_mouse_click(layer, event):
 # Connect the mouse click handler to the image layer
 layer.mouse_drag_callbacks.append(on_mouse_click)
 
-# --------------------- MPL WIDGET ---------------------
+# --------------------- MPL WIDGET (SIGNAL LIVE PLOT) ---------------------
 
-# Create and add the MPL widget to the viewer with a slower update rate for stability
+# Create and add the MPL widget to the viewer for live signal monitoring.
+# 'measure_function' is a lambda function that returns the current APD signal value (voltage).
+# 'histogram_range' is the number of data points to plot before overwriting.
+# 'dt' is the time between data points in seconds (converted to milliseconds internally).
 mpl_widget = live_plot(measure_function=lambda: counter.getData(), histogram_range=100, dt=0.2)
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING ---------------------
 def scan_pattern(x_points, y_points):
+    """
+    Perform a raster scan pattern using the galvo mirrors and collect APD counts.
+    
+    Args:
+        x_points (array): Voltage values for X galvo positions
+        y_points (array): Voltage values for Y galvo positions
+    
+    Returns:
+        tuple: The x and y points used for scanning (for history tracking)
+    """
     global image, layer, data_path
 
     height, width = len(y_points), len(x_points)
@@ -111,20 +124,25 @@ def scan_pattern(x_points, y_points):
     layer.data = image  # update layer
     layer.contrast_limits = contrast_limits
     
+    # Configure analog output task for galvo control
     with nidaqmx.Task() as ao_task:
         ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
         ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
 
+        # Perform raster scan
         for y_idx, y in enumerate(y_points):
             for x_idx, x in enumerate(x_points):
-                ao_task.write([x, y])
-                time.sleep(0.001)
-                counts = counter.getData()[0][0]/(binwidth/1e12)
-                time.sleep(binwidth/1e12)
-                print(f"{counts}")
-                image[y_idx, x_idx] = counts
-                layer.data = image
+                if x_idx == 0:
+                    time.sleep(0.01) # Wait for galvos to settle
+                ao_task.write([x, y]) # Move galvos to position
+                time.sleep(0.001) # Settling time for galvos
+                counts = counter.getData()[0][0]/(binwidth/1e12) # Read SPD signal
+                time.sleep(binwidth/1e12) # Wait for SPD to count
+                print(f"{counts}") # Print counts
+                image[y_idx, x_idx] = counts # Store in image
+                layer.data = image # Update display
     
+    # Adjust contrast and save data
     layer.contrast_limits = (np.min(image), np.max(image))
     data_path = data_manager.save_scan_data(image)
     return x_points, y_points # Returns for history
