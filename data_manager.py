@@ -39,8 +39,7 @@ class DataManager:
         seq_str = f"{seq_num:03d}"
         
         # Save scan data in daily folder with sequence number
-        timestamp = time.strftime("%H%M%S")
-        filename = os.path.join(daily_folder, f"{daily_folder}{seq_str}_scan{timestamp}.csv")
+        filename = os.path.join(daily_folder, f"{daily_folder}{seq_str}.csv")
 
         # Convert data to DataFrame if it's not already
         if not isinstance(scan_data, pd.DataFrame):
