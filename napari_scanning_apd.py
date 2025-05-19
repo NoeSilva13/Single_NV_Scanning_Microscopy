@@ -85,9 +85,9 @@ def on_mouse_click(layer, event):
     # Move the galvo scanner to the clicked position
     try:
         galvo_controller.set(x_voltage, y_voltage)
-        print(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
+        show_info(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
     except Exception as e:
-        print(f"Error moving scanner: {str(e)}")
+        show_info(f"Error moving scanner: {str(e)}")
 
 # Connect the mouse click handler to the image layer
 layer.mouse_drag_callbacks.append(on_mouse_click)
