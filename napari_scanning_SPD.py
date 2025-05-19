@@ -149,27 +149,36 @@ def scan_pattern(x_points, y_points):
 
 @magicgui(call_button="🔬 New Scan")
 def new_scan():
+    """Initiates a new scan using the original (full-range) scan parameters.
+    Runs the scan in a separate thread to prevent UI freezing.
+    """
     global original_x_points, original_y_points
     
     def run_new_scan():
         scan_pattern(original_x_points, original_y_points)
         shapes.data = []
     threading.Thread(target=run_new_scan, daemon=True).start()
-    show_info("New scan started")
+    show_info("🔬 New scan started")
     
 
 @magicgui(call_button="🎯 Set to Zero")
 def close_scanner():
+    """Sets the Galvo scanner controller to its zero position.
+    Runs in a separate thread.
+    """
     def run_close():
         galvo_controller.close()
     
     threading.Thread(target=run_close, daemon=True).start()
-    show_info("Scanner set to zero")
+    show_info("🎯 Scanner set to zero")
 
 @magicgui(call_button="📷 Save Image")
 def save_image():
+    """Saves the current view of the Napari canvas as a PNG image.
+    The filename is derived from the data_path of the scan.
+    """
     viewer.screenshot(path=f"{data_path}.png", canvas_only=True, flash=True)
-    show_info("Image saved")
+    show_info("📷 Image saved")
 
 # --------------------- SCAN PARAMETERS WIDGET ---------------------
 def update_scan_parameters_widget():
@@ -182,12 +191,12 @@ def update_scan_parameters_widget():
     update_scan_parameters.y_resolution.value = y_res
 
 @magicgui(
-    x_min={"widget_type": "FloatSpinBox", "value": x_range[0], "min": -10, "max": 10, "step": 0.1},
-    x_max={"widget_type": "FloatSpinBox", "value": x_range[1], "min": -10, "max": 10, "step": 0.1},
-    y_min={"widget_type": "FloatSpinBox", "value": y_range[0], "min": -10, "max": 10, "step": 0.1},
-    y_max={"widget_type": "FloatSpinBox", "value": y_range[1], "min": -10, "max": 10, "step": 0.1},
-    x_resolution={"widget_type": "SpinBox", "value": x_res, "min": 2, "max": 100},
-    y_resolution={"widget_type": "SpinBox", "value": y_res, "min": 2, "max": 100},
+    x_min={"widget_type": "FloatSpinBox", "value": x_range[0], "min": -10, "max": 10, "step": 0.1, "label": "X Min (V)"},
+    x_max={"widget_type": "FloatSpinBox", "value": x_range[1], "min": -10, "max": 10, "step": 0.1, "label": "X Max (V)"},
+    y_min={"widget_type": "FloatSpinBox", "value": y_range[0], "min": -10, "max": 10, "step": 0.1, "label": "Y Min (V)"},
+    y_max={"widget_type": "FloatSpinBox", "value": y_range[1], "min": -10, "max": 10, "step": 0.1, "label": "Y Max (V)"},
+    x_resolution={"widget_type": "SpinBox", "value": x_res, "min": 2, "max": 100, "label": "X Res (px)"},
+    y_resolution={"widget_type": "SpinBox", "value": y_res, "min": 2, "max": 100, "label": "Y Res (px)"},
     call_button="Apply Changes"
 )
 def update_scan_parameters(
@@ -220,20 +229,25 @@ def update_scan_parameters(
     with open("config_template.json", 'w') as f:
         json.dump(config, f, indent=4)
     
-    show_info('Scan parameters updated successfully!')
+    show_info('⚠️ Scan parameters updated successfully!')
 # --------------------- ZOOM BY REGION ---------------------
 
 zoom_in_progress = False  # Flag global
 @shapes.events.data.connect
 def on_shape_added(event):
+    """
+    Handle zoom region selection in the GUI.
+    Triggered when user draws a rectangle to zoom into a region.
+    Maintains aspect ratio and resolution while zooming into selected area.
+    """
     global zoom_level, max_zoom, scan_history
     global original_x_points, original_y_points, zoom_in_progress
 
     if zoom_in_progress:
-        return  # Ignore if already running
+        return  # Prevent multiple simultaneous zoom operations.
 
     if zoom_level >= max_zoom:
-        print(f"⚠️ Max zoom reached ({max_zoom} levels).")
+        show_info(f"⚠️ Max zoom reached ({max_zoom} levels).")
         return
 
     if len(shapes.data) == 0:
@@ -246,24 +260,22 @@ def on_shape_added(event):
         original_scan_params['x_res'] = x_res
         original_scan_params['y_res'] = y_res
 
+    # Calculate new scan region from selected rectangle
     rect = shapes.data[-1]
     min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
     max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
 
-    # Limit to current image size
+    # Ensure zoom region stays within image bounds
     height, width = layer.data.shape
     min_x = max(0, min_x)
     max_x = min(width, max_x)
     min_y = max(0, min_y)
     max_y = min(height, max_y)
 
-    # History: save current state before zoom
+    # Save current state for zoom history
     scan_history.append((original_x_points, original_y_points))
 
-    # Adjust resolution to new range (keep original resolution)
-    #x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], max_x - min_x)
-    #y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], max_y - min_y)
-    # Same resolution as original but zoom in
+    # Calculate new scan points maintaining original resolution
     x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], x_res)
     y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], y_res)
 
@@ -325,4 +337,4 @@ viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan P
 
 
 
-napari.run()
+napari.run() # Start the Napari event loop
