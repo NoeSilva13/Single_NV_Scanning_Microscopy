@@ -1,3 +1,14 @@
+"""
+Confocal Single-NV Microscopy Control Software
+-------------------------------------------
+This software controls a confocal microscope setup for single NV center imaging using:
+- Thorlabs LSKGG4 Galvo-Galvo Scanner
+- National Instruments USB-6453 DAQ
+- Single Photon Detector SPD
+
+The system provides real-time visualization and control through a Napari-based GUI.
+"""
+
 import numpy as np 
 import napari
 import time
@@ -13,27 +24,30 @@ from live_plot_napari_widget import live_plot
 from TimeTagger import createTimeTagger, Countrate, Counter  # Swabian TimeTagger API
 
 # --------------------- INITIAL CONFIGURATION ---------------------
+# Load scanning parameters from config file
 config = json.load(open("config_template.json"))
-galvo_controller = GalvoScannerController()
-data_manager = DataManager()
+galvo_controller = GalvoScannerController() # Initialize galvo scanner control
+data_manager = DataManager() # Initialize data saving system
 
-x_range = config['scan_range']['x']
-y_range = config['scan_range']['y']
-x_res = config['resolution']['x']
-y_res = config['resolution']['y']
+# Extract scan parameters from config
+x_range = config['scan_range']['x']     # X scanning range in volts
+y_range = config['scan_range']['y']     # Y scanning range in volts
+x_res = config['resolution']['x']       # X resolution in pixels
+y_res = config['resolution']['y']       # Y resolution in pixels
 
+# Create initial scanning grids
 original_x_points = np.linspace(x_range[0], x_range[1], x_res)
 original_y_points = np.linspace(y_range[0], y_range[1], y_res)
 
-# Global state
-zoom_level = 0
-max_zoom = 3
-contrast_limits = (0, 10000)
-scan_history = []  # For going back
-image = np.zeros((y_res, x_res), dtype=np.float32)
-data_path = None
+# Global state variables
+zoom_level = 0          # Current zoom level
+max_zoom = 3           # Maximum allowed zoom levels
+contrast_limits = (0, 10000)  # Initial image contrast range
+scan_history = []      # Store scan parameters for zoom history
+image = np.zeros((y_res, x_res), dtype=np.float32)  # Initialize empty image
+data_path = None       # Path for saving data
 
-# Add these variables to store original parameters
+# Store original parameters for reset functionality
 original_scan_params = {
     'x_range': None,
     'y_range': None,
