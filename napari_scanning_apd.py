@@ -52,6 +52,12 @@ monitor_task = nidaqmx.Task()
 monitor_task.ai_channels.add_ai_voltage_chan(galvo_controller.xout_voltage, terminal_config=TerminalConfiguration.RSE)
 monitor_task.start()
 
+# Initialize DAQ output task for galvo control
+output_task = nidaqmx.Task()
+output_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
+output_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
+output_task.start()
+
 # Store original parameters for reset functionality
 original_scan_params = {
     'x_range': None,
@@ -120,22 +126,17 @@ def scan_pattern(x_points, y_points):
     layer.data = image
     layer.contrast_limits = contrast_limits
     
-    # Configure analog output task for galvo control
-    with nidaqmx.Task() as ao_task:
-        ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)  # X galvo
-        ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)  # Y galvo
-
-        # Perform raster scan
-        for y_idx, y in enumerate(y_points):
-            for x_idx, x in enumerate(x_points):
-                if x_idx == 0:
-                    time.sleep(0.01) # Wait for galvos to settle
-                ao_task.write([x, y])  # Move galvos to position
-                time.sleep(0.001)      # Settling time for galvos
-                voltage = monitor_task.read()  # Read APD signal
-                print(y_idx, x_idx, voltage)
-                image[y_idx, x_idx] = voltage  # Store in image
-                layer.data = image  # Update display
+    # Perform raster scan
+    for y_idx, y in enumerate(y_points):
+        for x_idx, x in enumerate(x_points):
+            if x_idx == 0:
+                time.sleep(0.01) # Wait for galvos to settle
+            output_task.write([x, y])  # Move galvos to position
+            time.sleep(0.001)      # Settling time for galvos
+            voltage = monitor_task.read()  # Read APD signal
+            print(y_idx, x_idx, voltage)
+            image[y_idx, x_idx] = voltage  # Store in image
+            layer.data = image  # Update display
     
     # Adjust contrast and save data
     layer.contrast_limits = (np.min(image), np.max(image))
