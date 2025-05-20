@@ -47,6 +47,12 @@ scan_history = []      # Store scan parameters for zoom history
 image = np.zeros((y_res, x_res), dtype=np.float32)  # Initialize empty image
 data_path = None       # Path for saving data
 
+# Initialize DAQ output task for galvo control
+output_task = nidaqmx.Task()
+output_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
+output_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
+output_task.start()
+
 # Store original parameters for reset functionality
 original_scan_params = {
     'x_range': None,
@@ -88,7 +94,7 @@ def on_mouse_click(layer, event):
     
     # Move the galvo scanner to the clicked position
     try:
-        galvo_controller.set(x_voltage, y_voltage)
+        output_task.write([x_voltage, y_voltage])
         show_info(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
     except Exception as e:
         show_info(f"Error moving scanner: {str(e)}")
@@ -124,27 +130,28 @@ def scan_pattern(x_points, y_points):
     layer.data = image  # update layer
     layer.contrast_limits = contrast_limits
     
-    # Configure analog output task for galvo control
-    with nidaqmx.Task() as ao_task:
-        ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
-        ao_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
-
-        # Perform raster scan
-        for y_idx, y in enumerate(y_points):
-            for x_idx, x in enumerate(x_points):
-                if x_idx == 0:
-                    time.sleep(0.01) # Wait for galvos to settle
-                ao_task.write([x, y]) # Move galvos to position
-                time.sleep(0.001) # Settling time for galvos
-                counts = counter.getData()[0][0]/(binwidth/1e12) # Read SPD signal
-                time.sleep(binwidth/1e12) # Wait for SPD to count
-                print(f"{counts}") # Print counts
-                image[y_idx, x_idx] = counts # Store in image
-                layer.data = image # Update display
+    # Perform raster scan
+    for y_idx, y in enumerate(y_points):
+        for x_idx, x in enumerate(x_points):
+            if x_idx == 0:
+                time.sleep(0.01) # Wait for galvos to settle
+            output_task.write([x, y]) # Move galvos to position
+            time.sleep(0.001) # Settling time for galvos
+            counts = counter.getData()[0][0]/(binwidth/1e12) # Read SPD signal
+            time.sleep(binwidth/1e12) # Wait for SPD to count
+            print(f"{counts}") # Print counts
+            image[y_idx, x_idx] = counts # Store in image
+            layer.data = image # Update display
     
+    # Create a dictionary with image and scan positions
+    scan_data = {
+        'image': image,
+        'x_points': x_points,
+        'y_points': y_points
+    }
+    data_path = data_manager.save_scan_data(scan_data)
     # Adjust contrast and save data
     layer.contrast_limits = (np.min(image), np.max(image))
-    data_path = data_manager.save_scan_data(image)
     return x_points, y_points # Returns for history
 
 @magicgui(call_button="🔬 New Scan")
@@ -167,7 +174,7 @@ def close_scanner():
     Runs in a separate thread.
     """
     def run_close():
-        galvo_controller.close()
+        output_task.write([0, 0])
     
     threading.Thread(target=run_close, daemon=True).start()
     show_info("🎯 Scanner set to zero")
