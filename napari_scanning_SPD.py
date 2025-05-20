@@ -135,8 +135,10 @@ def scan_pattern(x_points, y_points):
         for x_idx, x in enumerate(x_points):
             output_task.write([x, y]) # Move galvos to position
             if x_idx == 0:
-                time.sleep(0.01) # Wait for galvos to settle
-            time.sleep(0.001) # Settling time for galvos
+                time.sleep(0.05) # Wait for galvos to settle
+            else:
+                time.sleep(0.001) # Settling time for galvos
+                
             counts = counter.getData()[0][0]/(binwidth/1e12) # Read SPD signal
             time.sleep(binwidth/1e12) # Wait for SPD to count
             print(f"{counts}") # Print counts
