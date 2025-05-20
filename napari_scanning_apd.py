@@ -138,9 +138,6 @@ def scan_pattern(x_points, y_points):
             image[y_idx, x_idx] = voltage  # Store in image
             layer.data = image  # Update display
     
-    # Adjust contrast and save data
-    layer.contrast_limits = (np.min(image), np.max(image))
-    
     # Create a dictionary with image and scan positions
     scan_data = {
         'image': image,
@@ -148,6 +145,8 @@ def scan_pattern(x_points, y_points):
         'y_points': y_points
     }
     data_path = data_manager.save_scan_data(scan_data)
+    # Adjust contrast and save data
+    layer.contrast_limits = (np.min(image), np.max(image))
     return x_points, y_points
 
 @magicgui(call_button="🔬 New Scan")
