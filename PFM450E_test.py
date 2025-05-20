@@ -1,157 +1,125 @@
+"""
+Pythonnet example for Thorlabs PPC001 piezo controllers and PFM450E objective scanners
+Date of Creation(YYYY-MM-DD): 2023-10-02
+Date of Last Modification on Github: 2024-11-07
+Python Version Used: 3.9
+Kinesis Version Tested: 1.14.50
+=======================
+This example goes over connecting to the device, setting the output voltage in open loop, then new postion in closed loop.
+"""
+
 import os
 import time
-import ctypes
-from ctypes import cdll, c_int, c_float, c_char_p, byref
+import sys
+import clr
+import sys
 
-# Load the Thorlabs Kinesis DLLs
-try:
-    # Modify these paths according to your Kinesis installation
-    kinesis_path = r"C:\Program Files\Thorlabs\Kinesis"
-    os.environ['PATH'] = kinesis_path + ";" + os.environ['PATH']
-    
-    # Load the required DLLs
-    lib = cdll.LoadLibrary("Thorlabs.MotionControl.Piezo.dll")
-except Exception as e:
-    print(f"Error loading Thorlabs Kinesis DLLs: {e}")
-    raise
 
-class PFM450E_Controller:
-    def __init__(self, serial_number):
-        """
-        Initialize the PFM450E Piezo Objective Scanner controller.
-        
-        Args:
-            serial_number (str): The serial number of the device (found on the rear panel)
-        """
-        self.serial_number = c_char_p(serial_number.encode('ascii'))
-        self._initialize_device()
-        
-    def _initialize_device(self):
-        """Initialize communication with the device."""
-        # Build device list (required before communication)
-        if lib.TLI_BuildDeviceList() == 0:
-            print("Device list built successfully")
-        else:
-            raise Exception("Failed to build device list")
-        
-        # Open the device
-        if lib.PCC_Open(self.serial_number) == 0:
-            print(f"Device {self.serial_number.value.decode()} opened successfully")
-        else:
-            raise Exception(f"Failed to open device {self.serial_number.value.decode()}")
-        
-        # Start polling loop (250ms interval)
-        lib.PCC_StartPolling(self.serial_number, c_int(250))
-        
-        # Wait for settings to initialize
-        time.sleep(0.5)
-        
-        # Enable the channel (if not already enabled)
-        lib.PCC_EnableChannel(self.serial_number)
-        
-        # Get device information
-        self._get_device_info()
-    
-    def _get_device_info(self):
-        """Get and print device information."""
-        model = ctypes.create_string_buffer(256)
-        lib.PCC_GetModel(self.serial_number, model)
-        print(f"Model: {model.value.decode()}")
-        
-        version = ctypes.create_string_buffer(256)
-        lib.TLI_GetDeviceInfo(self.serial_number, version)
-        print(f"Version: {version.value.decode()}")
-        
-        min_voltage = c_float()
-        max_voltage = c_float()
-        lib.PCC_GetOutputVoltageRange(self.serial_number, byref(min_voltage), byref(max_voltage))
-        print(f"Voltage range: {min_voltage.value}V to {max_voltage.value}V")
-    
-    def set_position(self, position, channel=1):
-        """
-        Set the position of the piezo scanner.
-        
-        Args:
-            position (float): Position in microns (0-450 for PFM450E)
-            channel (int): Channel number (default 1)
-        """
-        position_mm = c_float(position / 1000.0)  # Convert microns to mm
-        lib.PCC_SetPosition(self.serial_number, c_int(channel), position_mm)
-    
-    def get_position(self, channel=1):
-        """
-        Get the current position of the piezo scanner.
-        
-        Args:
-            channel (int): Channel number (default 1)
-            
-        Returns:
-            float: Position in microns
-        """
-        position_mm = c_float()
-        lib.PCC_GetPosition(self.serial_number, c_int(channel), byref(position_mm))
-        return position_mm.value * 1000.0  # Convert mm to microns
-    
-    def set_output_voltage(self, voltage, channel=1):
-        """
-        Set the output voltage directly.
-        
-        Args:
-            voltage (float): Voltage in volts (check your device's range)
-            channel (int): Channel number (default 1)
-        """
-        lib.PCC_SetOutputVoltage(self.serial_number, c_int(channel), c_float(voltage))
-    
-    def get_output_voltage(self, channel=1):
-        """
-        Get the current output voltage.
-        
-        Args:
-            channel (int): Channel number (default 1)
-            
-        Returns:
-            float: Voltage in volts
-        """
-        voltage = c_float()
-        lib.PCC_GetOutputVoltage(self.serial_number, c_int(channel), byref(voltage))
-        return voltage.value
-    
-    def close(self):
-        """Close communication with the device."""
-        lib.PCC_StopPolling(self.serial_number)
-        lib.PCC_Close(self.serial_number)
-        print(f"Device {self.serial_number.value.decode()} closed")
+clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.DeviceManagerCLI.dll")
+clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.GenericPiezoCLI.dll")
+clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\ThorLabs.MotionControl.Benchtop.PrecisionPiezoCLI.dll")
+from Thorlabs.MotionControl.DeviceManagerCLI import *
+from Thorlabs.MotionControl.GenericPiezoCLI import *
+from Thorlabs.MotionControl.GenericPiezoCLI import Piezo
+from Thorlabs.MotionControl.Benchtop.PrecisionPiezoCLI import *
+from System import Decimal  # necessary for real world units
 
-# Example usage
-if __name__ == "__main__":
-    # Replace with your device's serial number
-    DEVICE_SERIAL = "12345678"  # Example serial number
-    
+
+def main():
+    """The main entry point for the application"""
+
+    # Uncomment this line if you are using
+    #SimulationManager.Instance.InitializeSimulations()
+
     try:
-        # Initialize the controller
-        controller = PFM450E_Controller(DEVICE_SERIAL)
-        
-        # Move to 100 microns
-        print("Moving to 100 microns...")
-        controller.set_position(100)
-        time.sleep(1)  # Wait for movement to complete
-        print(f"Current position: {controller.get_position()} microns")
-        
-        # Move to 200 microns
-        print("Moving to 200 microns...")
-        controller.set_position(200)
-        time.sleep(1)
-        print(f"Current position: {controller.get_position()} microns")
-        
-        # Set voltage directly (example)
-        print("Setting voltage to 50V...")
-        controller.set_output_voltage(50)
-        time.sleep(1)
-        print(f"Current voltage: {controller.get_output_voltage()}V")
-        
+        DeviceManagerCLI.BuildDeviceList()
+
+        # create new device
+        serial_no = "44506104"  # Replace this line with your device's serial number
+
+        # set voltage here
+        voltage = Decimal(75)
+        position = Decimal(150)
+
+
+        # Connect, begin polling, and enable
+        device = BenchtopPrecisionPiezo.CreateBenchtopPiezo(serial_no)
+
+        device.Connect(serial_no)
+
+        # Because this is a benchtop controller we need a channel object
+        channel = device.GetChannel(1)
+
+        # Ensure that the device settings have been initialized
+        if not channel.IsSettingsInitialized():
+            channel.WaitForSettingsInitialized(10000)  # 10 second timeout
+            assert channel.IsSettingsInitialized() is True
+
+        # Start polling and enable
+        channel.StartPolling(250)  # 250ms polling rate
+        time.sleep(0.25)
+        channel.EnableDevice()
+        time.sleep(0.25)  # Wait for device to enable
+
+        # Get Device Information and display description
+        device_info = channel.GetDeviceInfo()
+        print(device_info.Description)
+
+        # Load any configuration settings needed by the controller/stage
+        piezoConfiguration = channel.GetPiezoConfiguration(serial_no)
+
+        # Open loop example
+        channel.SetPositionControlMode(Piezo.PiezoControlModeTypes.OpenLoop)
+        time.sleep(.25)
+
+        # Get max output volts
+        maxVolts = channel.GetMaxOutputVoltage()
+        print(f'Max voltage = {maxVolts}V')
+
+        # Set the new Voltage
+        if (voltage != Decimal(0)):
+            if (voltage <= maxVolts):
+                # Update velocity if required using real world methods
+                channel.SetOutputVoltage(voltage)
+                time.sleep(5)
+                newVolts = channel.GetOutputVoltage()
+                time.sleep(.25)
+                print(f'Voltage set to {newVolts}')
+            else:
+                print("Set voltage must be less than max voltage")
+
+        # Closed loop example
+        channel.SetPositionControlMode(Piezo.PiezoControlModeTypes.CloseLoop)
+        time.sleep(.25)
+
+        # Get max output volts
+        maxPos = channel.GetMaxTravel()
+        print(f'Max position = {maxPos}µm')
+
+        # Move the device to a new position
+        if (position != Decimal(0)):
+            if (position <= maxPos):
+                # Update velocity if required using real world methods
+                channel.SetPosition(position)
+                time.sleep(5)
+                newPos = channel.GetPosition()
+                time.sleep(.25)
+                print(f'Position set to {newPos}')
+            else:
+                print("Set position must be less than max position")
+
+        # Stop Polling and Disconnect
+        channel.StopPolling()
+        channel.Disconnect()
+
     except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        # Ensure device is properly closed
-        if 'controller' in locals():
-            controller.close()
+        # this can be bad practice: It sometimes obscures the error source
+        print(e)
+
+    # Uncomment this line if you are using Simulations
+    #SimulationManager.Instance.UninitializeSimulations()
+    ...
+
+
+if __name__ == "__main__":
+    main()
