@@ -139,7 +139,14 @@ def scan_pattern(x_points, y_points):
     
     # Adjust contrast and save data
     layer.contrast_limits = (np.min(image), np.max(image))
-    data_path = data_manager.save_scan_data(image)
+    
+    # Create a dictionary with image and scan positions
+    scan_data = {
+        'image': image,
+        'x_points': x_points,
+        'y_points': y_points
+    }
+    data_path = data_manager.save_scan_data(scan_data)
     return x_points, y_points
 
 @magicgui(call_button="🔬 New Scan")

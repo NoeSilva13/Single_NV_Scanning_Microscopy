@@ -15,7 +15,7 @@ class DataManager:
         Save scan data to a CSV file in a daily folder.
         
         Args:
-            scan_data: The scan data to be saved (can be a dictionary, list, or pandas DataFrame)
+            scan_data: Dictionary containing 'image' (2D array), 'x_points', and 'y_points' arrays
             
         Returns:
             str: The path to the saved file
@@ -38,16 +38,21 @@ class DataManager:
         # Format the sequence number with leading zeros
         seq_str = f"{seq_num:03d}"
         
-        # Save scan data in daily folder with sequence number
+        # Create filename
         filename = os.path.join(daily_folder, f"{daily_folder}{seq_str}.csv")
 
-        # Convert data to DataFrame if it's not already
-        if not isinstance(scan_data, pd.DataFrame):
-            df = pd.DataFrame(scan_data)
-        else:
-            df = scan_data
-            
-        # Write config as a single JSON string in a comment block
+        # Get the image and points from scan_data
+        image = scan_data['image']
+        x_points = scan_data['x_points']
+        y_points = scan_data['y_points']
+        
+        # Create a DataFrame with the image data
+        df = pd.DataFrame(image, index=y_points, columns=x_points)
+        
+        # Add a name to the index for the y-axis label
+        df.index.name = r'y\x'
+        
+        # Write config and data to file
         with open(filename, 'w', encoding='utf-8', newline='') as f:
             # Write measurement date and time as the first line
             measurement_time = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -59,6 +64,8 @@ class DataManager:
             for line in config_json_str.splitlines():
                 f.write(f"# {line}\n")
             f.write("#\n")  # Empty line to separate header from data
-            df.to_csv(f, index=False)
+            
+            # Write the data matrix
+            df.to_csv(f, float_format='%.6f')
         
         return filename
