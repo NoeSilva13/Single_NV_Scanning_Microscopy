@@ -169,7 +169,7 @@ def close_scanner():
     Runs in a separate thread.
     """
     def run_close():
-        galvo_controller.close()
+        output_task.write([0, 0])
     
     threading.Thread(target=run_close, daemon=True).start()
     show_info("🎯 Scanner set to zero")
