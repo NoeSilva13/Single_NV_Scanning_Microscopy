@@ -90,7 +90,7 @@ def on_mouse_click(layer, event):
     
     # Move the galvo scanner to the clicked position
     try:
-        galvo_controller.set(x_voltage, y_voltage)
+        output_task.write([x_voltage, y_voltage])
         show_info(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
     except Exception as e:
         show_info(f"Error moving scanner: {str(e)}")
