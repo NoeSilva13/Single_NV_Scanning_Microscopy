@@ -66,6 +66,6 @@ class DataManager:
             f.write("#\n")  # Empty line to separate header from data
             
             # Write the data matrix
-            df.to_csv(f, float_format='%.6f')
+            df.to_csv(f, float_format='%.7f')
         
         return filename
