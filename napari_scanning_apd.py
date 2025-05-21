@@ -66,7 +66,7 @@ original_scan_params = {
     'y_res': None
 }
 
-def calculate_scale(V1, V2, image_width_px, L=200, volts_per_degree=1.33):
+def calculate_scale(V1, V2, image_width_px, L=6.86, volts_per_degree=1.33):
     """Calculate microns per pixel based on galvo settings"""
     theta_deg = abs(V2 - V1) / volts_per_degree
     scan_width_mm = 2 * L * np.tan(np.radians(theta_deg / 2))
@@ -88,7 +88,7 @@ viewer.scale_bar.unit = "µm"
 viewer.scale_bar.position = "bottom_right"
 
 # Calculate scale (in microns/pixel)
-scale_um_per_px = calculate_scale(x_range[0], x_range[1], width)
+scale_um_per_px = calculate_scale(x_range[0], x_range[1], x_res)
 layer.scale = (scale_um_per_px, scale_um_per_px)
 
 # --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
