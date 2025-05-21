@@ -72,6 +72,7 @@ def calculate_scale(V1, V2, image_width_px, L=200, volts_per_degree=1.33):
     scan_width_mm = 2 * L * np.tan(np.radians(theta_deg / 2))
     return (scan_width_mm * 1000) / image_width_px  # Convert to microns/px
 
+
 # --------------------- NAPARI VIEWER SETUP ---------------------
 viewer = napari.Viewer(title="NV Scanning Microscopy") # Initialize Napari viewer
 # Set window size (width, height)
@@ -80,6 +81,11 @@ viewer.window.resize(1200, 800)
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
 # Add a shapes layer to display the zoom area. Initially empty.
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
+
+# Configure scale bar
+viewer.scale_bar.visible = True
+viewer.scale_bar.unit = "µm"
+viewer.scale_bar.position = "bottom_right"
 
 # --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
 def on_mouse_click(layer, event):
