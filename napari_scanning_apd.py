@@ -87,6 +87,10 @@ viewer.scale_bar.visible = True
 viewer.scale_bar.unit = "µm"
 viewer.scale_bar.position = "bottom_right"
 
+# Calculate scale (in microns/pixel)
+scale_um_per_px = calculate_scale(x_range[0], x_range[1], width)
+layer.scale = (scale_um_per_px, scale_um_per_px)
+
 # --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
 def on_mouse_click(layer, event):
     """
