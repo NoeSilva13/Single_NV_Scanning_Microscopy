@@ -66,14 +66,32 @@ original_scan_params = {
     'y_res': None
 }
 
+# --------------------- SCALE FUNCTION ---------------------
+def calculate_scale(V1, V2, image_width_px, L=6.86, volts_per_degree=1.33):
+    """Calculate microns per pixel based on galvo settings"""
+    theta_deg = abs(V2 - V1) / volts_per_degree
+    scan_width_mm = 2 * L * np.tan(np.radians(theta_deg / 2))
+    return (scan_width_mm * 1000) / image_width_px  # Convert to microns/px
+
+
 # --------------------- NAPARI VIEWER SETUP ---------------------
 viewer = napari.Viewer(title="NV Scanning Microscopy") # Initialize Napari viewer
 # Set window size (width, height)
 viewer.window.resize(1200, 800)
 # Add an image layer to display the live scan. Data is initialized as an empty array 'image'.
-layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
+layer = viewer.add_image(image, name="live scan", colormap="viridis", contrast_limits=contrast_limits)
 # Add a shapes layer to display the zoom area. Initially empty.
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
+
+# Configure scale bar
+viewer.scale_bar.visible = True
+viewer.scale_bar.unit = "µm"
+viewer.scale_bar.position = "bottom_right"
+
+# Calculate scale (in microns/pixel)
+scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
+scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
+layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 
 # --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
 def on_mouse_click(layer, event):
@@ -147,6 +165,9 @@ def scan_pattern(x_points, y_points):
     data_path = data_manager.save_scan_data(scan_data)
     # Adjust contrast and save data
     layer.contrast_limits = (np.min(image), np.max(image))
+    scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
+    scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
+    layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
     return x_points, y_points
 
 @magicgui(call_button="🔬 New Scan")
@@ -263,10 +284,10 @@ def on_shape_added(event):
         original_scan_params['y_res'] = y_res
 
     # Calculate new scan region from selected rectangle
-    rect = shapes.data[-1]
+    rect1 = shapes.data[-1]
+    rect = np.array([layer.world_to_data(point) for point in rect1])
     min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
     max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
-
     # Ensure zoom region stays within image bounds
     height, width = layer.data.shape
     min_x = max(0, min_x)
