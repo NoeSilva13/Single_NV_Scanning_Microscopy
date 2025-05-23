@@ -78,7 +78,7 @@ viewer = napari.Viewer(title="NV Scanning Microscopy") # Initialize Napari viewe
 # Set window size (width, height)
 viewer.window.resize(1200, 800)
 # Add an image layer to display the live scan. Data is initialized as an empty array 'image'.
-layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
+layer = viewer.add_image(image, name="live scan", colormap="viridis", contrast_limits=contrast_limits)
 # Add a shapes layer to display the zoom area. Initially empty.
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
@@ -163,9 +163,9 @@ def scan_pattern(x_points, y_points):
     data_path = data_manager.save_scan_data(scan_data)
     # Adjust contrast and save data
     layer.contrast_limits = (np.min(image), np.max(image))
-    scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
-    scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
-    layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+    #scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
+    #scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
+    #layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
     return x_points, y_points
 
 @magicgui(call_button="🔬 New Scan")
@@ -282,12 +282,14 @@ def on_shape_added(event):
         original_scan_params['y_res'] = y_res
 
     # Calculate new scan region from selected rectangle
-    rect = shapes.data[-1]
+    rect = layer.world_to_data(shapes.data[-1])
     min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
     max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
 
     # Ensure zoom region stays within image bounds
     height, width = layer.data.shape
+    print("height, width")
+    print(height, width)
     min_x = max(0, min_x)
     max_x = min(width, max_x)
     min_y = max(0, min_y)
