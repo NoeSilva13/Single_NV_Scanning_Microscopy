@@ -66,6 +66,7 @@ original_scan_params = {
     'y_res': None
 }
 
+# --------------------- SCALE FUNCTION ---------------------
 def calculate_scale(V1, V2, image_width_px, L=6.86, volts_per_degree=1.33):
     """Calculate microns per pixel based on galvo settings"""
     theta_deg = abs(V2 - V1) / volts_per_degree
