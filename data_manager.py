@@ -29,8 +29,9 @@ class DataManager:
         if not os.path.exists(daily_folder):
             os.makedirs(daily_folder)
         
-        # Get list of existing files in the daily folder
-        existing_files = [f for f in os.listdir(daily_folder) if f.startswith(daily_folder)]
+        # Get list of existing .csv files in the daily folder
+        existing_files = [f for f in os.listdir(daily_folder) 
+                        if f.startswith(daily_folder) and f.endswith('.csv')]
         
         # Determine the next sequence number (001, 002, etc.)
         seq_num = len(existing_files) + 1
