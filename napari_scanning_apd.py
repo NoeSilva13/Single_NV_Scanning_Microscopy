@@ -88,8 +88,9 @@ viewer.scale_bar.unit = "µm"
 viewer.scale_bar.position = "bottom_right"
 
 # Calculate scale (in microns/pixel)
-scale_um_per_px = calculate_scale(x_range[0], x_range[1], x_res)
-layer.scale = (scale_um_per_px, scale_um_per_px)
+scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
+scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
+layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 
 # --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
 def on_mouse_click(layer, event):
@@ -163,9 +164,9 @@ def scan_pattern(x_points, y_points):
     data_path = data_manager.save_scan_data(scan_data)
     # Adjust contrast and save data
     layer.contrast_limits = (np.min(image), np.max(image))
-    #scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
-    #scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
-    #layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+    scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
+    scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
+    layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
     return x_points, y_points
 
 @magicgui(call_button="🔬 New Scan")
