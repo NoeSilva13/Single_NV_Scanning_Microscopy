@@ -283,14 +283,12 @@ def on_shape_added(event):
         original_scan_params['y_res'] = y_res
 
     # Calculate new scan region from selected rectangle
-    rect = layer.world_to_data(shapes.data[-1])
+    rect1 = shapes.data[-1]
+    rect = np.array([layer.world_to_data(point) for point in rect1])
     min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
     max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
-
     # Ensure zoom region stays within image bounds
     height, width = layer.data.shape
-    print("height, width")
-    print(height, width)
     min_x = max(0, min_x)
     max_x = min(width, max_x)
     min_y = max(0, min_y)
