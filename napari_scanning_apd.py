@@ -202,7 +202,7 @@ def save_image():
     """Saves the current view of the Napari canvas as a PNG image.
     The filename is derived from the data_path of the scan.
     """
-    viewer.export_figure(path=f"{data_path}.png", flash=True)
+    viewer.screenshot(path=f"{data_path}.png", canvas_only=True, flash=True)
     show_info("📷 Image saved")
 
 # --------------------- SCAN PARAMETERS WIDGET ---------------------
