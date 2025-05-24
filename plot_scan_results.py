@@ -1,0 +1,45 @@
+import matplotlib
+matplotlib.use('Agg')  # Set the backend to Agg before importing pyplot
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.colors import Normalize
+from pathlib import Path
+
+def plot_scan_results(scan_data, save_path):
+    """
+    Save 2D scan results as a PNG heatmap, automatically handling file extension.
+    
+    Args:
+        scan_data (dict): Dictionary containing scan results
+        save_path (str or Path): Path where to save the plot (will force .png extension)
+    """
+    save_path = Path(save_path)
+    
+    # Force .png extension regardless of input
+    plot_path = save_path.with_suffix('.png')
+    
+    # Rest of plotting code...
+    x_grid = np.array(scan_data['x_points'])
+    y_grid = np.array(scan_data['y_points'])
+    counts_grid = np.array(scan_data['image'])
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    im = ax.pcolormesh(
+        x_grid,
+        y_grid,
+        counts_grid,
+        shading='auto',
+        norm=Normalize(vmin=counts_grid.min(), vmax=counts_grid.max()),
+        cmap='viridis'
+    )
+    
+    cbar = fig.colorbar(im, ax=ax)
+    cbar.set_label('SPD Counts', rotation=270, labelpad=15)
+    ax.set_xlabel("X Position (V)")
+    ax.set_ylabel("Y Position (V)")
+    ax.set_title("SPD Counts Heatmap")
+    fig.tight_layout()
+    
+    plot_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(plot_path, dpi=300, bbox_inches='tight')
+    plt.close(fig)

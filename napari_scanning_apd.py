@@ -21,6 +21,7 @@ import threading
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
+from plot_scan_results import plot_scan_results
 
 # --------------------- INITIAL CONFIGURATION ---------------------
 # Load scanning parameters from config file
@@ -168,6 +169,7 @@ def scan_pattern(x_points, y_points):
     scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
     scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
     layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+    plot_scan_results(scan_data, data_path)
     return x_points, y_points
 
 @magicgui(call_button="🔬 New Scan")
@@ -200,7 +202,7 @@ def save_image():
     """Saves the current view of the Napari canvas as a PNG image.
     The filename is derived from the data_path of the scan.
     """
-    viewer.screenshot(path=f"{data_path}.png", canvas_only=True, flash=True)
+    viewer.export_figure(path=f"{data_path}.png", flash=True)
     show_info("📷 Image saved")
 
 # --------------------- SCAN PARAMETERS WIDGET ---------------------
