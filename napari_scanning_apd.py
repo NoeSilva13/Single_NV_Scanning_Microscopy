@@ -86,7 +86,7 @@ shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color=
 # Configure scale bar
 viewer.scale_bar.visible = True
 viewer.scale_bar.unit = "µm"
-viewer.scale_bar.position = "bottom_right"
+viewer.scale_bar.position = "bottom_left"
 
 # Calculate scale (in microns/pixel)
 scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
