@@ -61,6 +61,13 @@ original_scan_params = {
     'y_res': None
 }
 
+# --------------------- SCALE FUNCTION ---------------------
+def calculate_scale(V1, V2, image_width_px, L=6.86, volts_per_degree=1.33):
+    """Calculate microns per pixel based on galvo settings"""
+    theta_deg = abs(V2 - V1) / volts_per_degree
+    scan_width_mm = 2 * L * np.tan(np.radians(theta_deg / 2))
+    return (scan_width_mm * 1000) / image_width_px  # Convert to microns/px
+
 # --------------------- NAPARI VIEWER SETUP ---------------------
 viewer = napari.Viewer(title="NV Scanning Microscopy") # Initialize Napari viewer
 # Set window size (width, height)
