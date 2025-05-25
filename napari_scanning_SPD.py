@@ -21,7 +21,7 @@ import threading
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
-from TimeTagger import createTimeTagger, Countrate, Counter  # Swabian TimeTagger API
+from TimeTagger import createTimeTagger, Countrate, Counter, createTimeTaggerVirtual  # Swabian TimeTagger API
 from plot_scan_results import plot_scan_results
 
 # --------------------- INITIAL CONFIGURATION ---------------------
@@ -91,6 +91,9 @@ layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 # --------------------- TIMETAGGER SETUP ---------------------
 tagger = createTimeTagger() 
 tagger.reset()
+#Virtual TimeTagger for testing purposes uncomment the following two lines
+#tagger = createTimeTaggerVirtual("TimeTagger/time_tags.ttbin")
+#tagger.run()
 # Set bin width to 5 ns
 binwidth = int(5e9)
 n_values = 1
