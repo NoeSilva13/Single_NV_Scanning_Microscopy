@@ -77,6 +77,16 @@ layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 
 # Add a shapes layer to display the zoom area. Initially empty.
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
+# Configure scale bar
+viewer.scale_bar.visible = True
+viewer.scale_bar.unit = "µm"
+viewer.scale_bar.position = "bottom_left"
+
+# Calculate scale (in microns/pixel)
+scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
+scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
+layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+
 # --------------------- TIMETAGGER SETUP ---------------------
 tagger = createTimeTagger() 
 tagger.reset()
