@@ -171,6 +171,9 @@ def scan_pattern(x_points, y_points):
     data_path = data_manager.save_scan_data(scan_data)
     # Adjust contrast and save data
     layer.contrast_limits = (np.min(image), np.max(image))
+    scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
+    scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
+    layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
     return x_points, y_points # Returns for history
 
 @magicgui(call_button="🔬 New Scan")
