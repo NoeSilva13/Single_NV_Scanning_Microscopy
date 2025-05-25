@@ -1,5 +1,5 @@
 import matplotlib
-matplotlib.use('Agg')  # Set the backend to Agg before importing pyplot
+matplotlib.use('PDF')  # Set the backend to PDF before importing pyplot
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import Normalize
@@ -7,16 +7,16 @@ from pathlib import Path
 
 def plot_scan_results(scan_data, save_path):
     """
-    Save 2D scan results as a PNG heatmap, automatically handling file extension.
+    Save 2D scan results as a PDF heatmap, automatically handling file extension.
     
     Args:
         scan_data (dict): Dictionary containing scan results
-        save_path (str or Path): Path where to save the plot (will force .png extension)
+        save_path (str or Path): Path where to save the plot (will force .pdf extension)
     """
     save_path = Path(save_path)
     
-    # Force .png extension regardless of input
-    plot_path = save_path.with_suffix('.png')
+    # Force .pdf extension regardless of input
+    plot_path = save_path.with_suffix('.pdf')
     
     # Rest of plotting code...
     x_grid = np.array(scan_data['x_points'])
@@ -41,5 +41,5 @@ def plot_scan_results(scan_data, save_path):
     fig.tight_layout()
     
     plot_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(plot_path, dpi=300, bbox_inches='tight')
+    fig.savefig(plot_path, format='pdf', bbox_inches='tight')
     plt.close(fig)
