@@ -22,6 +22,7 @@ from magicgui import magicgui
 from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
 from TimeTagger import createTimeTagger, Countrate, Counter  # Swabian TimeTagger API
+from plot_scan_results import plot_scan_results
 
 # --------------------- INITIAL CONFIGURATION ---------------------
 # Load scanning parameters from config file
@@ -174,6 +175,7 @@ def scan_pattern(x_points, y_points):
     scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
     scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
     layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+    plot_scan_results(scan_data, data_path)
     return x_points, y_points # Returns for history
 
 @magicgui(call_button="🔬 New Scan")
