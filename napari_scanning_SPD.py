@@ -23,6 +23,18 @@ from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
 from TimeTagger import createTimeTagger, Countrate, Counter, createTimeTaggerVirtual  # Swabian TimeTagger API
 from plot_scan_results import plot_scan_results
+import clr
+import sys
+from System import Decimal
+
+# Add Thorlabs.Kinesis references
+clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.DeviceManagerCLI.dll")
+clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.GenericPiezoCLI.dll")
+clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\ThorLabs.MotionControl.Benchtop.PrecisionPiezoCLI.dll")
+from Thorlabs.MotionControl.DeviceManagerCLI import *
+from Thorlabs.MotionControl.GenericPiezoCLI import *
+from Thorlabs.MotionControl.GenericPiezoCLI import Piezo
+from Thorlabs.MotionControl.Benchtop.PrecisionPiezoCLI import *
 
 # --------------------- INITIAL CONFIGURATION ---------------------
 # Load scanning parameters from config file
@@ -214,6 +226,69 @@ def save_image():
     viewer.screenshot(path=f"{data_path}.png", canvas_only=True, flash=True)
     show_info("📷 Image saved")
 
+# --------------------- AUTO FOCUS FUNCTION ---------------------
+@magicgui(call_button="🎯 Auto Focus")
+def auto_focus():
+    """Automatically find the optimal Z position by scanning for maximum signal"""
+    def run_auto_focus():
+        try:
+            # Initialize piezo controller
+            DeviceManagerCLI.BuildDeviceList()
+            serial_no = "44506104"  # Your piezo serial number
+            
+            # Connect to device
+            device = BenchtopPrecisionPiezo.CreateBenchtopPiezo(serial_no)
+            device.Connect(serial_no)
+            channel = device.GetChannel(1)
+            
+            # Initialize device
+            if not channel.IsSettingsInitialized():
+                channel.WaitForSettingsInitialized(10000)
+                assert channel.IsSettingsInitialized() is True
+            
+            channel.StartPolling(250)
+            time.sleep(0.25)
+            channel.EnableDevice()
+            time.sleep(0.25)
+            
+            # Set to closed loop mode
+            channel.SetPositionControlMode(Piezo.PiezoControlModeTypes.CloseLoop)
+            time.sleep(0.25)
+            
+            # Get max travel range
+            max_pos = channel.GetMaxTravel()
+            
+            # Parameters for Z sweep
+            step_size = Decimal(0.1)  # 0.1 µm steps
+            positions = np.arange(0, float(max_pos), float(step_size))
+            counts = []
+            
+            show_info('🔍 Starting Z scan...')
+            
+            # Perform Z sweep
+            for pos in positions:
+                channel.SetPosition(Decimal(pos))
+                time.sleep(0.1)  # Wait for movement and settling
+                counts.append(counter.getData())
+            
+            # Find position with maximum counts
+            optimal_pos = positions[np.argmax(counts)]
+            
+            # Move to optimal position
+            channel.SetPosition(Decimal(optimal_pos))
+            time.sleep(0.5)
+            
+            show_info(f'✅ Focus optimized at Z = {optimal_pos:.2f} µm')
+            
+            # Clean up
+            channel.StopPolling()
+            channel.Disconnect()
+            
+        except Exception as e:
+            show_info(f'❌ Auto-focus error: {str(e)}')
+    
+    threading.Thread(target=run_auto_focus, daemon=True).start()
+
 # --------------------- SCAN PARAMETERS WIDGET ---------------------
 def update_scan_parameters_widget():
     """Update the scan parameters widget with current values."""
@@ -368,8 +443,7 @@ viewer.window.add_dock_widget(reset_zoom, area="right")
 viewer.window.add_dock_widget(new_scan, area="right")
 viewer.window.add_dock_widget(save_image, area="right")
 viewer.window.add_dock_widget(close_scanner, area="right")
+viewer.window.add_dock_widget(auto_focus, area="right")
 viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan Parameters")
-
-
 
 napari.run() # Start the Napari event loop
