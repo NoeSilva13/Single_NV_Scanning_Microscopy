@@ -227,7 +227,7 @@ def save_image():
     show_info("📷 Image saved")
 
 # --------------------- AUTO FOCUS FUNCTION ---------------------
-@magicgui(call_button="🎯 Auto Focus")
+@magicgui(call_button="🔍 Auto Focus")
 def auto_focus():
     """Automatically find the optimal Z position by scanning for maximum signal"""
     def run_auto_focus():
