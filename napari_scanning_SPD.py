@@ -267,26 +267,21 @@ def auto_focus():
             while current <= max_pos:
                 positions.append(current)
                 current += step_size
-                print(f'{current}')
             
             show_info('🔍 Starting Z scan...')
-            channel.SetPosition(Decimal(0))
-            time.sleep(0.1)
-            print('Zero')
             # Perform Z sweep
             for pos in positions:
-                print(pos)
                 channel.SetPosition(pos)
                 time.sleep(0.1)  # Wait for movement and settling
                 counts.append(counter.getData())
+                print(f'Position: {pos}, counts: {counts[-1]}')
             
             # Find position with maximum counts
             optimal_pos = positions[np.argmax(counts)]
-            print(optimal_pos)
-            print(type(optimal_pos))
+
             # Move to optimal position
             channel.SetPosition(optimal_pos)
-            time.sleep(0.5)
+            time.sleep(0.1)
             
             show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
             
