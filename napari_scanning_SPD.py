@@ -257,28 +257,38 @@ def auto_focus():
             
             # Get max travel range
             max_pos = channel.GetMaxTravel()
-            
+            print(f"{max_pos}")
             # Parameters for Z sweep
-            step_size = Decimal(0.1)  # 0.1 µm steps
-            positions = np.arange(0, float(max_pos), float(step_size))
+            step_size = Decimal(10)  # 0.1 µm steps
+            positions = []
             counts = []
+            current = Decimal(0)
+            
+            while current <= max_pos:
+                positions.append(current)
+                current += step_size
+                print(f'{current}')
             
             show_info('🔍 Starting Z scan...')
-            
+            channel.SetPosition(Decimal(0))
+            time.sleep(0.1)
+            print('Zero')
             # Perform Z sweep
             for pos in positions:
-                channel.SetPosition(Decimal(pos))
+                print(pos)
+                channel.SetPosition(pos)
                 time.sleep(0.1)  # Wait for movement and settling
                 counts.append(counter.getData())
             
             # Find position with maximum counts
             optimal_pos = positions[np.argmax(counts)]
-            
+            print(optimal_pos)
+            print(type(optimal_pos))
             # Move to optimal position
-            channel.SetPosition(Decimal(optimal_pos))
+            channel.SetPosition(optimal_pos)
             time.sleep(0.5)
             
-            show_info(f'✅ Focus optimized at Z = {optimal_pos:.2f} µm')
+            show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
             
             # Clean up
             channel.StopPolling()
