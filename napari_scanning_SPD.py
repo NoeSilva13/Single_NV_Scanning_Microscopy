@@ -387,6 +387,7 @@ def create_focus_plot_widget(positions, counts):
     # Create a widget to hold the plot
     widget = QWidget()
     layout = QVBoxLayout()
+    widget.setFixedHeight(300)
     widget.setLayout(layout)
     
     # Create the figure and canvas
