@@ -16,7 +16,7 @@ class LivePlotNapariWidget(QWidget):
         super().__init__()
         self.measure_function = measure_function
         self.histogram_range = histogram_range
-        
+        self.setFixedHeight(250)
         # Setup the figure with a style that matches napari's dark theme
         self.fig = Figure(figsize=(4, 2), facecolor='#262930')
         self.canvas = FigureCanvas(self.fig)
