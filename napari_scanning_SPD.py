@@ -580,11 +580,11 @@ def reset_zoom():
     threading.Thread(target=run_reset, daemon=True).start()
 
 # Add buttons to the interface
-viewer.window.add_dock_widget(reset_zoom, area="right")
-viewer.window.add_dock_widget(new_scan, area="right")
-viewer.window.add_dock_widget(save_image, area="right")
-viewer.window.add_dock_widget(close_scanner, area="right")
-viewer.window.add_dock_widget(auto_focus, area="right")
+viewer.window.add_dock_widget(new_scan, area="bottom")
+viewer.window.add_dock_widget(save_image, area="bottom")
+viewer.window.add_dock_widget(reset_zoom, area="bottom")
+viewer.window.add_dock_widget(close_scanner, area="bottom")
+viewer.window.add_dock_widget(auto_focus, area="bottom")
 viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan Parameters")
 
 napari.run() # Start the Napari event loop
