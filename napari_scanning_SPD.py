@@ -390,7 +390,7 @@ def create_focus_plot_widget(positions, counts):
     widget.setLayout(layout)
     
     # Create the figure and canvas
-    fig = Figure(figsize=(4, 4), facecolor='#262930')
+    fig = Figure(figsize=(4, 2), facecolor='#262930')
     canvas = FigureCanvas(fig)
     ax = fig.add_subplot(111)
     
