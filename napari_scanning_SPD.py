@@ -105,11 +105,11 @@ scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
 layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 
 # --------------------- TIMETAGGER SETUP ---------------------
-#tagger = createTimeTagger() 
-#tagger.reset()
+tagger = createTimeTagger() 
+tagger.reset()
 #Virtual TimeTagger for testing purposes uncomment the following two lines
-tagger = createTimeTaggerVirtual("TimeTagger/time_tags.ttbin")
-tagger.run()
+#tagger = createTimeTaggerVirtual("TimeTagger/time_tags.ttbin")
+#tagger.run()
 # Set bin width to 5 ns
 binwidth = int(5e9)
 n_values = 1
@@ -353,10 +353,10 @@ def auto_focus(test_mode=False):
                 show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
                 
                 # Convert Decimal to float for plotting
-                positions_float = [float(pos) for pos in positions]
-                
+                positions_float = [float(str(pos)) for pos in positions]
+                counts_flat = [int(c.item()) for c in counts]
                 # Use signal to create and add widget from main thread
-                signal_bridge.create_focus_plot_signal.emit(positions_float, counts, 'Auto-Focus Plot')
+                signal_bridge.create_focus_plot_signal.emit(positions_float, counts_flat, 'Auto-Focus Plot')
                 
                 # Clean up
                 channel.StopPolling()
