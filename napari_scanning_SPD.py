@@ -341,7 +341,7 @@ def auto_focus(test_mode=False):
                     channel.SetPosition(pos)
                     time.sleep(0.1)  # Wait for movement and settling
                     counts.append(counter.getData())
-                    print(f'Position: {pos}, counts: {counts[-1]}')
+                    print(f'Position: {pos}, counts: {counts[-1].item()}')
                 
                 # Find position with maximum counts
                 optimal_pos = positions[np.argmax(counts)]
