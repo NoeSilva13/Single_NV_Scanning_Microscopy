@@ -92,7 +92,7 @@ layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 tagger = createTimeTagger() 
 tagger.reset()
 #Virtual TimeTagger for testing purposes uncomment the following two lines
-#tagger = createTimeTaggerVirtual("TimeTagger/time_tags.ttbin")
+#tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
 #tagger.run()
 # Set bin width to 5 ns
 binwidth = int(5e9)

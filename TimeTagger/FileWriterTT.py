@@ -5,10 +5,10 @@ import time
 tagger = createTimeTagger()  # Use virtual=True for simulation mode
 
 # Configure channels (example: detector on channel 1, laser sync on channel 2)
-channels = [1, 2]  # List of channels to record
+channels = [1]  # List of channels to record
 
 # Define output file path
-output_file = "time_tags.ttbin"  # Binary format (default for Time Tagger)
+output_file = "time_tags_test.ttbin"  # Binary format (default for Time Tagger)
 
 # Create FileWriter instance
 file_writer = FileWriter(tagger, filename=output_file, channels=channels)
