@@ -26,6 +26,10 @@ from plot_scan_results import plot_scan_results
 import clr
 import sys
 from System import Decimal
+from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from PyQt5.QtCore import QObject, pyqtSignal, QThread
 
 # Add Thorlabs.Kinesis references
 clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.DeviceManagerCLI.dll")
@@ -227,72 +231,205 @@ def save_image():
     show_info("📷 Image saved")
 
 # --------------------- AUTO FOCUS FUNCTION ---------------------
-@magicgui(call_button="🔍 Auto Focus")
-def auto_focus():
+class SignalBridge(QObject):
+    """Bridge to safely create and add widgets from background threads"""
+    create_focus_plot_signal = pyqtSignal(list, list, str)
+    
+    def __init__(self):
+        super().__init__()
+        self.create_focus_plot_signal.connect(self._create_and_add_focus_plot)
+        self.current_focus_widget = None
+    
+    def _create_and_add_focus_plot(self, positions, counts, name):
+        """Create and add the focus plot widget from the main thread"""
+        # Remove previous focus plot widget if it exists
+        if self.current_focus_widget is not None:
+            viewer.window.remove_dock_widget(self.current_focus_widget)
+        
+        # Create new focus plot widget
+        focus_plot_widget = create_focus_plot_widget(positions, counts)
+        
+        # Add the widget to the viewer
+        self.current_focus_widget = viewer.window.add_dock_widget(
+            focus_plot_widget, 
+            area='right', 
+            name=name
+        )
+
+# Create a global signal bridge
+signal_bridge = SignalBridge()
+
+@magicgui(call_button="🔍 Auto Focus", test_mode={"widget_type": "CheckBox", "text": "Test Mode"})
+def auto_focus(test_mode=False):
     """Automatically find the optimal Z position by scanning for maximum signal"""
     def run_auto_focus():
         try:
-            # Initialize piezo controller
-            DeviceManagerCLI.BuildDeviceList()
-            serial_no = "44506104"  # Your piezo serial number
-            
-            # Connect to device
-            device = BenchtopPrecisionPiezo.CreateBenchtopPiezo(serial_no)
-            device.Connect(serial_no)
-            channel = device.GetChannel(1)
-            
-            # Initialize device
-            if not channel.IsSettingsInitialized():
-                channel.WaitForSettingsInitialized(10000)
-                assert channel.IsSettingsInitialized() is True
-            
-            channel.StartPolling(250)
-            time.sleep(0.25)
-            channel.EnableDevice()
-            time.sleep(0.25)
-            
-            # Set to closed loop mode
-            channel.SetPositionControlMode(Piezo.PiezoControlModeTypes.CloseLoop)
-            time.sleep(0.25)
-            
-            # Get max travel range
-            max_pos = channel.GetMaxTravel()
-            print(f"{max_pos}")
-            # Parameters for Z sweep
-            step_size = Decimal(10)  # 0.1 µm steps
-            positions = []
-            counts = []
-            current = Decimal(0)
-            
-            while current <= max_pos:
-                positions.append(current)
-                current += step_size
-            
-            show_info('🔍 Starting Z scan...')
-            # Perform Z sweep
-            for pos in positions:
-                channel.SetPosition(pos)
-                time.sleep(0.1)  # Wait for movement and settling
-                counts.append(counter.getData())
-                print(f'Position: {pos}, counts: {counts[-1]}')
-            
-            # Find position with maximum counts
-            optimal_pos = positions[np.argmax(counts)]
+            if test_mode:
+                # Mock implementation for testing
+                show_info('🔍 Starting Z scan in TEST MODE...')
+                
+                # Create simulated data
+                max_pos = 100.0
+                step_size = 5.0
+                positions = np.arange(0, max_pos + step_size, step_size)
+                
+                # Simulate a Gaussian distribution of counts centered at a random position
+                center = np.random.uniform(30, 70)  # Random center between 30-70
+                width = 15.0  # Width of the Gaussian
+                noise_level = 200  # Base noise level
+                peak_height = 1000  # Peak signal above noise
+                
+                # Generate simulated counts with noise
+                counts = noise_level + peak_height * np.exp(-((positions - center) ** 2) / (2 * width ** 2))
+                counts = counts + np.random.normal(0, noise_level * 0.1, len(positions))  # Add random noise
+                counts = counts.astype(int)  # Convert to integers like real counts
+                
+                # Simulate the scanning process
+                for i, pos in enumerate(positions):
+                    time.sleep(0.05)  # Simulate shorter delay for testing
+                    print(f'Position: {pos}, counts: {counts[i]}')
+                
+                # Find position with maximum counts
+                optimal_pos = positions[np.argmax(counts)]
+                
+                show_info(f'✅ Focus optimized at Z = {optimal_pos} µm (TEST MODE)')
+                
+                # Use signal to create and add widget from main thread
+                signal_bridge.create_focus_plot_signal.emit(positions.tolist(), counts.tolist(), 'Auto-Focus Plot (TEST)')
+                
+            else:
+                # Real implementation with actual hardware
+                # Initialize piezo controller
+                DeviceManagerCLI.BuildDeviceList()
+                serial_no = "44506104"  # Your piezo serial number
+                
+                # Connect to device
+                device = BenchtopPrecisionPiezo.CreateBenchtopPiezo(serial_no)
+                device.Connect(serial_no)
+                channel = device.GetChannel(1)
+                
+                # Initialize device
+                if not channel.IsSettingsInitialized():
+                    channel.WaitForSettingsInitialized(10000)
+                    assert channel.IsSettingsInitialized() is True
+                
+                channel.StartPolling(250)
+                time.sleep(0.25)
+                channel.EnableDevice()
+                time.sleep(0.25)
+                
+                # Set to closed loop mode
+                channel.SetPositionControlMode(Piezo.PiezoControlModeTypes.CloseLoop)
+                time.sleep(0.25)
+                
+                # Get max travel range
+                max_pos = channel.GetMaxTravel()
+                print(f"{max_pos}")
+                # Parameters for Z sweep
+                step_size = Decimal(10)  # 0.1 µm steps
+                positions = []
+                counts = []
+                current = Decimal(0)
+                
+                while current <= max_pos:
+                    positions.append(current)
+                    current += step_size
+                
+                show_info('🔍 Starting Z scan...')
+                # Perform Z sweep
+                for pos in positions:
+                    channel.SetPosition(pos)
+                    time.sleep(0.1)  # Wait for movement and settling
+                    counts.append(counter.getData())
+                    print(f'Position: {pos}, counts: {counts[-1].item()}')
+                
+                # Find position with maximum counts
+                optimal_pos = positions[np.argmax(counts)]
 
-            # Move to optimal position
-            channel.SetPosition(optimal_pos)
-            time.sleep(0.1)
-            
-            show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
-            
-            # Clean up
-            channel.StopPolling()
-            channel.Disconnect()
-            
+                # Move to optimal position
+                channel.SetPosition(optimal_pos)
+                time.sleep(0.1)
+                
+                show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
+                
+                # Convert Decimal to float for plotting
+                positions_float = [float(str(pos)) for pos in positions]
+                counts_flat = [int(c.item()) for c in counts]
+                # Use signal to create and add widget from main thread
+                signal_bridge.create_focus_plot_signal.emit(positions_float, counts_flat, 'Auto-Focus Plot')
+                
+                # Clean up
+                channel.StopPolling()
+                channel.Disconnect()
+                
         except Exception as e:
             show_info(f'❌ Auto-focus error: {str(e)}')
     
     threading.Thread(target=run_auto_focus, daemon=True).start()
+
+# --------------------- AUTO-FOCUS PLOT WIDGET ---------------------
+def create_focus_plot_widget(positions, counts):
+    """
+    Creates a static plot widget to display auto-focus results
+    
+    Parameters
+    ----------
+    positions : list
+        Z positions scanned during auto-focus
+    counts : list
+        Photon counts measured at each position
+    
+    Returns
+    -------
+    QWidget
+        A Qt widget containing the matplotlib plot
+    """
+    # Create a widget to hold the plot
+    widget = QWidget()
+    layout = QVBoxLayout()
+    widget.setFixedHeight(250)
+    widget.setLayout(layout)
+    
+    # Create the figure and canvas
+    fig = Figure(figsize=(4, 2), facecolor='#262930')
+    canvas = FigureCanvas(fig)
+    ax = fig.add_subplot(111)
+    
+    # Style the plot to match napari's dark theme
+    ax.set_facecolor('#262930')
+    ax.tick_params(colors='white')
+    for spine in ax.spines.values():
+        spine.set_color('white')
+    
+    # Plot the data
+    ax.plot(positions, counts, 'o-', color='#00ff00')
+    
+    # Mark the optimal position
+    optimal_idx = np.argmax(counts)
+    optimal_pos = positions[optimal_idx]
+    optimal_counts = counts[optimal_idx]
+    ax.plot(optimal_pos, optimal_counts, 'ro', markersize=8)
+    ax.annotate(f'Optimal: {optimal_pos} µm', 
+                xy=(optimal_pos, optimal_counts),
+                xytext=(10, -20),
+                textcoords='offset points',
+                color='white',
+                arrowprops=dict(arrowstyle='->', color='white'))
+    
+    # Set labels and grid
+    ax.set_xlabel('Z Position (µm)', color='white')
+    ax.set_ylabel('Counts', color='white')
+    ax.set_title('Auto-Focus Results', color='white')
+    ax.grid(True, color='gray', alpha=0.3)
+    
+    # Add the canvas to the layout
+    layout.addWidget(canvas)
+    
+    # Draw the canvas
+    fig.tight_layout()
+    canvas.draw()
+    
+    return widget
 
 # --------------------- SCAN PARAMETERS WIDGET ---------------------
 def update_scan_parameters_widget():
@@ -444,11 +581,11 @@ def reset_zoom():
     threading.Thread(target=run_reset, daemon=True).start()
 
 # Add buttons to the interface
-viewer.window.add_dock_widget(reset_zoom, area="right")
-viewer.window.add_dock_widget(new_scan, area="right")
-viewer.window.add_dock_widget(save_image, area="right")
-viewer.window.add_dock_widget(close_scanner, area="right")
-viewer.window.add_dock_widget(auto_focus, area="right")
+viewer.window.add_dock_widget(new_scan, area="bottom")
+viewer.window.add_dock_widget(save_image, area="bottom")
+viewer.window.add_dock_widget(reset_zoom, area="bottom")
+viewer.window.add_dock_widget(close_scanner, area="bottom")
+viewer.window.add_dock_widget(auto_focus, area="bottom")
 viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan Parameters")
 
 napari.run() # Start the Napari event loop
