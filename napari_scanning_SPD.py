@@ -145,7 +145,7 @@ layer.mouse_drag_callbacks.append(on_mouse_click)
 # 'measure_function' is a lambda function that returns the current APD signal value (voltage).
 # 'histogram_range' is the number of data points to plot before overwriting.
 # 'dt' is the time between data points in seconds (converted to milliseconds internally).
-mpl_widget = live_plot(measure_function=lambda: counter.getData(), histogram_range=100, dt=0.2)
+mpl_widget = live_plot(measure_function=lambda: counter.getData()[0][0]/(binwidth/1e12), histogram_range=100, dt=0.2)
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING ---------------------
@@ -177,7 +177,7 @@ def scan_pattern(x_points, y_points):
                 time.sleep(0.001) # Settling time for galvos
                 
             counts = counter.getData()[0][0]/(binwidth/1e12) # Read SPD signal
-            time.sleep(binwidth/1e12) # Wait for SPD to count
+            #time.sleep(binwidth/1e12) # Wait for SPD to count
             print(f"{counts}") # Print counts
             image[y_idx, x_idx] = counts # Store in image
             layer.data = image # Update display
