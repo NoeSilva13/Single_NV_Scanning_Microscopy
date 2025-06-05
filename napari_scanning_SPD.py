@@ -16,6 +16,8 @@ import os
 camera_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Camera')
 if camera_dir not in sys.path:
     sys.path.append(camera_dir)
+from camera_video_mode import POACameraController
+import cv2
 
 import numpy as np 
 import napari
@@ -591,208 +593,27 @@ def reset_zoom():
 
 # --------------------- CAMERA CONTROL WIDGET ---------------------
 
-class CameraControlWidget(QWidget):
+@magicgui(call_button="Camera Live")
+def camera_live():
+    """Sets the Galvo scanner controller to its zero position.
+    Runs in a separate thread.
     """
-    A widget for controlling and displaying the camera feed in napari.
-    """
-    def __init__(self, viewer, parent=None):
-        super().__init__(parent)
-        self.viewer = viewer
-        self.camera = None
-        self.camera_layer = None
-        self.running = False
-        
-        # Camera settings
-        self.exposure = 100  # ms
-        self.gain = 100
-        self.width = 640
-        self.height = 480
-        
-        # Setup UI
-        self.setup_ui()
-        
-        # Timer for camera updates
-        self.timer = None
-        
-    def setup_ui(self):
-        """Initialize the user interface."""
-        layout = QVBoxLayout()
-        
-        # Camera controls
-        self.start_btn = QPushButton("Start Camera")
-        self.start_btn.clicked.connect(self.toggle_camera)
-        
-        # Exposure control
-        self.exposure_slider = QSlider()
-        self.exposure_slider.setOrientation(1)  # Vertical
-        self.exposure_slider.setRange(1, 1000)  # 1ms to 1000ms
-        self.exposure_slider.setValue(self.exposure)
-        self.exposure_slider.valueChanged.connect(self.update_exposure)
-        
-        # Gain control
-        self.gain_slider = QSlider()
-        self.gain_slider.setOrientation(1)  # Vertical
-        self.gain_slider.setRange(0, 1000)
-        self.gain_slider.setValue(self.gain)
-        self.gain_slider.valueChanged.connect(self.update_gain)
-        
-        # Add widgets to layout
-        layout.addWidget(QLabel("Camera Controls:"))
-        layout.addWidget(self.start_btn)
-        layout.addWidget(QLabel("Exposure (ms):"))
-        layout.addWidget(self.exposure_slider)
-        layout.addWidget(QLabel("Gain:"))
-        layout.addWidget(self.gain_slider)
-        
-        self.setLayout(layout)
-    
-    def init_camera(self):
-        """Initialize the camera."""
-        try:
-            import pyPOACamera
-            
-            # Get camera properties
-            camera_count = pyPOACamera.GetCameraCount()
-            if camera_count == 0:
-                print("No cameras found")
-                return False
-                
-            error, camera_props = pyPOACamera.GetCameraProperties(0)
-            if error != pyPOACamera.POAErrors.POA_OK:
-                print(f"Error getting camera properties: {pyPOACamera.GetErrorString(error)}")
-                return False
-                
-            self.camera_id = camera_props.cameraID
-            
-            # Open and initialize camera
-            error = pyPOACamera.OpenCamera(self.camera_id)
-            if error != pyPOACamera.POAErrors.POA_OK:
-                print(f"Error opening camera: {pyPOACamera.GetErrorString(error)}")
-                return False
-                
-            error = pyPOACamera.InitCamera(self.camera_id)
-            if error != pyPOACamera.POAErrors.POA_OK:
-                print(f"Error initializing camera: {pyPOACamera.GetErrorString(error)}")
-                pyPOACamera.CloseCamera(self.camera_id)
-                return False
-                
-            # Set initial parameters
-            pyPOACamera.SetImageFormat(self.camera_id, pyPOACamera.POAImgFormat.POA_RAW8)
-            pyPOACamera.SetImageSize(self.camera_id, self.width, self.height)
-            pyPOACamera.SetImageBin(self.camera_id, 1)
-            pyPOACamera.SetExp(self.camera_id, self.exposure * 1000, False)  # Convert to microseconds
-            pyPOACamera.SetGain(self.camera_id, self.gain, False)
-            
-            # Start video mode
-            error = pyPOACamera.StartExposure(self.camera_id, False)
-            if error != pyPOACamera.POAErrors.POA_OK:
-                print(f"Error starting exposure: {pyPOACamera.GetErrorString(error)}")
-                pyPOACamera.CloseCamera(self.camera_id)
-                return False
-                
-            # Create camera layer if it doesn't exist
-            if self.camera_layer is None:
-                self.camera_layer = self.viewer.add_image(
-                    np.zeros((self.height, self.width), dtype=np.uint8),
-                    name="Camera Feed",
-                    colormap='gray',
-                    blending='additive'
-                )
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error initializing camera: {str(e)}")
-            return False
-    
-    def start_camera(self):
-        """Start the camera feed."""
-        if self.init_camera():
-            self.running = True
-            self.start_btn.setText("Stop Camera")
-            self.timer = self.startTimer(30)  # Update ~30 FPS
-    
-    def stop_camera(self):
-        """Stop the camera feed."""
-        self.running = False
-        if hasattr(self, 'timer') and self.timer is not None:
-            self.killTimer(self.timer)
-            self.timer = None
-        
-        if hasattr(self, 'camera_id'):
-            try:
-                import pyPOACamera
-                pyPOACamera.StopExposure(self.camera_id)
-                pyPOACamera.CloseCamera(self.camera_id)
-            except:
-                pass
-        
-        self.start_btn.setText("Start Camera")
-    
-    def toggle_camera(self):
-        """Toggle the camera on/off."""
-        if self.running:
-            self.stop_camera()
-        else:
-            self.start_camera()
-    
-    def update_exposure(self, value):
-        """Update the camera exposure time."""
-        self.exposure = value
-        if hasattr(self, 'camera_id') and self.running:
-            try:
-                import pyPOACamera
-                pyPOACamera.SetExp(self.camera_id, self.exposure * 1000, False)
-            except:
-                pass
-    
-    def update_gain(self, value):
-        """Update the camera gain."""
-        self.gain = value
-        if hasattr(self, 'camera_id') and self.running:
-            try:
-                import pyPOACamera
-                pyPOACamera.SetGain(self.camera_id, self.gain, False)
-            except:
-                pass
-    
-    def timerEvent(self, event):
-        """Timer event for updating the camera feed."""
-        if not self.running or not hasattr(self, 'camera_id'):
-            return
-            
-        try:
-            import pyPOACamera
-            import numpy as np
-            
-            # Check if image is ready
-            error, is_ready = pyPOACamera.ImageReady(self.camera_id)
-            if not is_ready:
-                return
-            
-            # Get image data
-            img_size = pyPOACamera.ImageCalcSize(self.height, self.width, pyPOACamera.POAImgFormat.POA_RAW8)
-            buffer = np.zeros(img_size, dtype=np.uint8)
-            
-            error = pyPOACamera.GetImageData(self.camera_id, buffer, 1000)
-            if error != pyPOACamera.POAErrors.POA_OK:
-                print(f"Error getting image data: {pyPOACamera.GetErrorString(error)}")
-                return
-            
-            # Convert buffer to displayable format
-            frame = pyPOACamera.ImageDataConvert(buffer, self.height, self.width, pyPOACamera.POAImgFormat.POA_RAW8)
-            
-            # Update the camera layer
-            if self.camera_layer is not None:
-                self.camera_layer.data = frame
-                
-        except Exception as e:
-            print(f"Error updating camera feed: {str(e)}")
-            self.stop_camera()
+    def camera_video():
+        camera = POACameraController()
+        camera.connect(camera_index=0, width=640, height=480)
+        camera.start_stream()
+        while True:
+            frame = camera.get_frame()
+            if frame is not None:
+                cv2.imshow('Camera - Press q to quit', frame)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+        camera.disconnect()
+        cv2.destroyAllWindows()
+    threading.Thread(target=camera_video, daemon=True).start()
+    show_info("Camera Live")
 
-# Add the camera widget to the viewer
-camera_widget = CameraControlWidget(viewer)
-camera_dock = viewer.window.add_dock_widget(camera_widget, name="Camera Control", area="right")
+viewer.window.add_dock_widget(camera_live, name="Camera Control", area="right")
 
 # Add buttons to the interface
 viewer.window.add_dock_widget(new_scan, area="bottom")
