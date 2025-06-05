@@ -30,18 +30,6 @@ try:
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):  # Quit
                 break
-            elif key == ord('i'):  # Increase exposure
-                camera.set_exposure(camera.get_exposure() + 10000)
-                print(f"Exposure: {camera.get_exposure()/1000:.0f}ms")
-            elif key == ord('d'):  # Decrease exposure
-                camera.set_exposure(camera.get_exposure() - 10000)
-                print(f"Exposure: {camera.get_exposure()/1000:.0f}ms")
-            elif key == ord('g'):  # Increase gain
-                camera.set_gain(camera.get_gain() + 10)
-                print(f"Gain: {camera.get_gain()}")
-            elif key == ord('h'):  # Decrease gain
-                camera.set_gain(camera.get_gain() - 10)
-                print(f"Gain: {camera.get_gain()}")
 except KeyboardInterrupt:
     print("\nStopping camera...")
 finally:
