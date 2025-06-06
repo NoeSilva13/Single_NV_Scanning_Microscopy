@@ -33,29 +33,13 @@ from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
 from TimeTagger import createTimeTagger, Countrate, Counter, createTimeTaggerVirtual  # Swabian TimeTagger API
 from plot_scan_results import plot_scan_results
-import clr
-import sys
-from System import Decimal
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame, QGridLayout
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimerEvent, Qt
 from PyQt5.QtGui import QPalette, QColor
-from PyQt5.QtCore import QMetaType, Q_ARG
 from PyQt5.QtCore import pyqtSlot
 from piezo_controller import PiezoController, simulate_auto_focus
-
-# Add Thorlabs.Kinesis references
-clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.DeviceManagerCLI.dll")
-clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.GenericPiezoCLI.dll")
-clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\ThorLabs.MotionControl.Benchtop.PrecisionPiezoCLI.dll")
-from Thorlabs.MotionControl.DeviceManagerCLI import *
-from Thorlabs.MotionControl.GenericPiezoCLI import *
-from Thorlabs.MotionControl.GenericPiezoCLI import Piezo
-from Thorlabs.MotionControl.Benchtop.PrecisionPiezoCLI import *
-
-# Register numpy array as a meta type for thread-safe signal emission
-import numpy as np
 
 # --------------------- INITIAL CONFIGURATION ---------------------
 # Load scanning parameters from config file
