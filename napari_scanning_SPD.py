@@ -28,7 +28,7 @@ from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
 from TimeTagger import createTimeTagger, Countrate, Counter, createTimeTaggerVirtual  # Swabian TimeTagger API
 from plot_scan_results import plot_scan_results
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame, QGridLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame, QGridLayout, QDesktopWidget
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimerEvent, Qt
@@ -83,8 +83,9 @@ def calculate_scale(V1, V2, image_width_px, L=6.86, volts_per_degree=1.33):
 
 # --------------------- NAPARI VIEWER SETUP ---------------------
 viewer = napari.Viewer(title="NV Scanning Microscopy") # Initialize Napari viewer
-# Set window size (width, height)
-viewer.window.resize(1200, 800)
+# Set window size to maximum screen size
+screen = QDesktopWidget().screenGeometry()
+viewer.window.resize(screen.width(), screen.height())
 # Add an image layer to display the live scan. Data is initialized as an empty array 'image'.
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
 # Add a points layer to show current scanner position
