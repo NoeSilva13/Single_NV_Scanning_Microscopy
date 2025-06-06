@@ -543,7 +543,7 @@ def camera_live():
         # Add text overlay with settings
         exp_ms = camera_live.camera.get_exposure() / 1000
         gain = camera_live.camera.get_gain()
-        camera_layer.name = f"Camera Live (Exp: {exp_ms:.0f}ms, Gain: {gain})"
+        camera_layer.name = f"Live (Exp: {exp_ms:.0f}ms, Gain: {gain})"
     
     if not camera_live.is_running:
         # Start camera feed
@@ -570,7 +570,7 @@ def camera_live():
             initial_frame = np.zeros((height, width), dtype=np.uint8)
             camera_layer = viewer.add_image(
                 initial_frame,
-                name="Camera Live",
+                name="Live",
                 colormap="gray",
                 blending="additive",
                 visible=True
