@@ -200,7 +200,18 @@ def scan_pattern(x_points, y_points):
     }
     data_path = data_manager.save_scan_data(scan_data)
     # Adjust contrast and save data
-    layer.contrast_limits = (np.min(image), np.max(image))
+    try:
+        if image.size == 0 or np.all(np.isnan(image)):
+            show_info('⚠️ Image is empty or contains only NaNs. Contrast not updated.')
+        else:
+            min_val = np.nanmin(image)
+            max_val = np.nanmax(image)
+            if np.isclose(min_val, max_val):
+                show_info('⚠️ Image min and max are equal. Contrast not updated.')
+            else:
+                layer.contrast_limits = (min_val, max_val)
+    except Exception as e:
+        show_info(f'❌ Error setting contrast limits: {str(e)}')
     scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
     scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
     layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
