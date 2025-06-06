@@ -310,9 +310,11 @@ def auto_focus(test_mode=False):
     threading.Thread(target=run_auto_focus, daemon=True).start()
 
 # --------------------- AUTO-FOCUS PLOT WIDGET ---------------------
+from plot_widgets.single_axis_plot import SingleAxisPlot
+
 def create_focus_plot_widget(positions, counts):
     """
-    Creates a static plot widget to display auto-focus results
+    Creates a plot widget to display auto-focus results using SingleAxisPlot
     
     Parameters
     ----------
@@ -323,55 +325,19 @@ def create_focus_plot_widget(positions, counts):
     
     Returns
     -------
-    QWidget
-        A Qt widget containing the matplotlib plot
+    SingleAxisPlot
+        A widget containing the focus plot
     """
-    # Create a widget to hold the plot
-    widget = QWidget()
-    layout = QVBoxLayout()
-    widget.setFixedHeight(250)
-    widget.setLayout(layout)
-    
-    # Create the figure and canvas
-    fig = Figure(figsize=(4, 2), facecolor='#262930')
-    canvas = FigureCanvas(fig)
-    ax = fig.add_subplot(111)
-    
-    # Style the plot to match napari's dark theme
-    ax.set_facecolor('#262930')
-    ax.tick_params(colors='white')
-    for spine in ax.spines.values():
-        spine.set_color('white')
-    
-    # Plot the data
-    ax.plot(positions, counts, 'o-', color='#00ff00')
-    
-    # Mark the optimal position
-    optimal_idx = np.argmax(counts)
-    optimal_pos = positions[optimal_idx]
-    optimal_counts = counts[optimal_idx]
-    ax.plot(optimal_pos, optimal_counts, 'ro', markersize=8)
-    ax.annotate(f'Optimal: {optimal_pos} µm', 
-                xy=(optimal_pos, optimal_counts),
-                xytext=(10, -20),
-                textcoords='offset points',
-                color='white',
-                arrowprops=dict(arrowstyle='->', color='white'))
-    
-    # Set labels and grid
-    ax.set_xlabel('Z Position (µm)', color='white')
-    ax.set_ylabel('Counts', color='white')
-    ax.set_title('Auto-Focus Results', color='white')
-    ax.grid(True, color='gray', alpha=0.3)
-    
-    # Add the canvas to the layout
-    layout.addWidget(canvas)
-    
-    # Draw the canvas
-    fig.tight_layout()
-    canvas.draw()
-    
-    return widget
+    plot_widget = SingleAxisPlot()
+    plot_widget.plot_data(
+        x_data=positions,
+        y_data=counts,
+        x_label='Z Position (µm)',
+        y_label='Counts',
+        title='Auto-Focus Results',
+        peak_annotation=f'Optimal: {positions[np.argmax(counts)]:.2f} µm' if len(counts) > 0 else None
+    )
+    return plot_widget
 
 # --------------------- SCAN PARAMETERS WIDGET ---------------------
 def update_scan_parameters_widget():
