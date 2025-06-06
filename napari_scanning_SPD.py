@@ -104,11 +104,17 @@ scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
 layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 
 # --------------------- TIMETAGGER SETUP ---------------------
-#tagger = createTimeTagger() 
-#tagger.reset()
-#Virtual TimeTagger for testing purposes uncomment the following two lines
-tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
-tagger.run()
+try:
+    # Try to create real TimeTagger
+    tagger = createTimeTagger()
+    tagger.reset()
+    show_info("✅ Connected to real TimeTagger device")
+except Exception as e:
+    # Fall back to virtual TimeTagger if real device is not available
+    show_info("⚠️ Real TimeTagger not detected, using virtual device")
+    tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+    tagger.run()
+
 # Set bin width to 5 ns
 binwidth = int(5e9)
 n_values = 1
