@@ -39,8 +39,10 @@ from System import Decimal
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimerEvent
+from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimerEvent, Qt
 from PyQt5.QtGui import QPalette, QColor
+from PyQt5.QtCore import QMetaType, Q_ARG
+from PyQt5.QtCore import pyqtSlot
 
 # Add Thorlabs.Kinesis references
 clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.DeviceManagerCLI.dll")
@@ -50,6 +52,9 @@ from Thorlabs.MotionControl.DeviceManagerCLI import *
 from Thorlabs.MotionControl.GenericPiezoCLI import *
 from Thorlabs.MotionControl.GenericPiezoCLI import Piezo
 from Thorlabs.MotionControl.Benchtop.PrecisionPiezoCLI import *
+
+# Register numpy array as a meta type for thread-safe signal emission
+import numpy as np
 
 # --------------------- INITIAL CONFIGURATION ---------------------
 # Load scanning parameters from config file
@@ -593,25 +598,147 @@ def reset_zoom():
 
 # --------------------- CAMERA CONTROL WIDGET ---------------------
 
+class CameraUpdateThread(QThread):
+    """Thread for updating camera feed"""
+    frame_ready = pyqtSignal(np.ndarray)  # Signal to emit when new frame is ready
+    
+    def __init__(self, camera):
+        super().__init__()
+        self.camera = camera
+        self.running = True
+    
+    def run(self):
+        while self.running:
+            frame = self.camera.get_frame()
+            if frame is not None:
+                self.frame_ready.emit(frame)
+            self.msleep(33)  # ~30 fps
+    
+    def stop(self):
+        self.running = False
+        self.wait()
+
 @magicgui(call_button="Camera Live")
 def camera_live():
+    """Start/stop live camera feed in Napari viewer."""
+    global camera_layer
     
-    def camera_video():
-        camera = POACameraController()
-        camera.connect(camera_index=0, width=640, height=480)
-        camera.start_stream()
-        while True:
-            frame = camera.get_frame()
-            if frame is not None:
-                cv2.imshow('Camera - Press q to quit', frame)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-        camera.disconnect()
-        cv2.destroyAllWindows()
-    threading.Thread(target=camera_video, daemon=True).start()
-    show_info("Camera Live")
+    # Initialize camera controller if not already done
+    if not hasattr(camera_live, 'camera'):
+        camera_live.camera = POACameraController()
+        camera_live.is_running = False
+        camera_live.update_thread = None
+    
+    def update_layer(frame):
+        """Update the Napari layer with new frame"""
+        # Reshape frame to 2D if it's 3D with single channel
+        if frame.ndim == 3 and frame.shape[2] == 1:
+            frame = frame.squeeze()  # Remove single-dimensional entries
+        camera_layer.data = frame
+        # Add text overlay with settings
+        exp_ms = camera_live.camera.get_exposure() / 1000
+        gain = camera_live.camera.get_gain()
+        camera_layer.name = f"Camera Live (Exp: {exp_ms:.0f}ms, Gain: {gain})"
+    
+    if not camera_live.is_running:
+        # Start camera feed
+        if not hasattr(camera_live, 'camera_layer'):
+            # Connect to camera
+            if not camera_live.camera.connect(camera_index=0, width=1024, height=1024):  # Set desired resolution
+                show_info("❌ Failed to connect to camera")
+                return
+            
+            # Get actual image dimensions from camera
+            width, height = camera_live.camera.get_image_dimensions()
+            print(f"Camera dimensions: {width}x{height}")
+            
+            camera_live.camera.set_exposure(50000)  # 50ms initial exposure
+            camera_live.camera.set_gain(300)        # Initial gain
+            
+            # Start the stream
+            if not camera_live.camera.start_stream():
+                show_info("❌ Failed to start camera stream")
+                camera_live.camera.disconnect()
+                return
+            
+            # Create initial frame with correct dimensions
+            initial_frame = np.zeros((height, width), dtype=np.uint8)
+            camera_layer = viewer.add_image(
+                initial_frame,
+                name="Camera Live",
+                colormap="gray",
+                blending="additive",
+                visible=True
+            )
+            camera_live.camera_layer = camera_layer
+        
+        # Start update thread
+        camera_live.is_running = True
+        camera_live.update_thread = CameraUpdateThread(camera_live.camera)
+        camera_live.update_thread.frame_ready.connect(update_layer)
+        camera_live.update_thread.start()
+        show_info("📸 Camera live view started")
+        camera_live.call_button.text = "Stop Camera"
+    else:
+        # Stop camera feed
+        camera_live.is_running = False
+        if camera_live.update_thread:
+            camera_live.update_thread.stop()
+        camera_live.camera.stop_stream()
+        camera_live.camera.disconnect()
+        show_info("🛑 Camera live view stopped")
+        camera_live.call_button.text = "Camera Live"
 
-viewer.window.add_dock_widget(camera_live, name="Camera Control", area="right")
+# Create camera control widget with exposure and gain sliders
+class CameraControlWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+        
+        # Add camera live button
+        layout.addWidget(camera_live.native)
+        
+        # Exposure slider
+        exp_label = QLabel("Exposure (ms):")
+        exp_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(exp_label)
+        
+        self.exposure_slider = QSlider(Qt.Horizontal)
+        self.exposure_slider.setMinimum(1)
+        self.exposure_slider.setMaximum(1000)
+        self.exposure_slider.setValue(50)
+        self.exposure_slider.valueChanged.connect(self.update_exposure)
+        layout.addWidget(self.exposure_slider)
+        
+        # Gain slider
+        gain_label = QLabel("Gain:")
+        gain_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(gain_label)
+        
+        self.gain_slider = QSlider(Qt.Horizontal)
+        self.gain_slider.setMinimum(0)
+        self.gain_slider.setMaximum(1000)
+        self.gain_slider.setValue(300)
+        self.gain_slider.valueChanged.connect(self.update_gain)
+        layout.addWidget(self.gain_slider)
+        
+        # Set fixed width for better appearance
+        self.setFixedWidth(200)
+    
+    @pyqtSlot(int)
+    def update_exposure(self, value):
+        if hasattr(camera_live, 'camera'):
+            camera_live.camera.set_exposure(value * 1000)  # Convert ms to µs
+    
+    @pyqtSlot(int)
+    def update_gain(self, value):
+        if hasattr(camera_live, 'camera'):
+            camera_live.camera.set_gain(value)
+
+# Add camera control widget to viewer
+camera_control = CameraControlWidget()
+viewer.window.add_dock_widget(camera_control, name="Camera Control", area="right")
 
 # Add buttons to the interface
 viewer.window.add_dock_widget(new_scan, area="bottom")
