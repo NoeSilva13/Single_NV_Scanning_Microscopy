@@ -36,7 +36,7 @@ from plot_scan_results import plot_scan_results
 import clr
 import sys
 from System import Decimal
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimerEvent, Qt
@@ -713,6 +713,72 @@ def camera_live():
         show_info("🛑 Camera live view stopped")
         camera_live.call_button.text = "Camera Live"
 
+@magicgui(call_button="📸 Capture Shot")
+def capture_shot():
+    """Take a single image from the camera and display it in a new layer."""
+    # Initialize camera if needed
+    if not hasattr(capture_shot, 'camera'):
+        capture_shot.camera = POACameraController()
+    
+    try:
+        # Connect to camera if not already connected
+        if not capture_shot.camera.is_connected:
+            if not capture_shot.camera.connect(camera_index=0, width=1024, height=1024):
+                show_info("❌ Failed to connect to camera")
+                return
+            
+            capture_shot.camera.set_exposure(50000)  # 50ms initial exposure
+            capture_shot.camera.set_gain(300)        # Initial gain
+        
+        # Start stream temporarily
+        if not capture_shot.camera.start_stream():
+            show_info("❌ Failed to start camera stream")
+            capture_shot.camera.disconnect()
+            return
+        
+        # Wait a bit for the camera to settle
+        time.sleep(0.1)
+        
+        # Try to get a frame for up to 1 second
+        start_time = time.time()
+        frame = None
+        while time.time() - start_time < 1.0:
+            frame = capture_shot.camera.get_frame()
+            if frame is not None:
+                break
+            time.sleep(0.05)
+        
+        # Stop stream
+        capture_shot.camera.stop_stream()
+        
+        if frame is not None:
+            # Reshape frame if needed
+            if frame.ndim == 3 and frame.shape[2] == 1:
+                frame = frame.squeeze()
+            
+            # Generate unique name for the layer
+            timestamp = time.strftime("%H-%M-%S")
+            layer_name = f"Camera Shot {timestamp}"
+            
+            # Add as new layer
+            viewer.add_image(
+                frame,
+                name=layer_name,
+                colormap="gray",
+                blending="additive",
+                visible=True
+            )
+            show_info(f"✨ Captured image saved as '{layer_name}'")
+        else:
+            show_info("❌ Failed to capture image")
+            
+    except Exception as e:
+        show_info(f"❌ Error capturing image: {str(e)}")
+    finally:
+        # Cleanup if we connected in this function
+        if not hasattr(camera_live, 'camera') or not camera_live.camera.is_connected:
+            capture_shot.camera.disconnect()
+
 # Create camera control widget with exposure and gain sliders
 class CameraControlWidget(QWidget):
     def __init__(self, parent=None):
@@ -722,6 +788,15 @@ class CameraControlWidget(QWidget):
         
         # Add camera live button
         layout.addWidget(camera_live.native)
+        
+        # Add capture shot button
+        layout.addWidget(capture_shot.native)
+        
+        # Add separator line
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(line)
         
         # Exposure slider
         exp_label = QLabel("Exposure (ms):")
@@ -754,11 +829,15 @@ class CameraControlWidget(QWidget):
     def update_exposure(self, value):
         if hasattr(camera_live, 'camera'):
             camera_live.camera.set_exposure(value * 1000)  # Convert ms to µs
+        if hasattr(capture_shot, 'camera'):
+            capture_shot.camera.set_exposure(value * 1000)  # Convert ms to µs
     
     @pyqtSlot(int)
     def update_gain(self, value):
         if hasattr(camera_live, 'camera'):
             camera_live.camera.set_gain(value)
+        if hasattr(capture_shot, 'camera'):
+            capture_shot.camera.set_gain(value)
 
 # Add camera control widget to viewer
 camera_control = CameraControlWidget()
