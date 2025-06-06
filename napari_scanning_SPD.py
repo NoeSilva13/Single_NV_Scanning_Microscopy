@@ -281,35 +281,29 @@ class SignalBridge(QObject):
 # Create a global signal bridge
 signal_bridge = SignalBridge()
 
-@magicgui(call_button="🔍 Auto Focus", test_mode={"widget_type": "CheckBox", "text": "Test Mode"})
-def auto_focus(test_mode=False):
+@magicgui(call_button="🔍 Auto Focus")
+def auto_focus():
     """Automatically find the optimal Z position by scanning for maximum signal"""
     def run_auto_focus():
         try:
-            if test_mode:
-                show_info('🔍 Starting Z scan in TEST MODE...')
-                positions, counts, optimal_pos = simulate_auto_focus()
-                show_info(f'✅ Focus optimized at Z = {optimal_pos} µm (TEST MODE)')
-                signal_bridge.update_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot (TEST)')
-            else:
-                show_info('🔍 Starting Z scan...')
-                piezo = PiezoController()
+            show_info('🔍 Starting Z scan...')
+            piezo = PiezoController()
+            
+            if not piezo.connect():
+                show_info('❌ Failed to connect to piezo stage')
+                return
+            
+            try:
+                # Get count data using the counter
+                count_function = lambda: counter.getData()[0][0]/(binwidth/1e12)
+                positions, counts, optimal_pos = piezo.perform_auto_focus(count_function)
                 
-                if not piezo.connect():
-                    show_info('❌ Failed to connect to piezo stage')
-                    return
+                show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
+                signal_bridge.update_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot')
                 
-                try:
-                    # Get count data using the counter
-                    count_function = lambda: counter.getData()[0][0]/(binwidth/1e12)
-                    positions, counts, optimal_pos = piezo.perform_auto_focus(count_function)
-                    
-                    show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
-                    signal_bridge.update_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot')
-                    
-                finally:
-                    piezo.disconnect()
-                
+            finally:
+                piezo.disconnect()
+            
         except Exception as e:
             show_info(f'❌ Auto-focus error: {str(e)}')
     
