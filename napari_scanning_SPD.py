@@ -36,7 +36,7 @@ from plot_scan_results import plot_scan_results
 import clr
 import sys
 from System import Decimal
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame, QGridLayout
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimerEvent, Qt
@@ -783,47 +783,58 @@ def capture_shot():
 class CameraControlWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        layout = QVBoxLayout()
+        layout = QGridLayout()
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(layout)
         
-        # Add camera live button
-        layout.addWidget(camera_live.native)
+        # First row: Camera buttons (2 columns)
+        layout.addWidget(camera_live.native, 0, 0)
+        layout.addWidget(capture_shot.native, 0, 1)
         
-        # Add capture shot button
-        layout.addWidget(capture_shot.native)
+        # Second row: Sliders
+        # Exposure control (first column)
+        exposure_widget = QWidget()
+        exposure_layout = QVBoxLayout()
+        exposure_layout.setSpacing(0)
+        exposure_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Add separator line
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        layout.addWidget(line)
-        
-        # Exposure slider
         exp_label = QLabel("Exposure (ms):")
         exp_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(exp_label)
+        exposure_layout.addWidget(exp_label)
         
         self.exposure_slider = QSlider(Qt.Horizontal)
         self.exposure_slider.setMinimum(1)
         self.exposure_slider.setMaximum(1000)
         self.exposure_slider.setValue(50)
         self.exposure_slider.valueChanged.connect(self.update_exposure)
-        layout.addWidget(self.exposure_slider)
+        exposure_layout.addWidget(self.exposure_slider)
         
-        # Gain slider
+        exposure_widget.setLayout(exposure_layout)
+        layout.addWidget(exposure_widget, 1, 0)
+        
+        # Gain control (second column)
+        gain_widget = QWidget()
+        gain_layout = QVBoxLayout()
+        gain_layout.setSpacing(0)
+        gain_layout.setContentsMargins(0, 0, 0, 0)
+        
         gain_label = QLabel("Gain:")
         gain_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(gain_label)
+        gain_layout.addWidget(gain_label)
         
         self.gain_slider = QSlider(Qt.Horizontal)
         self.gain_slider.setMinimum(0)
         self.gain_slider.setMaximum(1000)
         self.gain_slider.setValue(300)
         self.gain_slider.valueChanged.connect(self.update_gain)
-        layout.addWidget(self.gain_slider)
+        gain_layout.addWidget(self.gain_slider)
         
-        # Set fixed width for better appearance
-        self.setFixedWidth(200)
+        gain_widget.setLayout(gain_layout)
+        layout.addWidget(gain_widget, 1, 1)
+        
+        # Set fixed height for better appearance
+        self.setFixedHeight(120)
     
     @pyqtSlot(int)
     def update_exposure(self, value):
