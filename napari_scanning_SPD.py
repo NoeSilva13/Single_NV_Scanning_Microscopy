@@ -642,7 +642,7 @@ def camera_live():
     
     if not camera_live.is_running:
         # Start camera feed
-        if not hasattr(camera_live, 'camera_layer'):
+        if not hasattr(camera_live, 'camera_layer') or camera_live.camera_layer not in viewer.layers:
             # Connect to camera
             if not camera_live.camera.connect(camera_index=0, width=1024, height=1024):  # Set desired resolution
                 show_info("❌ Failed to connect to camera")
@@ -671,6 +671,23 @@ def camera_live():
                 visible=True
             )
             camera_live.camera_layer = camera_layer
+        else:
+            # Reuse existing layer but reconnect camera
+            if not camera_live.camera.connect(camera_index=0, width=1024, height=1024):
+                show_info("❌ Failed to connect to camera")
+                return
+            
+            if not camera_live.camera.start_stream():
+                show_info("❌ Failed to start camera stream")
+                camera_live.camera.disconnect()
+                return
+            
+            # Get actual image dimensions from camera
+            width, height = camera_live.camera.get_image_dimensions()
+            print(f"Camera dimensions: {width}x{height}")
+            
+            camera_live.camera.set_exposure(50000)  # 50ms initial exposure
+            camera_live.camera.set_gain(300)        # Initial gain
         
         # Start update thread
         camera_live.is_running = True
@@ -684,8 +701,15 @@ def camera_live():
         camera_live.is_running = False
         if camera_live.update_thread:
             camera_live.update_thread.stop()
+            camera_live.update_thread = None
         camera_live.camera.stop_stream()
         camera_live.camera.disconnect()
+        
+        # Keep the layer but clear its data
+        if hasattr(camera_live, 'camera_layer') and camera_live.camera_layer in viewer.layers:
+            width, height = camera_live.camera_layer.data.shape
+            camera_live.camera_layer.data = np.zeros((height, width), dtype=np.uint8)
+        
         show_info("🛑 Camera live view stopped")
         camera_live.call_button.text = "Camera Live"
 
