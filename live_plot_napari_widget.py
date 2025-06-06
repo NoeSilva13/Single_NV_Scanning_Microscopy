@@ -12,17 +12,31 @@ import numpy as np
 from time import time
 
 class LivePlotNapariWidget(QWidget):
-    def __init__(self, measure_function, histogram_range=100, dt=100):  # dt in milliseconds
-        super().__init__()
+    def __init__(
+        self,
+        measure_function,
+        histogram_range=100,
+        dt=100,  # dt in milliseconds
+        widget_height=250,
+        figsize=(4, 2),
+        bg_color='#262930',
+        plot_color='#00ff00',
+        parent=None
+    ):
+        super().__init__(parent)
         self.measure_function = measure_function
         self.histogram_range = histogram_range
-        self.setFixedHeight(250)
+        self.bg_color = bg_color
+        self.plot_color = plot_color
+        
+        # Setup widget dimensions
+        self.setFixedHeight(widget_height)
         
         # Setup the figure with a style that matches napari's dark theme
-        self.fig = Figure(figsize=(4, 2), facecolor='#262930')
+        self.fig = Figure(figsize=figsize, facecolor=self.bg_color)
         self.canvas = FigureCanvas(self.fig)
         self.ax = self.fig.add_subplot(111)
-        self.ax.set_facecolor('#262930')
+        self.ax.set_facecolor(self.bg_color)
         
         # Style the plot to match napari's dark theme
         self.ax.tick_params(colors='white')
@@ -45,13 +59,13 @@ class LivePlotNapariWidget(QWidget):
         self.timer.start(dt)  # Update every dt milliseconds
         
         # Setup the plot
-        self.line, = self.ax.plot([], [], 'o-', color='#00ff00')  # Bright green line with markers
+        self.line, = self.ax.plot([], [], 'o-', color=self.plot_color)  # Line with markers
         self.ax.set_xlabel('Time (s)', color='white')
         self.ax.set_ylabel('Signal', color='white')
         self.ax.grid(True, color='gray', alpha=0.3)
         
         # Ensure the figure background matches napari
-        self.fig.patch.set_facecolor('#262930')
+        self.fig.patch.set_facecolor(self.bg_color)
         self.fig.tight_layout()
         self.canvas.draw()
     
@@ -83,7 +97,20 @@ class LivePlotNapariWidget(QWidget):
         self.timer.stop()
         super().closeEvent(event)
 
-def live_plot(measure_function, histogram_range=100, dt=0.1):
+    def clear(self):
+        """Clear the current plot"""
+        self.ax.clear()
+        self.canvas.draw()
+
+def live_plot(
+    measure_function,
+    histogram_range=100,
+    dt=0.1,
+    widget_height=250,
+    figsize=(4, 2),
+    bg_color='#262930',
+    plot_color='#00ff00'
+):
     '''
     Creates a LivePlotNapariWidget that updates with new measurements
     
@@ -95,10 +122,26 @@ def live_plot(measure_function, histogram_range=100, dt=0.1):
         Total number of data points plotted before overwriting
     dt : float
         Time between datapoints in seconds (converted to milliseconds internally)
+    widget_height : int
+        Height of the widget in pixels
+    figsize : tuple
+        Figure size in inches (width, height)
+    bg_color : str
+        Background color of the plot
+    plot_color : str
+        Color of the plot line
     
     Returns
     ---------------------------------------------------------------------------------
     LivePlotNapariWidget
         A Qt widget that can be added to napari's viewer
     '''
-    return LivePlotNapariWidget(measure_function, histogram_range, int(dt * 1000))
+    return LivePlotNapariWidget(
+        measure_function,
+        histogram_range,
+        int(dt * 1000),
+        widget_height,
+        figsize,
+        bg_color,
+        plot_color
+    )

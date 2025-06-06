@@ -780,27 +780,9 @@ class SingleAxisScanWidget(QWidget):
         self.x_scan_btn = QPushButton("⬌ X-Axis Scan")
         self.y_scan_btn = QPushButton("⬍ Y-Axis Scan")
         
-        # Add number of points spinbox
-        self.points_label = QLabel("Points:")
-        self.points_spinbox = QSlider(Qt.Horizontal)
-        self.points_spinbox.setMinimum(10)
-        self.points_spinbox.setMaximum(100)
-        self.points_spinbox.setValue(50)
-        
-        # Add range spinbox (in volts)
-        self.range_label = QLabel("Range (V):")
-        self.range_spinbox = QSlider(Qt.Horizontal)
-        self.range_spinbox.setMinimum(1)
-        self.range_spinbox.setMaximum(20)
-        self.range_spinbox.setValue(4)
-        
         # Add widgets to layout
         layout.addWidget(self.x_scan_btn, 0, 0)
         layout.addWidget(self.y_scan_btn, 0, 1)
-        layout.addWidget(self.points_label, 1, 0)
-        layout.addWidget(self.points_spinbox, 1, 1)
-        layout.addWidget(self.range_label, 2, 0)
-        layout.addWidget(self.range_spinbox, 2, 1)
         
         # Connect buttons
         self.x_scan_btn.clicked.connect(lambda: self.start_scan('x'))
@@ -808,12 +790,11 @@ class SingleAxisScanWidget(QWidget):
         
         # Create plot widget
         self.plot_widget = SingleAxisPlot()
-        layout.addWidget(self.plot_widget, 3, 0, 1, 2)
+        layout.addWidget(self.plot_widget, 1, 0, 1, 2)
         
         # Initialize plot with zeros
-        initial_points = self.points_spinbox.value()
-        x_data = np.linspace(-2, 2, initial_points)  # Default range of ±2V
-        y_data = np.zeros(initial_points)
+        x_data = np.linspace(x_range[0], x_range[1], x_res)
+        y_data = np.zeros(x_res)
         self.plot_widget.plot_data(
             x_data=x_data,
             y_data=y_data,
@@ -824,7 +805,7 @@ class SingleAxisScanWidget(QWidget):
         )
         
         # Set fixed height for better appearance
-        self.setFixedHeight(400)
+        self.setFixedHeight(300)
         
     def get_current_position(self):
         """Get the current scanner position from the points layer"""
@@ -848,17 +829,13 @@ class SingleAxisScanWidget(QWidget):
             show_info("❌ No current position set")
             return
         
-        # Get scan parameters
-        n_points = self.points_spinbox.value()
-        scan_range = self.range_spinbox.value() / 2  # Convert to ±range/2
-        
-        # Create scan points array
+        # Use resolution and range from config
         if axis == 'x':
-            scan_points = np.linspace(x_pos - scan_range, x_pos + scan_range, n_points)
+            scan_points = np.linspace(x_range[0], x_range[1], x_res)
             fixed_pos = y_pos
             axis_label = 'X Position (V)'
         else:  # y-axis
-            scan_points = np.linspace(y_pos - scan_range, y_pos + scan_range, n_points)
+            scan_points = np.linspace(y_range[0], y_range[1], y_res)
             fixed_pos = x_pos
             axis_label = 'Y Position (V)'
         
