@@ -618,7 +618,7 @@ class CameraUpdateThread(QThread):
         self.running = False
         self.wait()
 
-@magicgui(call_button="Camera Live")
+@magicgui(call_button="🎥 Camera Live")
 def camera_live():
     """Start/stop live camera feed in Napari viewer."""
     global camera_layer
@@ -694,8 +694,8 @@ def camera_live():
         camera_live.update_thread = CameraUpdateThread(camera_live.camera)
         camera_live.update_thread.frame_ready.connect(update_layer)
         camera_live.update_thread.start()
-        show_info("📸 Camera live view started")
-        camera_live.call_button.text = "Stop Camera"
+        show_info("🎥 Camera live view started")
+        camera_live.call_button.text = "🛑 Stop Camera"
     else:
         # Stop camera feed
         camera_live.is_running = False
@@ -711,9 +711,9 @@ def camera_live():
             camera_live.camera_layer.data = np.zeros((height, width), dtype=np.uint8)
         
         show_info("🛑 Camera live view stopped")
-        camera_live.call_button.text = "Camera Live"
+        camera_live.call_button.text = "🎥Camera Live"
 
-@magicgui(call_button="📸 Capture Shot")
+@magicgui(call_button="📸 Single Shot")
 def capture_shot():
     """Take a single image from the camera and display it in a new layer."""
     # Initialize camera if needed
