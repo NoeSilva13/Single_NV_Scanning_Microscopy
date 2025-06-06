@@ -11,12 +11,7 @@ The system provides real-time visualization and control through a Napari-based G
 
 import sys
 import os
-
-# Add the Camera directory to the Python path
-camera_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Camera')
-if camera_dir not in sys.path:
-    sys.path.append(camera_dir)
-from camera_video_mode import POACameraController
+from Camera import POACameraController
 import cv2
 
 import numpy as np 

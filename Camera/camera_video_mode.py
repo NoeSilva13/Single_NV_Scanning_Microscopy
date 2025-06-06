@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-import pyPOACamera
+from . import pyPOACamera
 from typing import Optional, List, Tuple, Any, Dict, Union
 
 
