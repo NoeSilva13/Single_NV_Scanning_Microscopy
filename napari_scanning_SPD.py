@@ -249,28 +249,34 @@ def save_image():
 # --------------------- AUTO FOCUS FUNCTION ---------------------
 class SignalBridge(QObject):
     """Bridge to safely create and add widgets from background threads"""
-    create_focus_plot_signal = pyqtSignal(list, list, str)
+    update_focus_plot_signal = pyqtSignal(list, list, str)
     
     def __init__(self):
         super().__init__()
-        self.create_focus_plot_signal.connect(self._create_and_add_focus_plot)
-        self.current_focus_widget = None
+        self.update_focus_plot_signal.connect(self._update_focus_plot)
+        self.focus_plot_widget = None
+        self.focus_dock_widget = None
     
-    def _create_and_add_focus_plot(self, positions, counts, name):
-        """Create and add the focus plot widget from the main thread"""
-        # Remove previous focus plot widget if it exists
-        if self.current_focus_widget is not None:
-            viewer.window.remove_dock_widget(self.current_focus_widget)
-        
-        # Create new focus plot widget
-        focus_plot_widget = create_focus_plot_widget(positions, counts)
-        
-        # Add the widget to the viewer
-        self.current_focus_widget = viewer.window.add_dock_widget(
-            focus_plot_widget, 
-            area='right', 
-            name=name
-        )
+    def _update_focus_plot(self, positions, counts, name):
+        """Update the focus plot widget from the main thread"""
+        # Create plot widget if it doesn't exist
+        if self.focus_plot_widget is None:
+            self.focus_plot_widget = create_focus_plot_widget(positions, counts)
+            self.focus_dock_widget = viewer.window.add_dock_widget(
+                self.focus_plot_widget, 
+                area='right', 
+                name=name
+            )
+        else:
+            # Update existing plot
+            self.focus_plot_widget.plot_data(
+                x_data=positions,
+                y_data=counts,
+                x_label='Z Position (µm)',
+                y_label='Counts',
+                title='Auto-Focus Results',
+                peak_annotation=f'Optimal: {positions[np.argmax(counts)]:.2f} µm' if len(counts) > 0 else None
+            )
 
 # Create a global signal bridge
 signal_bridge = SignalBridge()
@@ -284,7 +290,7 @@ def auto_focus(test_mode=False):
                 show_info('🔍 Starting Z scan in TEST MODE...')
                 positions, counts, optimal_pos = simulate_auto_focus()
                 show_info(f'✅ Focus optimized at Z = {optimal_pos} µm (TEST MODE)')
-                signal_bridge.create_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot (TEST)')
+                signal_bridge.update_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot (TEST)')
             else:
                 show_info('🔍 Starting Z scan...')
                 piezo = PiezoController()
@@ -299,7 +305,7 @@ def auto_focus(test_mode=False):
                     positions, counts, optimal_pos = piezo.perform_auto_focus(count_function)
                     
                     show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
-                    signal_bridge.create_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot')
+                    signal_bridge.update_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot')
                     
                 finally:
                     piezo.disconnect()
@@ -747,6 +753,13 @@ camera_control = CameraControlWidget()
 viewer.window.add_dock_widget(camera_control, name="Camera Control", area="right")
 
 # Add buttons to the interface
+# Set fixed sizes for widget buttons
+new_scan.native.setFixedSize(150, 50)
+save_image.native.setFixedSize(150, 50)
+reset_zoom.native.setFixedSize(150, 50)
+close_scanner.native.setFixedSize(150, 50)
+auto_focus.native.setFixedSize(150, 50)
+
 viewer.window.add_dock_widget(new_scan, area="bottom")
 viewer.window.add_dock_widget(save_image, area="bottom")
 viewer.window.add_dock_widget(reset_zoom, area="bottom")
@@ -757,7 +770,7 @@ viewer.window.add_dock_widget(update_scan_parameters, area="left", name="Scan Pa
 # Initialize empty auto-focus plot
 empty_positions = [0, 1]  # Minimal data to create empty plot
 empty_counts = [0, 0]
-signal_bridge.create_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto-Focus Plot')
+signal_bridge.update_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto-Focus Plot')
 
 # Calculate the indices corresponding to 0V for both axes
 x_zero_idx = np.interp(0, [x_range[0], x_range[1]], [0, x_res-1])
