@@ -7,7 +7,7 @@ A napari-compatible widget for live plotting of measurements
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from qtpy.QtCore import QTimer
-from qtpy.QtWidgets import QWidget, QVBoxLayout
+from qtpy.QtWidgets import QWidget, QVBoxLayout, QGridLayout
 import numpy as np
 from time import time
 
@@ -44,7 +44,9 @@ class LivePlotNapariWidget(QWidget):
             spine.set_color('white')
         
         # Setup the layout
-        layout = QVBoxLayout()
+        layout = QGridLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         layout.addWidget(self.canvas)
         self.setLayout(layout)
         
