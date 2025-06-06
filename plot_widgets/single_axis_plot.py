@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 import numpy as np
@@ -30,7 +30,9 @@ class SingleAxisPlot(QWidget):
         
     def _setup_layout(self):
         """Initialize the widget layout"""
-        self.layout = QVBoxLayout()
+        self.layout = QGridLayout()
+        self.layout.setContentsMargins(0, 0, 0, 0)
+        self.layout.setSpacing(0)
         self.setLayout(self.layout)
         
     def _create_figure(self, figsize):
