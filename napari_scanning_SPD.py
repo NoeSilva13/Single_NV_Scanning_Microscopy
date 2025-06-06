@@ -100,8 +100,8 @@ points_layer = viewer.add_points(
     ndim=2,
     name="scanner position",
     face_color='red',
-    size=10,
-    opacity=0.8,
+    size=5,
+    opacity=1,
     symbol='o'
 )
 
