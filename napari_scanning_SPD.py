@@ -862,4 +862,9 @@ viewer.window.add_dock_widget(close_scanner, area="bottom")
 viewer.window.add_dock_widget(auto_focus, area="bottom")
 viewer.window.add_dock_widget(update_scan_parameters, area="left", name="Scan Parameters")
 
+# Initialize empty auto-focus plot
+empty_positions = [0, 1]  # Minimal data to create empty plot
+empty_counts = [0, 0]
+signal_bridge.create_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto-Focus Plot')
+
 napari.run() # Start the Napari event loop
