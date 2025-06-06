@@ -99,10 +99,10 @@ shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color=
 points_layer = viewer.add_points(
     ndim=2,
     name="scanner position",
-    face_color='yellow',
+    face_color='red',
     size=10,
     opacity=0.8,
-    symbol='x'
+    symbol='o'
 )
 
 # Configure scale bar
