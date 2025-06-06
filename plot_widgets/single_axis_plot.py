@@ -112,7 +112,7 @@ class SingleAxisPlot(QWidget):
         # Set labels and styling
         self.ax.set_xlabel(x_label, color='white')
         self.ax.set_ylabel(y_label, color='white')
-        self.ax.set_title(title, color='white')
+        #self.ax.set_title(title, color='white')
         self.ax.grid(True, color='gray', alpha=0.3)
         
         # Update the plot
