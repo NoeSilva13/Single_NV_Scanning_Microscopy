@@ -767,4 +767,119 @@ y_zero_idx = np.interp(0, [y_range[0], y_range[1]], [0, y_res-1])
 world_coords = layer.data_to_world([y_zero_idx, x_zero_idx])
 points_layer.data = [[world_coords[0], world_coords[1]]]
 
+# --------------------- SINGLE AXIS SCAN WIDGET ---------------------
+class SingleAxisScanWidget(QWidget):
+    """Widget for performing single axis scans at current cursor position"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QGridLayout()
+        layout.setSpacing(5)
+        self.setLayout(layout)
+        
+        # Create buttons for X and Y scans
+        self.x_scan_btn = QPushButton("⬌ X-Axis Scan")
+        self.y_scan_btn = QPushButton("⬍ Y-Axis Scan")
+        
+        # Add number of points spinbox
+        self.points_label = QLabel("Points:")
+        self.points_spinbox = QSlider(Qt.Horizontal)
+        self.points_spinbox.setMinimum(10)
+        self.points_spinbox.setMaximum(100)
+        self.points_spinbox.setValue(50)
+        
+        # Add range spinbox (in volts)
+        self.range_label = QLabel("Range (V):")
+        self.range_spinbox = QSlider(Qt.Horizontal)
+        self.range_spinbox.setMinimum(1)
+        self.range_spinbox.setMaximum(20)
+        self.range_spinbox.setValue(4)
+        
+        # Add widgets to layout
+        layout.addWidget(self.x_scan_btn, 0, 0)
+        layout.addWidget(self.y_scan_btn, 0, 1)
+        layout.addWidget(self.points_label, 1, 0)
+        layout.addWidget(self.points_spinbox, 1, 1)
+        layout.addWidget(self.range_label, 2, 0)
+        layout.addWidget(self.range_spinbox, 2, 1)
+        
+        # Connect buttons
+        self.x_scan_btn.clicked.connect(lambda: self.start_scan('x'))
+        self.y_scan_btn.clicked.connect(lambda: self.start_scan('y'))
+        
+        # Create plot widget
+        self.plot_widget = SingleAxisPlot()
+        layout.addWidget(self.plot_widget, 3, 0, 1, 2)
+        
+        # Set fixed height for better appearance
+        self.setFixedHeight(400)
+        
+    def get_current_position(self):
+        """Get the current scanner position from the points layer"""
+        if len(points_layer.data) == 0:
+            return None, None
+        
+        world_coords = points_layer.data[0]
+        data_coords = layer.world_to_data(world_coords)
+        y_idx, x_idx = data_coords
+        
+        # Convert from pixel indices to voltage values
+        x_voltage = np.interp(x_idx, [0, x_res-1], [x_range[0], x_range[1]])
+        y_voltage = np.interp(y_idx, [0, y_res-1], [y_range[0], y_range[1]])
+        
+        return x_voltage, y_voltage
+    
+    def start_scan(self, axis):
+        """Start a single axis scan"""
+        x_pos, y_pos = self.get_current_position()
+        if x_pos is None or y_pos is None:
+            show_info("❌ No current position set")
+            return
+        
+        # Get scan parameters
+        n_points = self.points_spinbox.value()
+        scan_range = self.range_spinbox.value() / 2  # Convert to ±range/2
+        
+        # Create scan points array
+        if axis == 'x':
+            scan_points = np.linspace(x_pos - scan_range, x_pos + scan_range, n_points)
+            fixed_pos = y_pos
+            axis_label = 'X Position (V)'
+        else:  # y-axis
+            scan_points = np.linspace(y_pos - scan_range, y_pos + scan_range, n_points)
+            fixed_pos = x_pos
+            axis_label = 'Y Position (V)'
+        
+        # Perform scan in a separate thread
+        def run_scan():
+            counts = []
+            for point in scan_points:
+                if axis == 'x':
+                    output_task.write([point, fixed_pos])
+                else:
+                    output_task.write([fixed_pos, point])
+                    
+                time.sleep(0.001)  # Small delay for settling
+                count = counter.getData()[0][0]/(binwidth/1e12)
+                counts.append(count)
+            
+            # Plot results
+            self.plot_widget.plot_data(
+                x_data=scan_points,
+                y_data=counts,
+                x_label=axis_label,
+                y_label='Counts',
+                title=f'Single Axis Scan ({axis.upper()})',
+                mark_peak=True
+            )
+            
+            # Return to original position
+            output_task.write([x_pos, y_pos])
+        
+        threading.Thread(target=run_scan, daemon=True).start()
+        show_info(f"🔍 Starting {axis.upper()}-axis scan...")
+
+# Add single axis scan widget to viewer
+single_axis_scan = SingleAxisScanWidget()
+viewer.window.add_dock_widget(single_axis_scan, name="Single Axis Scan", area="right")
+
 napari.run() # Start the Napari event loop
