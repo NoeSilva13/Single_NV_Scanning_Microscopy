@@ -17,6 +17,7 @@ class LivePlotNapariWidget(QWidget):
         self.measure_function = measure_function
         self.histogram_range = histogram_range
         self.setFixedHeight(250)
+        
         # Setup the figure with a style that matches napari's dark theme
         self.fig = Figure(figsize=(4, 2), facecolor='#262930')
         self.canvas = FigureCanvas(self.fig)
@@ -44,13 +45,14 @@ class LivePlotNapariWidget(QWidget):
         self.timer.start(dt)  # Update every dt milliseconds
         
         # Setup the plot
-        self.line, = self.ax.plot([], [], color='#00ff00')  # Bright green line
+        self.line, = self.ax.plot([], [], 'o-', color='#00ff00')  # Bright green line with markers
         self.ax.set_xlabel('Time (s)', color='white')
         self.ax.set_ylabel('Signal', color='white')
         self.ax.grid(True, color='gray', alpha=0.3)
         
         # Ensure the figure background matches napari
         self.fig.patch.set_facecolor('#262930')
+        self.fig.tight_layout()
         self.canvas.draw()
     
     def update_plot(self):
@@ -72,6 +74,7 @@ class LivePlotNapariWidget(QWidget):
             self.line.set_data(self.x_data, self.y_data)
             self.ax.relim()
             self.ax.autoscale_view()
+            self.fig.tight_layout()
             self.canvas.draw()
         except Exception as e:
             print(f"Error updating plot: {e}")
