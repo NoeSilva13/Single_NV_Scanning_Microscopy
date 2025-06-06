@@ -595,9 +595,7 @@ def reset_zoom():
 
 @magicgui(call_button="Camera Live")
 def camera_live():
-    """Sets the Galvo scanner controller to its zero position.
-    Runs in a separate thread.
-    """
+    
     def camera_video():
         camera = POACameraController()
         camera.connect(camera_index=0, width=640, height=480)
