@@ -92,18 +92,10 @@ viewer = napari.Viewer(title="NV Scanning Microscopy") # Initialize Napari viewe
 viewer.window.resize(1200, 800)
 # Add an image layer to display the live scan. Data is initialized as an empty array 'image'.
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
+# Add a points layer to show current scanner position
+points_layer = viewer.add_points(ndim=2, name="scanner position", face_color='red', size=5, opacity=1, symbol='o')
 # Add a shapes layer to display the zoom area. Initially empty.
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
-
-# Add a points layer to show current scanner position
-points_layer = viewer.add_points(
-    ndim=2,
-    name="scanner position",
-    face_color='red',
-    size=5,
-    opacity=1,
-    symbol='o'
-)
 
 # Configure scale bar
 viewer.scale_bar.visible = True
