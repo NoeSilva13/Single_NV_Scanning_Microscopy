@@ -43,6 +43,7 @@ from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimerEvent, Qt
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import QMetaType, Q_ARG
 from PyQt5.QtCore import pyqtSlot
+from piezo_controller import PiezoController, simulate_auto_focus
 
 # Add Thorlabs.Kinesis references
 clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.DeviceManagerCLI.dll")
@@ -281,102 +282,28 @@ def auto_focus(test_mode=False):
     def run_auto_focus():
         try:
             if test_mode:
-                # Mock implementation for testing
                 show_info('🔍 Starting Z scan in TEST MODE...')
-                
-                # Create simulated data
-                max_pos = 100.0
-                step_size = 5.0
-                positions = np.arange(0, max_pos + step_size, step_size)
-                
-                # Simulate a Gaussian distribution of counts centered at a random position
-                center = np.random.uniform(30, 70)  # Random center between 30-70
-                width = 15.0  # Width of the Gaussian
-                noise_level = 200  # Base noise level
-                peak_height = 1000  # Peak signal above noise
-                
-                # Generate simulated counts with noise
-                counts = noise_level + peak_height * np.exp(-((positions - center) ** 2) / (2 * width ** 2))
-                counts = counts + np.random.normal(0, noise_level * 0.1, len(positions))  # Add random noise
-                counts = counts.astype(int)  # Convert to integers like real counts
-                
-                # Simulate the scanning process
-                for i, pos in enumerate(positions):
-                    time.sleep(0.05)  # Simulate shorter delay for testing
-                    print(f'Position: {pos}, counts: {counts[i]}')
-                
-                # Find position with maximum counts
-                optimal_pos = positions[np.argmax(counts)]
-                
+                positions, counts, optimal_pos = simulate_auto_focus()
                 show_info(f'✅ Focus optimized at Z = {optimal_pos} µm (TEST MODE)')
-                
-                # Use signal to create and add widget from main thread
-                signal_bridge.create_focus_plot_signal.emit(positions.tolist(), counts.tolist(), 'Auto-Focus Plot (TEST)')
-                
+                signal_bridge.create_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot (TEST)')
             else:
-                # Real implementation with actual hardware
-                # Initialize piezo controller
-                DeviceManagerCLI.BuildDeviceList()
-                serial_no = "44506104"  # Your piezo serial number
-                
-                # Connect to device
-                device = BenchtopPrecisionPiezo.CreateBenchtopPiezo(serial_no)
-                device.Connect(serial_no)
-                channel = device.GetChannel(1)
-                
-                # Initialize device
-                if not channel.IsSettingsInitialized():
-                    channel.WaitForSettingsInitialized(10000)
-                    assert channel.IsSettingsInitialized() is True
-                
-                channel.StartPolling(250)
-                time.sleep(0.25)
-                channel.EnableDevice()
-                time.sleep(0.25)
-                
-                # Set to closed loop mode
-                channel.SetPositionControlMode(Piezo.PiezoControlModeTypes.CloseLoop)
-                time.sleep(0.25)
-                
-                # Get max travel range
-                max_pos = channel.GetMaxTravel()
-                print(f"{max_pos}")
-                # Parameters for Z sweep
-                step_size = Decimal(10)  # 0.1 µm steps
-                positions = []
-                counts = []
-                current = Decimal(0)
-                
-                while current <= max_pos:
-                    positions.append(current)
-                    current += step_size
-                
                 show_info('🔍 Starting Z scan...')
-                # Perform Z sweep
-                for pos in positions:
-                    channel.SetPosition(pos)
-                    time.sleep(0.1)  # Wait for movement and settling
-                    counts.append(counter.getData())
-                    print(f'Position: {pos}, counts: {counts[-1].item()}')
+                piezo = PiezoController()
                 
-                # Find position with maximum counts
-                optimal_pos = positions[np.argmax(counts)]
-
-                # Move to optimal position
-                channel.SetPosition(optimal_pos)
-                time.sleep(0.1)
+                if not piezo.connect():
+                    show_info('❌ Failed to connect to piezo stage')
+                    return
                 
-                show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
-                
-                # Convert Decimal to float for plotting
-                positions_float = [float(str(pos)) for pos in positions]
-                counts_flat = [int(c.item()) for c in counts]
-                # Use signal to create and add widget from main thread
-                signal_bridge.create_focus_plot_signal.emit(positions_float, counts_flat, 'Auto-Focus Plot')
-                
-                # Clean up
-                channel.StopPolling()
-                channel.Disconnect()
+                try:
+                    # Get count data using the counter
+                    count_function = lambda: counter.getData()[0][0]/(binwidth/1e12)
+                    positions, counts, optimal_pos = piezo.perform_auto_focus(count_function)
+                    
+                    show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
+                    signal_bridge.create_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot')
+                    
+                finally:
+                    piezo.disconnect()
                 
         except Exception as e:
             show_info(f'❌ Auto-focus error: {str(e)}')
