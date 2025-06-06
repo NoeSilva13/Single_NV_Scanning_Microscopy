@@ -95,6 +95,16 @@ layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 
 # Add a shapes layer to display the zoom area. Initially empty.
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
+# Add a points layer to show current scanner position
+points_layer = viewer.add_points(
+    ndim=2,
+    name="scanner position",
+    face_color='yellow',
+    size=10,
+    opacity=0.8,
+    symbol='x'
+)
+
 # Configure scale bar
 viewer.scale_bar.visible = True
 viewer.scale_bar.unit = "µm"
@@ -134,6 +144,11 @@ def on_mouse_click(layer, event):
     try:
         output_task.write([x_voltage, y_voltage])
         show_info(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
+        
+        # Convert coordinates to world space for points layer
+        world_coords = layer.data_to_world([y_idx, x_idx])
+        points_layer.data = [[world_coords[0], world_coords[1]]]  # Use world coordinates
+        
     except Exception as e:
         show_info(f"Error moving scanner: {str(e)}")
 
