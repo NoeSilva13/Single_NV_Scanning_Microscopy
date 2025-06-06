@@ -810,6 +810,19 @@ class SingleAxisScanWidget(QWidget):
         self.plot_widget = SingleAxisPlot()
         layout.addWidget(self.plot_widget, 3, 0, 1, 2)
         
+        # Initialize plot with zeros
+        initial_points = self.points_spinbox.value()
+        x_data = np.linspace(-2, 2, initial_points)  # Default range of ±2V
+        y_data = np.zeros(initial_points)
+        self.plot_widget.plot_data(
+            x_data=x_data,
+            y_data=y_data,
+            x_label='Position (V)',
+            y_label='Counts',
+            title='Single Axis Scan',
+            mark_peak=False
+        )
+        
         # Set fixed height for better appearance
         self.setFixedHeight(400)
         
