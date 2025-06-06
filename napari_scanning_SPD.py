@@ -234,6 +234,14 @@ def close_scanner():
     """
     def run_close():
         output_task.write([0, 0])
+        
+        # Calculate the indices corresponding to 0V for both axes
+        x_zero_idx = np.interp(0, [x_range[0], x_range[1]], [0, x_res-1])
+        y_zero_idx = np.interp(0, [y_range[0], y_range[1]], [0, y_res-1])
+        
+        # Convert to world coordinates and update point position
+        world_coords = layer.data_to_world([y_zero_idx, x_zero_idx])
+        points_layer.data = [[world_coords[0], world_coords[1]]]
     
     threading.Thread(target=run_close, daemon=True).start()
     show_info("🎯 Scanner set to zero")
