@@ -849,6 +849,6 @@ viewer.window.add_dock_widget(save_image, area="bottom")
 viewer.window.add_dock_widget(reset_zoom, area="bottom")
 viewer.window.add_dock_widget(close_scanner, area="bottom")
 viewer.window.add_dock_widget(auto_focus, area="bottom")
-viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan Parameters")
+viewer.window.add_dock_widget(update_scan_parameters, area="left", name="Scan Parameters")
 
 napari.run() # Start the Napari event loop
