@@ -104,7 +104,7 @@ class PiezoController:
 
     def perform_auto_focus(self, 
                          counter_function: Callable[[], int],
-                         step_size: Decimal = Decimal(10),
+                         step_size: float = 10.0,
                          settling_time: float = 0.1
                          ) -> Tuple[List[float], List[int], float]:
         """Perform auto-focus by scanning the Z axis and measuring counts.
@@ -127,15 +127,16 @@ class PiezoController:
         positions = []
         counts = []
         current = Decimal(0)
+        step = Decimal(str(step_size))  # Convert float to Decimal
 
         # Generate position list
         while current <= max_pos:
-            positions.append(float(current))
-            current += step_size
+            positions.append(float(current))  # Convert to float for return value
+            current += step
 
         # Perform Z sweep
         for pos in positions:
-            self.set_position(Decimal(pos))
+            self.set_position(Decimal(str(pos)))  # Convert back to Decimal for piezo control
             time.sleep(settling_time)
             count = counter_function()
             counts.append(count)
@@ -146,7 +147,7 @@ class PiezoController:
         optimal_pos = positions[optimal_idx]
 
         # Move to optimal position
-        self.set_position(Decimal(optimal_pos))
+        self.set_position(Decimal(str(optimal_pos)))
         time.sleep(settling_time)
 
         return positions, counts, optimal_pos
