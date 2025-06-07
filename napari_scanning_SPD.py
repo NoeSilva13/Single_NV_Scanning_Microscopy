@@ -159,6 +159,22 @@ mpl_widget = live_plot(measure_function=lambda: counter.getData()[0][0]/(binwidt
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING ---------------------
+def return_scanner_to_zero():
+    """
+    Returns the galvo scanner to the (0,0) position and updates the UI accordingly.
+    """
+    # Set galvo voltages to zero
+    output_task.write([0, 0])
+    
+    # Calculate the indices corresponding to 0V for both axes
+    x_zero_idx = np.interp(0, [x_range[0], x_range[1]], [0, x_res-1])
+    y_zero_idx = np.interp(0, [y_range[0], y_range[1]], [0, y_res-1])
+    
+    # Convert to world coordinates and update point position
+    world_coords = layer.data_to_world([y_zero_idx, x_zero_idx])
+    points_layer.data = [[world_coords[0], world_coords[1]]]
+    show_info("🎯 Scanner returned to zero position")
+
 def scan_pattern(x_points, y_points):
     """
     Perform a raster scan pattern using the galvo mirrors and collect APD counts.
@@ -216,6 +232,10 @@ def scan_pattern(x_points, y_points):
     scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
     layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
     plot_scan_results(scan_data, data_path)
+    
+    # Return scanner to zero position after scan
+    return_scanner_to_zero()
+    
     return x_points, y_points # Returns for history
 
 @magicgui(call_button="🔬 New Scan")
@@ -238,15 +258,7 @@ def close_scanner():
     Runs in a separate thread.
     """
     def run_close():
-        output_task.write([0, 0])
-        
-        # Calculate the indices corresponding to 0V for both axes
-        x_zero_idx = np.interp(0, [x_range[0], x_range[1]], [0, x_res-1])
-        y_zero_idx = np.interp(0, [y_range[0], y_range[1]], [0, y_res-1])
-        
-        # Convert to world coordinates and update point position
-        world_coords = layer.data_to_world([y_zero_idx, x_zero_idx])
-        points_layer.data = [[world_coords[0], world_coords[1]]]
+        return_scanner_to_zero()
     
     threading.Thread(target=run_close, daemon=True).start()
     show_info("🎯 Scanner set to zero")

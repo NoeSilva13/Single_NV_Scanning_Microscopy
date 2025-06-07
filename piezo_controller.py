@@ -7,9 +7,9 @@ auto-focus functionality for the confocal microscope.
 
 import time
 import numpy as np
-from decimal import Decimal
 import clr
 from typing import Tuple, List, Optional, Callable
+from System import Decimal  # Use .NET's Decimal type
 
 # Add Thorlabs.Kinesis references
 clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.DeviceManagerCLI.dll")
@@ -75,28 +75,32 @@ class PiezoController:
             except Exception as e:
                 print(f"Error disconnecting from piezo: {str(e)}")
 
-    def get_max_travel(self) -> Decimal:
+    def get_max_travel(self) -> float:
         """Get the maximum travel range of the piezo.
         
         Returns:
-            Decimal: Maximum travel range
+            float: Maximum travel range in micrometers
         """
         if self._is_connected and self.channel:
-            return self.channel.GetMaxTravel()
-        return Decimal(0)
+            # Convert .NET Decimal to float using string conversion
+            max_travel = self.channel.GetMaxTravel()
+            return float(str(max_travel))
+        return 0.0
 
-    def set_position(self, position: Decimal) -> bool:
+    def set_position(self, position: float) -> bool:
         """Set the piezo position.
         
         Args:
-            position (Decimal): Target position
+            position (float): Target position in micrometers
             
         Returns:
             bool: True if successful, False otherwise
         """
         if self._is_connected and self.channel:
             try:
-                self.channel.SetPosition(position)
+                # Convert float to .NET Decimal using string conversion
+                decimal_pos = Decimal.Parse(str(position))
+                self.channel.SetPosition(decimal_pos)
                 return True
             except Exception as e:
                 print(f"Error setting position: {str(e)}")
@@ -123,20 +127,19 @@ class PiezoController:
         if not self._is_connected:
             raise RuntimeError("Piezo not connected")
 
-        max_pos = self.get_max_travel()
+        max_pos = self.get_max_travel()  # Returns float
         positions = []
         counts = []
-        current = Decimal(0)
-        step = Decimal(str(step_size))  # Convert float to Decimal
+        current_pos = 0.0
 
         # Generate position list
-        while current <= max_pos:
-            positions.append(float(current))  # Convert to float for return value
-            current += step
+        while current_pos <= max_pos:
+            positions.append(current_pos)
+            current_pos += step_size
 
         # Perform Z sweep
         for pos in positions:
-            self.set_position(Decimal(str(pos)))  # Convert back to Decimal for piezo control
+            self.set_position(pos)  # set_position handles conversion to System.Decimal
             time.sleep(settling_time)
             count = counter_function()
             counts.append(count)
@@ -147,7 +150,7 @@ class PiezoController:
         optimal_pos = positions[optimal_idx]
 
         # Move to optimal position
-        self.set_position(Decimal(str(optimal_pos)))
+        self.set_position(optimal_pos)
         time.sleep(settling_time)
 
         return positions, counts, optimal_pos
