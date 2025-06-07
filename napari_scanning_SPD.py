@@ -216,6 +216,17 @@ def scan_pattern(x_points, y_points):
     scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
     layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
     plot_scan_results(scan_data, data_path)
+    
+    # Set galvo to 0,0 after scan
+    output_task.write([0, 0])
+    # Calculate the indices corresponding to 0V for both axes
+    x_zero_idx = np.interp(0, [x_range[0], x_range[1]], [0, x_res-1])
+    y_zero_idx = np.interp(0, [y_range[0], y_range[1]], [0, y_res-1])
+    # Convert to world coordinates and update point position
+    world_coords = layer.data_to_world([y_zero_idx, x_zero_idx])
+    points_layer.data = [[world_coords[0], world_coords[1]]]
+    show_info("🎯 Scanner returned to zero position after scan")
+    
     return x_points, y_points # Returns for history
 
 @magicgui(call_button="🔬 New Scan")
