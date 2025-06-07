@@ -61,7 +61,7 @@ class LivePlotNapariWidget(QWidget):
         self.timer.start(dt)  # Update every dt milliseconds
         
         # Setup the plot
-        self.line, = self.ax.plot([], [], 'o-', color=self.plot_color)  # Line with markers
+        self.line, = self.ax.plot([], [], color=self.plot_color)  # Line with markers
         self.ax.set_xlabel('Time (s)', color='white')
         self.ax.set_ylabel('Signal', color='white')
         self.ax.grid(True, color='gray', alpha=0.3)
