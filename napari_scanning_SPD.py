@@ -9,6 +9,11 @@ This software controls a confocal microscope setup for single NV center imaging 
 The system provides real-time visualization and control through a Napari-based GUI.
 """
 
+import sys
+import os
+from Camera import POACameraController
+import cv2
+
 import numpy as np 
 import napari
 import time
@@ -23,22 +28,13 @@ from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
 from TimeTagger import createTimeTagger, Countrate, Counter, createTimeTaggerVirtual  # Swabian TimeTagger API
 from plot_scan_results import plot_scan_results
-import clr
-import sys
-from System import Decimal
-from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame, QGridLayout, QDesktopWidget
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from PyQt5.QtCore import QObject, pyqtSignal, QThread
-
-# Add Thorlabs.Kinesis references
-clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.DeviceManagerCLI.dll")
-clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.GenericPiezoCLI.dll")
-clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\ThorLabs.MotionControl.Benchtop.PrecisionPiezoCLI.dll")
-from Thorlabs.MotionControl.DeviceManagerCLI import *
-from Thorlabs.MotionControl.GenericPiezoCLI import *
-from Thorlabs.MotionControl.GenericPiezoCLI import Piezo
-from Thorlabs.MotionControl.Benchtop.PrecisionPiezoCLI import *
+from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimerEvent, Qt
+from PyQt5.QtGui import QPalette, QColor
+from PyQt5.QtCore import pyqtSlot
+from piezo_controller import PiezoController, simulate_auto_focus
 
 # --------------------- INITIAL CONFIGURATION ---------------------
 # Load scanning parameters from config file
@@ -87,10 +83,13 @@ def calculate_scale(V1, V2, image_width_px, L=6.86, volts_per_degree=1.33):
 
 # --------------------- NAPARI VIEWER SETUP ---------------------
 viewer = napari.Viewer(title="NV Scanning Microscopy") # Initialize Napari viewer
-# Set window size (width, height)
-viewer.window.resize(1200, 800)
+# Set window size to maximum screen size
+screen = QDesktopWidget().screenGeometry()
+viewer.window.resize(screen.width(), screen.height())
 # Add an image layer to display the live scan. Data is initialized as an empty array 'image'.
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
+# Add a points layer to show current scanner position
+points_layer = viewer.add_points(ndim=2, name="scanner position", face_color='red', size=5, opacity=1, symbol='o')
 # Add a shapes layer to display the zoom area. Initially empty.
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
@@ -105,11 +104,17 @@ scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
 layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 
 # --------------------- TIMETAGGER SETUP ---------------------
-tagger = createTimeTagger() 
-tagger.reset()
-#Virtual TimeTagger for testing purposes uncomment the following two lines
-#tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
-#tagger.run()
+try:
+    # Try to create real TimeTagger
+    tagger = createTimeTagger()
+    tagger.reset()
+    show_info("✅ Connected to real TimeTagger device")
+except Exception as e:
+    # Fall back to virtual TimeTagger if real device is not available
+    show_info("⚠️ Real TimeTagger not detected, using virtual device")
+    tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+    tagger.run()
+
 # Set bin width to 5 ns
 binwidth = int(5e9)
 n_values = 1
@@ -133,6 +138,11 @@ def on_mouse_click(layer, event):
     try:
         output_task.write([x_voltage, y_voltage])
         show_info(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
+        
+        # Convert coordinates to world space for points layer
+        world_coords = layer.data_to_world([y_idx, x_idx])
+        points_layer.data = [[world_coords[0], world_coords[1]]]  # Use world coordinates
+        
     except Exception as e:
         show_info(f"Error moving scanner: {str(e)}")
 
@@ -149,6 +159,22 @@ mpl_widget = live_plot(measure_function=lambda: counter.getData()[0][0]/(binwidt
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING ---------------------
+def return_scanner_to_zero():
+    """
+    Returns the galvo scanner to the (0,0) position and updates the UI accordingly.
+    """
+    # Set galvo voltages to zero
+    output_task.write([0, 0])
+    
+    # Calculate the indices corresponding to 0V for both axes
+    x_zero_idx = np.interp(0, [x_range[0], x_range[1]], [0, x_res-1])
+    y_zero_idx = np.interp(0, [y_range[0], y_range[1]], [0, y_res-1])
+    
+    # Convert to world coordinates and update point position
+    world_coords = layer.data_to_world([y_zero_idx, x_zero_idx])
+    points_layer.data = [[world_coords[0], world_coords[1]]]
+    show_info("🎯 Scanner returned to zero position")
+
 def scan_pattern(x_points, y_points):
     """
     Perform a raster scan pattern using the galvo mirrors and collect APD counts.
@@ -190,11 +216,26 @@ def scan_pattern(x_points, y_points):
     }
     data_path = data_manager.save_scan_data(scan_data)
     # Adjust contrast and save data
-    layer.contrast_limits = (np.min(image), np.max(image))
+    try:
+        if image.size == 0 or np.all(np.isnan(image)):
+            show_info('⚠️ Image is empty or contains only NaNs. Contrast not updated.')
+        else:
+            min_val = np.nanmin(image)
+            max_val = np.nanmax(image)
+            if np.isclose(min_val, max_val):
+                show_info('⚠️ Image min and max are equal. Contrast not updated.')
+            else:
+                layer.contrast_limits = (min_val, max_val)
+    except Exception as e:
+        show_info(f'❌ Error setting contrast limits: {str(e)}')
     scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
     scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
     layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
     plot_scan_results(scan_data, data_path)
+    
+    # Return scanner to zero position after scan
+    return_scanner_to_zero()
+    
     return x_points, y_points # Returns for history
 
 @magicgui(call_button="🔬 New Scan")
@@ -217,7 +258,7 @@ def close_scanner():
     Runs in a separate thread.
     """
     def run_close():
-        output_task.write([0, 0])
+        return_scanner_to_zero()
     
     threading.Thread(target=run_close, daemon=True).start()
     show_info("🎯 Scanner set to zero")
@@ -233,144 +274,72 @@ def save_image():
 # --------------------- AUTO FOCUS FUNCTION ---------------------
 class SignalBridge(QObject):
     """Bridge to safely create and add widgets from background threads"""
-    create_focus_plot_signal = pyqtSignal(list, list, str)
+    update_focus_plot_signal = pyqtSignal(list, list, str)
     
     def __init__(self):
         super().__init__()
-        self.create_focus_plot_signal.connect(self._create_and_add_focus_plot)
-        self.current_focus_widget = None
+        self.update_focus_plot_signal.connect(self._update_focus_plot)
+        self.focus_plot_widget = None
+        self.focus_dock_widget = None
     
-    def _create_and_add_focus_plot(self, positions, counts, name):
-        """Create and add the focus plot widget from the main thread"""
-        # Remove previous focus plot widget if it exists
-        if self.current_focus_widget is not None:
-            viewer.window.remove_dock_widget(self.current_focus_widget)
-        
-        # Create new focus plot widget
-        focus_plot_widget = create_focus_plot_widget(positions, counts)
-        
-        # Add the widget to the viewer
-        self.current_focus_widget = viewer.window.add_dock_widget(
-            focus_plot_widget, 
-            area='right', 
-            name=name
-        )
+    def _update_focus_plot(self, positions, counts, name):
+        """Update the focus plot widget from the main thread"""
+        # Create plot widget if it doesn't exist
+        if self.focus_plot_widget is None:
+            self.focus_plot_widget = create_focus_plot_widget(positions, counts)
+            self.focus_dock_widget = viewer.window.add_dock_widget(
+                self.focus_plot_widget, 
+                area='right', 
+                name=name
+            )
+        else:
+            # Update existing plot
+            self.focus_plot_widget.plot_data(
+                x_data=positions,
+                y_data=counts,
+                x_label='Z Position (µm)',
+                y_label='Counts',
+                title='Auto-Focus Results',
+                peak_annotation=f'Optimal: {positions[np.argmax(counts)]:.2f} µm' if len(counts) > 0 else None
+            )
 
 # Create a global signal bridge
 signal_bridge = SignalBridge()
 
-@magicgui(call_button="🔍 Auto Focus", test_mode={"widget_type": "CheckBox", "text": "Test Mode"})
-def auto_focus(test_mode=False):
+@magicgui(call_button="🔍 Auto Focus")
+def auto_focus():
     """Automatically find the optimal Z position by scanning for maximum signal"""
     def run_auto_focus():
         try:
-            if test_mode:
-                # Mock implementation for testing
-                show_info('🔍 Starting Z scan in TEST MODE...')
-                
-                # Create simulated data
-                max_pos = 100.0
-                step_size = 5.0
-                positions = np.arange(0, max_pos + step_size, step_size)
-                
-                # Simulate a Gaussian distribution of counts centered at a random position
-                center = np.random.uniform(30, 70)  # Random center between 30-70
-                width = 15.0  # Width of the Gaussian
-                noise_level = 200  # Base noise level
-                peak_height = 1000  # Peak signal above noise
-                
-                # Generate simulated counts with noise
-                counts = noise_level + peak_height * np.exp(-((positions - center) ** 2) / (2 * width ** 2))
-                counts = counts + np.random.normal(0, noise_level * 0.1, len(positions))  # Add random noise
-                counts = counts.astype(int)  # Convert to integers like real counts
-                
-                # Simulate the scanning process
-                for i, pos in enumerate(positions):
-                    time.sleep(0.05)  # Simulate shorter delay for testing
-                    print(f'Position: {pos}, counts: {counts[i]}')
-                
-                # Find position with maximum counts
-                optimal_pos = positions[np.argmax(counts)]
-                
-                show_info(f'✅ Focus optimized at Z = {optimal_pos} µm (TEST MODE)')
-                
-                # Use signal to create and add widget from main thread
-                signal_bridge.create_focus_plot_signal.emit(positions.tolist(), counts.tolist(), 'Auto-Focus Plot (TEST)')
-                
-            else:
-                # Real implementation with actual hardware
-                # Initialize piezo controller
-                DeviceManagerCLI.BuildDeviceList()
-                serial_no = "44506104"  # Your piezo serial number
-                
-                # Connect to device
-                device = BenchtopPrecisionPiezo.CreateBenchtopPiezo(serial_no)
-                device.Connect(serial_no)
-                channel = device.GetChannel(1)
-                
-                # Initialize device
-                if not channel.IsSettingsInitialized():
-                    channel.WaitForSettingsInitialized(10000)
-                    assert channel.IsSettingsInitialized() is True
-                
-                channel.StartPolling(250)
-                time.sleep(0.25)
-                channel.EnableDevice()
-                time.sleep(0.25)
-                
-                # Set to closed loop mode
-                channel.SetPositionControlMode(Piezo.PiezoControlModeTypes.CloseLoop)
-                time.sleep(0.25)
-                
-                # Get max travel range
-                max_pos = channel.GetMaxTravel()
-                print(f"{max_pos}")
-                # Parameters for Z sweep
-                step_size = Decimal(10)  # 0.1 µm steps
-                positions = []
-                counts = []
-                current = Decimal(0)
-                
-                while current <= max_pos:
-                    positions.append(current)
-                    current += step_size
-                
-                show_info('🔍 Starting Z scan...')
-                # Perform Z sweep
-                for pos in positions:
-                    channel.SetPosition(pos)
-                    time.sleep(0.1)  # Wait for movement and settling
-                    counts.append(counter.getData())
-                    print(f'Position: {pos}, counts: {counts[-1].item()}')
-                
-                # Find position with maximum counts
-                optimal_pos = positions[np.argmax(counts)]
-
-                # Move to optimal position
-                channel.SetPosition(optimal_pos)
-                time.sleep(0.1)
+            show_info('🔍 Starting Z scan...')
+            piezo = PiezoController()
+            
+            if not piezo.connect():
+                show_info('❌ Failed to connect to piezo stage')
+                return
+            
+            try:
+                # Get count data using the counter
+                count_function = lambda: counter.getData()[0][0]/(binwidth/1e12)
+                positions, counts, optimal_pos = piezo.perform_auto_focus(count_function)
                 
                 show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
+                signal_bridge.update_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot')
                 
-                # Convert Decimal to float for plotting
-                positions_float = [float(str(pos)) for pos in positions]
-                counts_flat = [int(c.item()) for c in counts]
-                # Use signal to create and add widget from main thread
-                signal_bridge.create_focus_plot_signal.emit(positions_float, counts_flat, 'Auto-Focus Plot')
-                
-                # Clean up
-                channel.StopPolling()
-                channel.Disconnect()
-                
+            finally:
+                piezo.disconnect()
+            
         except Exception as e:
             show_info(f'❌ Auto-focus error: {str(e)}')
     
     threading.Thread(target=run_auto_focus, daemon=True).start()
 
 # --------------------- AUTO-FOCUS PLOT WIDGET ---------------------
+from plot_widgets.single_axis_plot import SingleAxisPlot
+
 def create_focus_plot_widget(positions, counts):
     """
-    Creates a static plot widget to display auto-focus results
+    Creates a plot widget to display auto-focus results using SingleAxisPlot
     
     Parameters
     ----------
@@ -381,55 +350,19 @@ def create_focus_plot_widget(positions, counts):
     
     Returns
     -------
-    QWidget
-        A Qt widget containing the matplotlib plot
+    SingleAxisPlot
+        A widget containing the focus plot
     """
-    # Create a widget to hold the plot
-    widget = QWidget()
-    layout = QVBoxLayout()
-    widget.setFixedHeight(250)
-    widget.setLayout(layout)
-    
-    # Create the figure and canvas
-    fig = Figure(figsize=(4, 2), facecolor='#262930')
-    canvas = FigureCanvas(fig)
-    ax = fig.add_subplot(111)
-    
-    # Style the plot to match napari's dark theme
-    ax.set_facecolor('#262930')
-    ax.tick_params(colors='white')
-    for spine in ax.spines.values():
-        spine.set_color('white')
-    
-    # Plot the data
-    ax.plot(positions, counts, 'o-', color='#00ff00')
-    
-    # Mark the optimal position
-    optimal_idx = np.argmax(counts)
-    optimal_pos = positions[optimal_idx]
-    optimal_counts = counts[optimal_idx]
-    ax.plot(optimal_pos, optimal_counts, 'ro', markersize=8)
-    ax.annotate(f'Optimal: {optimal_pos} µm', 
-                xy=(optimal_pos, optimal_counts),
-                xytext=(10, -20),
-                textcoords='offset points',
-                color='white',
-                arrowprops=dict(arrowstyle='->', color='white'))
-    
-    # Set labels and grid
-    ax.set_xlabel('Z Position (µm)', color='white')
-    ax.set_ylabel('Counts', color='white')
-    ax.set_title('Auto-Focus Results', color='white')
-    ax.grid(True, color='gray', alpha=0.3)
-    
-    # Add the canvas to the layout
-    layout.addWidget(canvas)
-    
-    # Draw the canvas
-    fig.tight_layout()
-    canvas.draw()
-    
-    return widget
+    plot_widget = SingleAxisPlot()
+    plot_widget.plot_data(
+        x_data=positions,
+        y_data=counts,
+        x_label='Z Position (µm)',
+        y_label='Counts',
+        title='Auto-Focus Results',
+        peak_annotation=f'Optimal: {positions[np.argmax(counts)]:.2f} µm' if len(counts) > 0 else None
+    )
+    return plot_widget
 
 # --------------------- SCAN PARAMETERS WIDGET ---------------------
 def update_scan_parameters_widget():
@@ -580,12 +513,395 @@ def reset_zoom():
         
     threading.Thread(target=run_reset, daemon=True).start()
 
+# --------------------- CAMERA CONTROL WIDGET ---------------------
+
+class CameraUpdateThread(QThread):
+    """Thread for updating camera feed"""
+    frame_ready = pyqtSignal(np.ndarray)  # Signal to emit when new frame is ready
+    
+    def __init__(self, camera):
+        super().__init__()
+        self.camera = camera
+        self.running = True
+    
+    def run(self):
+        while self.running:
+            frame = self.camera.get_frame()
+            if frame is not None:
+                self.frame_ready.emit(frame)
+            self.msleep(33)  # ~30 fps
+    
+    def stop(self):
+        self.running = False
+        self.wait()
+
+@magicgui(call_button="🎥 Camera Live")
+def camera_live():
+    """Start/stop live camera feed in Napari viewer."""
+    global camera_layer
+    
+    # Initialize camera controller if not already done
+    if not hasattr(camera_live, 'camera'):
+        camera_live.camera = POACameraController()
+        camera_live.is_running = False
+        camera_live.update_thread = None
+    
+    def update_layer(frame):
+        """Update the Napari layer with new frame"""
+        # Reshape frame to 2D if it's 3D with single channel
+        if frame.ndim == 3 and frame.shape[2] == 1:
+            frame = frame.squeeze()  # Remove single-dimensional entries
+        camera_layer.data = frame
+        # Add text overlay with settings
+        exp_ms = camera_live.camera.get_exposure() / 1000
+        gain = camera_live.camera.get_gain()
+        camera_layer.name = f"Live (Exp: {exp_ms:.0f}ms, Gain: {gain})"
+    
+    if not camera_live.is_running:
+        # Start camera feed
+        if not hasattr(camera_live, 'camera_layer') or camera_live.camera_layer not in viewer.layers:
+            # Connect to camera
+            if not camera_live.camera.connect(camera_index=0, width=1024, height=1024):  # Set desired resolution
+                show_info("❌ Failed to connect to camera")
+                return
+            
+            # Get actual image dimensions from camera
+            width, height = camera_live.camera.get_image_dimensions()
+            print(f"Camera dimensions: {width}x{height}")
+            
+            camera_live.camera.set_exposure(50000)  # 50ms initial exposure
+            camera_live.camera.set_gain(300)        # Initial gain
+            
+            # Start the stream
+            if not camera_live.camera.start_stream():
+                show_info("❌ Failed to start camera stream")
+                camera_live.camera.disconnect()
+                return
+            
+            # Create initial frame with correct dimensions
+            initial_frame = np.zeros((height, width), dtype=np.uint8)
+            camera_layer = viewer.add_image(
+                initial_frame,
+                name="Live",
+                colormap="gray",
+                blending="additive",
+                visible=True
+            )
+            camera_live.camera_layer = camera_layer
+        else:
+            # Reuse existing layer but reconnect camera
+            if not camera_live.camera.connect(camera_index=0, width=1024, height=1024):
+                show_info("❌ Failed to connect to camera")
+                return
+            
+            if not camera_live.camera.start_stream():
+                show_info("❌ Failed to start camera stream")
+                camera_live.camera.disconnect()
+                return
+            
+            # Get actual image dimensions from camera
+            width, height = camera_live.camera.get_image_dimensions()
+            print(f"Camera dimensions: {width}x{height}")
+            
+            camera_live.camera.set_exposure(50000)  # 50ms initial exposure
+            camera_live.camera.set_gain(300)        # Initial gain
+        
+        # Start update thread
+        camera_live.is_running = True
+        camera_live.update_thread = CameraUpdateThread(camera_live.camera)
+        camera_live.update_thread.frame_ready.connect(update_layer)
+        camera_live.update_thread.start()
+        show_info("🎥 Camera live view started")
+        camera_live.call_button.text = "🛑 Stop Camera"
+    else:
+        # Stop camera feed
+        camera_live.is_running = False
+        if camera_live.update_thread:
+            camera_live.update_thread.stop()
+            camera_live.update_thread = None
+        camera_live.camera.stop_stream()
+        camera_live.camera.disconnect()
+        
+        # Keep the layer but clear its data
+        if hasattr(camera_live, 'camera_layer') and camera_live.camera_layer in viewer.layers:
+            width, height = camera_live.camera_layer.data.shape
+            camera_live.camera_layer.data = np.zeros((height, width), dtype=np.uint8)
+        
+        show_info("🛑 Camera live view stopped")
+        camera_live.call_button.text = "🎥Camera Live"
+
+@magicgui(call_button="📸 Single Shot")
+def capture_shot():
+    """Take a single image from the camera and display it in a new layer."""
+    # Initialize camera if needed
+    if not hasattr(capture_shot, 'camera'):
+        capture_shot.camera = POACameraController()
+    
+    try:
+        # Connect to camera if not already connected
+        if not capture_shot.camera.is_connected:
+            if not capture_shot.camera.connect(camera_index=0, width=1024, height=1024):
+                show_info("❌ Failed to connect to camera")
+                return
+            
+            capture_shot.camera.set_exposure(50000)  # 50ms initial exposure
+            capture_shot.camera.set_gain(300)        # Initial gain
+        
+        # Start stream temporarily
+        if not capture_shot.camera.start_stream():
+            show_info("❌ Failed to start camera stream")
+            capture_shot.camera.disconnect()
+            return
+        
+        # Wait a bit for the camera to settle
+        time.sleep(0.1)
+        
+        # Try to get a frame for up to 1 second
+        start_time = time.time()
+        frame = None
+        while time.time() - start_time < 1.0:
+            frame = capture_shot.camera.get_frame()
+            if frame is not None:
+                break
+            time.sleep(0.05)
+        
+        # Stop stream
+        capture_shot.camera.stop_stream()
+        
+        if frame is not None:
+            # Reshape frame if needed
+            if frame.ndim == 3 and frame.shape[2] == 1:
+                frame = frame.squeeze()
+            
+            # Generate unique name for the layer
+            timestamp = time.strftime("%H-%M-%S")
+            layer_name = f"Camera Shot {timestamp}"
+            
+            # Add as new layer
+            viewer.add_image(
+                frame,
+                name=layer_name,
+                colormap="gray",
+                blending="additive",
+                visible=True
+            )
+            show_info(f"✨ Captured image saved as '{layer_name}'")
+        else:
+            show_info("❌ Failed to capture image")
+            
+    except Exception as e:
+        show_info(f"❌ Error capturing image: {str(e)}")
+    finally:
+        # Cleanup if we connected in this function
+        if not hasattr(camera_live, 'camera') or not camera_live.camera.is_connected:
+            capture_shot.camera.disconnect()
+
+# Create camera control widget with exposure and gain sliders
+class CameraControlWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QGridLayout()
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
+        
+        # First row: Camera buttons (2 columns)
+        layout.addWidget(camera_live.native, 0, 0)
+        layout.addWidget(capture_shot.native, 0, 1)
+        
+        # Second row: Sliders
+        # Exposure control (first column)
+        exposure_widget = QWidget()
+        exposure_layout = QVBoxLayout()
+        exposure_layout.setSpacing(0)
+        exposure_layout.setContentsMargins(0, 0, 0, 0)
+        
+        exp_label = QLabel("Exposure (ms):")
+        exp_label.setAlignment(Qt.AlignCenter)
+        exposure_layout.addWidget(exp_label)
+        
+        self.exposure_slider = QSlider(Qt.Horizontal)
+        self.exposure_slider.setMinimum(1)
+        self.exposure_slider.setMaximum(1000)
+        self.exposure_slider.setValue(50)
+        self.exposure_slider.valueChanged.connect(self.update_exposure)
+        exposure_layout.addWidget(self.exposure_slider)
+        
+        exposure_widget.setLayout(exposure_layout)
+        layout.addWidget(exposure_widget, 1, 0)
+        
+        # Gain control (second column)
+        gain_widget = QWidget()
+        gain_layout = QVBoxLayout()
+        gain_layout.setSpacing(0)
+        gain_layout.setContentsMargins(0, 0, 0, 0)
+        
+        gain_label = QLabel("Gain:")
+        gain_label.setAlignment(Qt.AlignCenter)
+        gain_layout.addWidget(gain_label)
+        
+        self.gain_slider = QSlider(Qt.Horizontal)
+        self.gain_slider.setMinimum(0)
+        self.gain_slider.setMaximum(1000)
+        self.gain_slider.setValue(300)
+        self.gain_slider.valueChanged.connect(self.update_gain)
+        gain_layout.addWidget(self.gain_slider)
+        
+        gain_widget.setLayout(gain_layout)
+        layout.addWidget(gain_widget, 1, 1)
+        
+        # Set fixed height for better appearance
+        self.setFixedHeight(120)
+    
+    @pyqtSlot(int)
+    def update_exposure(self, value):
+        if hasattr(camera_live, 'camera'):
+            camera_live.camera.set_exposure(value * 1000)  # Convert ms to µs
+        if hasattr(capture_shot, 'camera'):
+            capture_shot.camera.set_exposure(value * 1000)  # Convert ms to µs
+    
+    @pyqtSlot(int)
+    def update_gain(self, value):
+        if hasattr(camera_live, 'camera'):
+            camera_live.camera.set_gain(value)
+        if hasattr(capture_shot, 'camera'):
+            capture_shot.camera.set_gain(value)
+
+# Add camera control widget to viewer
+camera_control = CameraControlWidget()
+viewer.window.add_dock_widget(camera_control, name="Camera Control", area="right")
+
 # Add buttons to the interface
+# Set fixed sizes for widget buttons
+new_scan.native.setFixedSize(150, 50)
+save_image.native.setFixedSize(150, 50)
+reset_zoom.native.setFixedSize(150, 50)
+close_scanner.native.setFixedSize(150, 50)
+auto_focus.native.setFixedSize(150, 50)
+
 viewer.window.add_dock_widget(new_scan, area="bottom")
 viewer.window.add_dock_widget(save_image, area="bottom")
 viewer.window.add_dock_widget(reset_zoom, area="bottom")
 viewer.window.add_dock_widget(close_scanner, area="bottom")
 viewer.window.add_dock_widget(auto_focus, area="bottom")
-viewer.window.add_dock_widget(update_scan_parameters, area="right", name="Scan Parameters")
+viewer.window.add_dock_widget(update_scan_parameters, area="left", name="Scan Parameters")
+
+# Initialize empty auto-focus plot
+empty_positions = [0, 1]  # Minimal data to create empty plot
+empty_counts = [0, 0]
+signal_bridge.update_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto-Focus Plot')
+
+# Calculate the indices corresponding to 0V for both axes
+x_zero_idx = np.interp(0, [x_range[0], x_range[1]], [0, x_res-1])
+y_zero_idx = np.interp(0, [y_range[0], y_range[1]], [0, y_res-1])
+        
+# Convert to world coordinates and update point position
+world_coords = layer.data_to_world([y_zero_idx, x_zero_idx])
+points_layer.data = [[world_coords[0], world_coords[1]]]
+
+# --------------------- SINGLE AXIS SCAN WIDGET ---------------------
+class SingleAxisScanWidget(QWidget):
+    """Widget for performing single axis scans at current cursor position"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        layout = QGridLayout()
+        layout.setSpacing(5)
+        self.setLayout(layout)
+        
+        # Create buttons for X and Y scans
+        self.x_scan_btn = QPushButton("⬌ X-Axis Scan")
+        self.y_scan_btn = QPushButton("⬍ Y-Axis Scan")
+        
+        # Add widgets to layout
+        layout.addWidget(self.x_scan_btn, 0, 0)
+        layout.addWidget(self.y_scan_btn, 0, 1)
+        
+        # Connect buttons
+        self.x_scan_btn.clicked.connect(lambda: self.start_scan('x'))
+        self.y_scan_btn.clicked.connect(lambda: self.start_scan('y'))
+        
+        # Create plot widget
+        self.plot_widget = SingleAxisPlot()
+        layout.addWidget(self.plot_widget, 1, 0, 1, 2)
+        
+        # Initialize plot with zeros
+        x_data = np.linspace(x_range[0], x_range[1], x_res)
+        y_data = np.zeros(x_res)
+        self.plot_widget.plot_data(
+            x_data=x_data,
+            y_data=y_data,
+            x_label='Position (V)',
+            y_label='Counts',
+            title='Single Axis Scan',
+            mark_peak=False
+        )
+        
+        # Set fixed height for better appearance
+        self.setFixedHeight(300)
+        
+    def get_current_position(self):
+        """Get the current scanner position from the points layer"""
+        if len(points_layer.data) == 0:
+            return None, None
+        
+        world_coords = points_layer.data[0]
+        data_coords = layer.world_to_data(world_coords)
+        y_idx, x_idx = data_coords
+        
+        # Convert from pixel indices to voltage values
+        x_voltage = np.interp(x_idx, [0, x_res-1], [x_range[0], x_range[1]])
+        y_voltage = np.interp(y_idx, [0, y_res-1], [y_range[0], y_range[1]])
+        
+        return x_voltage, y_voltage
+    
+    def start_scan(self, axis):
+        """Start a single axis scan"""
+        x_pos, y_pos = self.get_current_position()
+        if x_pos is None or y_pos is None:
+            show_info("❌ No current position set")
+            return
+        
+        # Use resolution and range from config
+        if axis == 'x':
+            scan_points = np.linspace(x_range[0], x_range[1], x_res)
+            fixed_pos = y_pos
+            axis_label = 'X Position (V)'
+        else:  # y-axis
+            scan_points = np.linspace(y_range[0], y_range[1], y_res)
+            fixed_pos = x_pos
+            axis_label = 'Y Position (V)'
+        
+        # Perform scan in a separate thread
+        def run_scan():
+            counts = []
+            for point in scan_points:
+                if axis == 'x':
+                    output_task.write([point, fixed_pos])
+                else:
+                    output_task.write([fixed_pos, point])
+                    
+                time.sleep(0.001)  # Small delay for settling
+                count = counter.getData()[0][0]/(binwidth/1e12)
+                counts.append(count)
+            
+            # Plot results
+            self.plot_widget.plot_data(
+                x_data=scan_points,
+                y_data=counts,
+                x_label=axis_label,
+                y_label='Counts',
+                title=f'Single Axis Scan ({axis.upper()})',
+                mark_peak=True
+            )
+            
+            # Return to original position
+            output_task.write([x_pos, y_pos])
+        
+        threading.Thread(target=run_scan, daemon=True).start()
+        show_info(f"🔍 Starting {axis.upper()}-axis scan...")
+
+# Add single axis scan widget to viewer
+single_axis_scan = SingleAxisScanWidget()
+viewer.window.add_dock_widget(single_axis_scan, name="Single Axis Scan", area="right")
 
 napari.run() # Start the Napari event loop

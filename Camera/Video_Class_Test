@@ -1,0 +1,39 @@
+from camera_video_mode import POACameraController
+import cv2
+
+# Create and configure camera
+camera = POACameraController()
+camera.connect(camera_index=0)  # Connect to first available camera
+print(f"Connected to camera: {camera.camera_props.cameraModelName}")
+print(f"Image size: {camera.img_width}x{camera.img_height}")
+camera.set_exposure(50000)  # 50ms exposure
+camera.set_gain(300)       # Set gain
+
+# Start the stream
+if not camera.start_stream():
+    print("Failed to start stream. Exiting...")
+    camera.disconnect()
+
+
+try:
+    while True:
+        frame = camera.get_frame()
+        if frame is not None:
+            # Add text overlay with settings
+            cv2.putText(frame, f"Exp: {camera.get_exposure()/1000:.0f}ms  Gain: {camera.get_gain()}", 
+                      (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                
+            # Display the frame
+            cv2.imshow('Camera - Press q to quit', frame)
+            
+            # Handle key presses
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):  # Quit
+                break
+except KeyboardInterrupt:
+    print("\nStopping camera...")
+finally:
+    # Cleanup
+    camera.disconnect()
+    cv2.destroyAllWindows()
+    print("\nCamera released.")
