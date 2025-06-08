@@ -28,13 +28,14 @@ from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
 from TimeTagger import createTimeTagger, Countrate, Counter, createTimeTaggerVirtual  # Swabian TimeTagger API
 from plot_scan_results import plot_scan_results
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame, QGridLayout, QDesktopWidget
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame, QGridLayout, QDesktopWidget, QFileDialog
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimerEvent, Qt
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import pyqtSlot
 from piezo_controller import PiezoController, simulate_auto_focus
+import tifffile
 
 # --------------------- INITIAL CONFIGURATION ---------------------
 # Load scanning parameters from config file
@@ -903,5 +904,52 @@ class SingleAxisScanWidget(QWidget):
 # Add single axis scan widget to viewer
 single_axis_scan = SingleAxisScanWidget()
 viewer.window.add_dock_widget(single_axis_scan, name="Single Axis Scan", area="right")
+
+# --------------------- LOAD SAVED SCAN ---------------------
+@magicgui(call_button="📂 Load Scan")
+def load_scan():
+    """Load a previously saved TIFF scan"""
+    # Open file dialog to select .tiff file
+    file_dialog = QFileDialog()
+    file_dialog.setFileMode(QFileDialog.ExistingFile)
+    file_dialog.setNameFilter("TIFF Files (*.tiff *.tif)")
+    
+    if file_dialog.exec_():
+        filenames = file_dialog.selectedFiles()
+        if filenames:
+            try:
+                # Load the TIFF file using tifffile
+                filename = filenames[0]
+                data = tifffile.imread(filename)
+                
+                # Generate unique name for the layer based on the file name
+                base_name = os.path.splitext(os.path.basename(filename))[0]
+                timestamp = time.strftime("%H-%M-%S")
+                layer_name = f"{base_name} ({timestamp})"
+                
+                # Add as new layer
+                new_layer = viewer.add_image(
+                    data,  # Pass the actual image data
+                    name=layer_name,
+                    colormap="viridis",
+                    blending="additive",
+                    visible=True,
+                    scale=(1, 1)
+                )
+                
+                # Set contrast limits based on data
+                if not np.all(np.isnan(data)):
+                    min_val = np.nanmin(data)
+                    max_val = np.nanmax(data)
+                    if not np.isclose(min_val, max_val):
+                        new_layer.contrast_limits = (min_val, max_val)
+                
+                show_info(f"✨ Loaded scan as '{layer_name}'")
+            except Exception as e:
+                show_info(f"❌ Error loading scan: {str(e)}")
+
+# Add load scan button
+load_scan.native.setFixedSize(150, 50)
+viewer.window.add_dock_widget(load_scan, area="bottom")
 
 napari.run() # Start the Napari event loop
