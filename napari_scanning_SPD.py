@@ -783,14 +783,6 @@ empty_positions = [0, 1]  # Minimal data to create empty plot
 empty_counts = [0, 0]
 signal_bridge.update_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto-Focus Plot')
 
-# Calculate the indices corresponding to 0V for both axes
-x_zero_idx = np.interp(0, [x_range[0], x_range[1]], [0, x_res-1])
-y_zero_idx = np.interp(0, [y_range[0], y_range[1]], [0, y_res-1])
-        
-# Convert to world coordinates and update point position
-world_coords = layer.data_to_world([y_zero_idx, x_zero_idx])
-points_layer.data = [[world_coords[0], world_coords[1]]]
-
 # --------------------- SINGLE AXIS SCAN WIDGET ---------------------
 class SingleAxisScanWidget(QWidget):
     """Widget for performing single axis scans at current cursor position"""
