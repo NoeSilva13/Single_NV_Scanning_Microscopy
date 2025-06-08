@@ -40,8 +40,6 @@ import tifffile
 # --------------------- INITIAL CONFIGURATION ---------------------
 # Load scanning parameters from config file
 config = json.load(open("config_template.json"))
-# Store initial config as default values
-default_config = config.copy()
 galvo_controller = GalvoScannerController() # Initialize galvo scanner control
 data_manager = DataManager() # Initialize data saving system
 
@@ -938,6 +936,19 @@ def load_scan():
 # Add load scan button
 load_scan.native.setFixedSize(150, 50)
 viewer.window.add_dock_widget(load_scan, area="bottom")
+
+# Define default config values
+default_config = {
+    "scan_range": {
+        "x": [-1.0, 1.0],
+        "y": [-1.0, 1.0]
+    },
+    "resolution": {
+        "x": 10,
+        "y": 10
+    },
+    "dwell_time": 0.1
+}
 
 # Connect to viewer closing event
 @viewer.window.qt_viewer.parent().destroyed.connect
