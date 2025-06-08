@@ -208,14 +208,6 @@ def scan_pattern(x_points, y_points):
             print(f"{counts}") # Print counts
             image[y_idx, x_idx] = counts # Store in image
             layer.data = image # Update display
-    
-    # Create a dictionary with image and scan positions
-    scan_data = {
-        'image': image,
-        'x_points': x_points,
-        'y_points': y_points
-    }
-    data_path = data_manager.save_scan_data(scan_data)
     # Adjust contrast and save data
     try:
         if image.size == 0 or np.all(np.isnan(image)):
@@ -232,8 +224,22 @@ def scan_pattern(x_points, y_points):
     scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
     scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
     layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+    # Create a dictionary with image and scan positions
+    scan_data = {
+        'image': image,
+        'x_points': x_points,
+        'y_points': y_points,
+        'scale_x': scale_um_per_px_x,
+        'scale_y': scale_um_per_px_y
+    }
+    data_path = data_manager.save_scan_data(scan_data)
     plot_scan_results(scan_data, data_path)
-    layer.save(data_path.replace('.csv', '.tiff'))
+    # Save image with scale information
+    np.savez(data_path.replace('.csv', '.npz'), 
+             image=image,
+             scale_x=scale_um_per_px_x,
+             scale_y=scale_um_per_px_y)
+    #layer.save(data_path.replace('.csv', '.tiff'))
     # Return scanner to zero position after scan
     return_scanner_to_zero()
     
@@ -908,39 +914,40 @@ viewer.window.add_dock_widget(single_axis_scan, name="Single Axis Scan", area="r
 # --------------------- LOAD SAVED SCAN ---------------------
 @magicgui(call_button="📂 Load Scan")
 def load_scan():
-    """Load a previously saved TIFF scan"""
-    # Open file dialog to select .tiff file
+    """Load a previously saved scan with correct scaling"""
+    # Open file dialog to select .npz file
     file_dialog = QFileDialog()
+    file_dialog.setNameFilter("Scan files (*.npz)")
     file_dialog.setFileMode(QFileDialog.ExistingFile)
-    file_dialog.setNameFilter("TIFF Files (*.tiff *.tif)")
     
     if file_dialog.exec_():
         filenames = file_dialog.selectedFiles()
         if filenames:
             try:
-                # Load the TIFF file using tifffile
-                filename = filenames[0]
-                data = tifffile.imread(filename)
+                # Load the .npz file
+                data = np.load(filenames[0])
+                image = data['image']
+                scale_x = data['scale_x']
+                scale_y = data['scale_y']
                 
-                # Generate unique name for the layer based on the file name
-                base_name = os.path.splitext(os.path.basename(filename))[0]
+                # Generate unique name for the layer
                 timestamp = time.strftime("%H-%M-%S")
-                layer_name = f"{base_name} ({timestamp})"
+                layer_name = f"Loaded Scan {timestamp}"
                 
-                # Add as new layer
+                # Add as new layer with correct scale
                 new_layer = viewer.add_image(
-                    data,  # Pass the actual image data
+                    image,
                     name=layer_name,
                     colormap="viridis",
                     blending="additive",
                     visible=True,
-                    scale=(1, 1)
+                    scale=(scale_y, scale_x)
                 )
                 
-                # Set contrast limits based on data
-                if not np.all(np.isnan(data)):
-                    min_val = np.nanmin(data)
-                    max_val = np.nanmax(data)
+                # Set contrast limits
+                if not np.all(np.isnan(image)):
+                    min_val = np.nanmin(image)
+                    max_val = np.nanmax(image)
                     if not np.isclose(min_val, max_val):
                         new_layer.contrast_limits = (min_val, max_val)
                 
