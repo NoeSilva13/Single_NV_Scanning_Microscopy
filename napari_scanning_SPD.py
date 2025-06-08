@@ -171,12 +171,13 @@ def scan_pattern(x_points, y_points):
     Returns:
         tuple: The x and y points used for scanning (for history tracking)
     """
-    global image, layer, data_path
+    global image, layer, data_path, points_layer
 
     height, width = len(y_points), len(x_points)
     image = np.zeros((height, width), dtype=np.float32)
     layer.data = image  # update layer
     layer.contrast_limits = contrast_limits
+    points_layer.data = []  # Clear points layer before starting scan
     
     # Perform raster scan
     for y_idx, y in enumerate(y_points):
