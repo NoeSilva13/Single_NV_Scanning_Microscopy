@@ -40,6 +40,8 @@ import tifffile
 # --------------------- INITIAL CONFIGURATION ---------------------
 # Load scanning parameters from config file
 config = json.load(open("config_template.json"))
+# Store initial config as default values
+default_config = config.copy()
 galvo_controller = GalvoScannerController() # Initialize galvo scanner control
 data_manager = DataManager() # Initialize data saving system
 
@@ -936,5 +938,16 @@ def load_scan():
 # Add load scan button
 load_scan.native.setFixedSize(150, 50)
 viewer.window.add_dock_widget(load_scan, area="bottom")
+
+# Connect to viewer closing event
+@viewer.window.qt_viewer.parent().destroyed.connect
+def _on_close():
+    """Reset config file to default values when closing the app"""
+    try:
+        with open("config_template.json", 'w') as f:
+            json.dump(default_config, f, indent=4)
+        show_info("✨ Config reset to default values")
+    except Exception as e:
+        show_info(f"❌ Error resetting config: {str(e)}")
 
 napari.run() # Start the Napari event loop
