@@ -100,9 +100,9 @@ viewer.scale_bar.unit = "µm"
 viewer.scale_bar.position = "bottom_left"
 
 # Calculate scale (in microns/pixel)
-#scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
-#scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
-#layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
+scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
+layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 
 # --------------------- TIMETAGGER SETUP ---------------------
 try:
@@ -229,9 +229,9 @@ def scan_pattern(x_points, y_points):
                 layer.contrast_limits = (min_val, max_val)
     except Exception as e:
         show_info(f'❌ Error setting contrast limits: {str(e)}')
-    #scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
-    #scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
-    #layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+    scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
+    scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
+    layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
     plot_scan_results(scan_data, data_path)
     layer.save(data_path.replace('.csv', '.tiff'))
     # Return scanner to zero position after scan
