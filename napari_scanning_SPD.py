@@ -160,22 +160,6 @@ mpl_widget = live_plot(measure_function=lambda: counter.getData()[0][0]/(binwidt
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING ---------------------
-def return_scanner_to_zero():
-    """
-    Returns the galvo scanner to the (0,0) position and updates the UI accordingly.
-    """
-    # Set galvo voltages to zero
-    output_task.write([0, 0])
-    
-    # Calculate the indices corresponding to 0V for both axes
-    x_zero_idx = np.interp(0, [x_range[0], x_range[1]], [0, x_res-1])
-    y_zero_idx = np.interp(0, [y_range[0], y_range[1]], [0, y_res-1])
-    
-    # Convert to world coordinates and update point position
-    world_coords = layer.data_to_world([y_zero_idx, x_zero_idx])
-    points_layer.data = [[world_coords[0], world_coords[1]]]
-    show_info("🎯 Scanner returned to zero position")
-
 def scan_pattern(x_points, y_points):
     """
     Perform a raster scan pattern using the galvo mirrors and collect APD counts.
@@ -241,8 +225,9 @@ def scan_pattern(x_points, y_points):
              scale_y=scale_um_per_px_y)
     #layer.save(data_path.replace('.csv', '.tiff'))
     # Return scanner to zero position after scan
-    return_scanner_to_zero()
-    
+    # Set galvo voltages to zero
+    output_task.write([0, 0])
+    show_info("🎯 Scanner returned to zero position")
     return x_points, y_points # Returns for history
 
 @magicgui(call_button="🔬 New Scan")
