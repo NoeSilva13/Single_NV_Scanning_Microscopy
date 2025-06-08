@@ -232,7 +232,7 @@ def scan_pattern(x_points, y_points):
     scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
     layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
     plot_scan_results(scan_data, data_path)
-    
+    layer.save(data_path.replace('.csv', '.tiff'))
     # Return scanner to zero position after scan
     return_scanner_to_zero()
     
