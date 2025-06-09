@@ -5,6 +5,12 @@ import numpy as np
 from matplotlib.colors import Normalize
 from pathlib import Path
 
+def calculate_scale(V1, V2, image_width_px, microns_per_volt=87.5):
+    """Calculate microns per pixel based on empirical calibration"""
+    voltage_span = abs(V2 - V1)
+    scan_width_microns = voltage_span * microns_per_volt
+    return scan_width_microns / image_width_px
+
 def plot_scan_results(scan_data, save_path):
     """
     Save 2D scan results as a PDF heatmap, automatically handling file extension.
@@ -32,6 +38,15 @@ def plot_scan_results(scan_data, save_path):
         norm=Normalize(vmin=counts_grid.min(), vmax=counts_grid.max()),
         cmap='viridis'
     )
+    
+    # Calculate the scale (microns per pixel)
+    microns_per_pixel_x = calculate_scale(x_grid[0], x_grid[-1], 1)
+    microns_per_pixel_y = calculate_scale(y_grid[0], y_grid[-1], 1)
+    # Draw the scale bar
+    ax.plot([x_grid[0], x_grid[-1]], [y_grid[0], y_grid[0]], color='white', linewidth=2)
+    ax.text(x_grid[0] + (x_grid[-1] - x_grid[0])/2, y_grid[0] + 0.02, f'{microns_per_pixel_x:.1f} µm', color='white', horizontalalignment='center', verticalalignment='bottom')
+    ax.plot([x_grid[0], x_grid[0]], [y_grid[0], y_grid[-1]], color='white', linewidth=2)
+    ax.text(x_grid[0]*0.78, y_grid[0] + (y_grid[-1] - y_grid[0])/2, f'{microns_per_pixel_y:.1f} µm', color='white', horizontalalignment='right', verticalalignment='center')
     
     cbar = fig.colorbar(im, ax=ax)
     cbar.set_label('SPD Counts', rotation=270, labelpad=15)

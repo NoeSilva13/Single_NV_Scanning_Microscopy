@@ -28,13 +28,14 @@ from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
 from TimeTagger import createTimeTagger, Countrate, Counter, createTimeTaggerVirtual  # Swabian TimeTagger API
 from plot_scan_results import plot_scan_results
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame, QGridLayout, QDesktopWidget
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame, QGridLayout, QDesktopWidget, QFileDialog
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimerEvent, Qt
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtCore import pyqtSlot
 from piezo_controller import PiezoController, simulate_auto_focus
+import tifffile
 
 # --------------------- INITIAL CONFIGURATION ---------------------
 # Load scanning parameters from config file
@@ -75,11 +76,11 @@ original_scan_params = {
 }
 
 # --------------------- SCALE FUNCTION ---------------------
-def calculate_scale(V1, V2, image_width_px, L=6.86, volts_per_degree=1.33):
-    """Calculate microns per pixel based on galvo settings"""
-    theta_deg = abs(V2 - V1) / volts_per_degree
-    scan_width_mm = 2 * L * np.tan(np.radians(theta_deg / 2))
-    return (scan_width_mm * 1000) / image_width_px  # Convert to microns/px
+def calculate_scale(V1, V2, image_width_px, microns_per_volt=87.5):
+    """Calculate microns per pixel based on empirical calibration"""
+    voltage_span = abs(V2 - V1)
+    scan_width_microns = voltage_span * microns_per_volt
+    return scan_width_microns / image_width_px
 
 # --------------------- NAPARI VIEWER SETUP ---------------------
 viewer = napari.Viewer(title="NV Scanning Microscopy") # Initialize Napari viewer
@@ -159,22 +160,6 @@ mpl_widget = live_plot(measure_function=lambda: counter.getData()[0][0]/(binwidt
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING ---------------------
-def return_scanner_to_zero():
-    """
-    Returns the galvo scanner to the (0,0) position and updates the UI accordingly.
-    """
-    # Set galvo voltages to zero
-    output_task.write([0, 0])
-    
-    # Calculate the indices corresponding to 0V for both axes
-    x_zero_idx = np.interp(0, [x_range[0], x_range[1]], [0, x_res-1])
-    y_zero_idx = np.interp(0, [y_range[0], y_range[1]], [0, y_res-1])
-    
-    # Convert to world coordinates and update point position
-    world_coords = layer.data_to_world([y_zero_idx, x_zero_idx])
-    points_layer.data = [[world_coords[0], world_coords[1]]]
-    show_info("🎯 Scanner returned to zero position")
-
 def scan_pattern(x_points, y_points):
     """
     Perform a raster scan pattern using the galvo mirrors and collect APD counts.
@@ -186,12 +171,13 @@ def scan_pattern(x_points, y_points):
     Returns:
         tuple: The x and y points used for scanning (for history tracking)
     """
-    global image, layer, data_path
+    global image, layer, data_path, points_layer
 
     height, width = len(y_points), len(x_points)
     image = np.zeros((height, width), dtype=np.float32)
     layer.data = image  # update layer
     layer.contrast_limits = contrast_limits
+    points_layer.data = []  # Clear points layer before starting scan
     
     # Perform raster scan
     for y_idx, y in enumerate(y_points):
@@ -207,14 +193,6 @@ def scan_pattern(x_points, y_points):
             print(f"{counts}") # Print counts
             image[y_idx, x_idx] = counts # Store in image
             layer.data = image # Update display
-    
-    # Create a dictionary with image and scan positions
-    scan_data = {
-        'image': image,
-        'x_points': x_points,
-        'y_points': y_points
-    }
-    data_path = data_manager.save_scan_data(scan_data)
     # Adjust contrast and save data
     try:
         if image.size == 0 or np.all(np.isnan(image)):
@@ -231,11 +209,26 @@ def scan_pattern(x_points, y_points):
     scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
     scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
     layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+    # Create a dictionary with image and scan positions
+    scan_data = {
+        'image': image,
+        'x_points': x_points,
+        'y_points': y_points,
+        'scale_x': scale_um_per_px_x,
+        'scale_y': scale_um_per_px_y
+    }
+    data_path = data_manager.save_scan_data(scan_data)
     plot_scan_results(scan_data, data_path)
-    layer.save(data_path.replace('.csv', '.tiff'))
+    # Save image with scale information
+    np.savez(data_path.replace('.csv', '.npz'), 
+             image=image,
+             scale_x=scale_um_per_px_x,
+             scale_y=scale_um_per_px_y)
+    #layer.save(data_path.replace('.csv', '.tiff'))
     # Return scanner to zero position after scan
-    return_scanner_to_zero()
-    
+    # Set galvo voltages to zero
+    output_task.write([0, 0])
+    show_info("🎯 Scanner returned to zero position")
     return x_points, y_points # Returns for history
 
 @magicgui(call_button="🔬 New Scan")
@@ -258,7 +251,7 @@ def close_scanner():
     Runs in a separate thread.
     """
     def run_close():
-        return_scanner_to_zero()
+        output_task.write([0, 0])
     
     threading.Thread(target=run_close, daemon=True).start()
     show_info("🎯 Scanner set to zero")
@@ -791,14 +784,6 @@ empty_positions = [0, 1]  # Minimal data to create empty plot
 empty_counts = [0, 0]
 signal_bridge.update_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto-Focus Plot')
 
-# Calculate the indices corresponding to 0V for both axes
-x_zero_idx = np.interp(0, [x_range[0], x_range[1]], [0, x_res-1])
-y_zero_idx = np.interp(0, [y_range[0], y_range[1]], [0, y_res-1])
-        
-# Convert to world coordinates and update point position
-world_coords = layer.data_to_world([y_zero_idx, x_zero_idx])
-points_layer.data = [[world_coords[0], world_coords[1]]]
-
 # --------------------- SINGLE AXIS SCAN WIDGET ---------------------
 class SingleAxisScanWidget(QWidget):
     """Widget for performing single axis scans at current cursor position"""
@@ -903,5 +888,77 @@ class SingleAxisScanWidget(QWidget):
 # Add single axis scan widget to viewer
 single_axis_scan = SingleAxisScanWidget()
 viewer.window.add_dock_widget(single_axis_scan, name="Single Axis Scan", area="right")
+
+# --------------------- LOAD SAVED SCAN ---------------------
+@magicgui(call_button="📂 Load Scan")
+def load_scan():
+    """Load a previously saved scan with correct scaling"""
+    # Open file dialog to select .npz file
+    file_dialog = QFileDialog()
+    file_dialog.setNameFilter("Scan files (*.npz)")
+    file_dialog.setFileMode(QFileDialog.ExistingFile)
+    
+    if file_dialog.exec_():
+        filenames = file_dialog.selectedFiles()
+        if filenames:
+            try:
+                # Load the .npz file
+                data = np.load(filenames[0])
+                image = data['image']
+                scale_x = data['scale_x']
+                scale_y = data['scale_y']
+                
+                # Generate unique name for the layer
+                timestamp = time.strftime("%H-%M-%S")
+                layer_name = f"Loaded Scan {timestamp}"
+                
+                # Add as new layer with correct scale
+                new_layer = viewer.add_image(
+                    image,
+                    name=layer_name,
+                    colormap="viridis",
+                    blending="additive",
+                    visible=True,
+                    scale=(scale_y, scale_x)
+                )
+                
+                # Set contrast limits
+                if not np.all(np.isnan(image)):
+                    min_val = np.nanmin(image)
+                    max_val = np.nanmax(image)
+                    if not np.isclose(min_val, max_val):
+                        new_layer.contrast_limits = (min_val, max_val)
+                
+                show_info(f"✨ Loaded scan as '{layer_name}'")
+            except Exception as e:
+                show_info(f"❌ Error loading scan: {str(e)}")
+
+# Add load scan button
+load_scan.native.setFixedSize(150, 50)
+viewer.window.add_dock_widget(load_scan, area="bottom")
+
+# Define default config values
+default_config = {
+    "scan_range": {
+        "x": [-1.0, 1.0],
+        "y": [-1.0, 1.0]
+    },
+    "resolution": {
+        "x": 10,
+        "y": 10
+    },
+    "dwell_time": 0.1
+}
+
+# Connect to viewer closing event
+@viewer.window.qt_viewer.parent().destroyed.connect
+def _on_close():
+    """Reset config file to default values when closing the app"""
+    try:
+        with open("config_template.json", 'w') as f:
+            json.dump(default_config, f, indent=4)
+        show_info("✨ Config reset to default values")
+    except Exception as e:
+        show_info(f"❌ Error resetting config: {str(e)}")
 
 napari.run() # Start the Napari event loop
