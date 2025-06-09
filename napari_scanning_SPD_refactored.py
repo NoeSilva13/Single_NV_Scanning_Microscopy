@@ -310,7 +310,7 @@ def get_data_path():
 # --------------------- CREATE WIDGETS USING FACTORIES ---------------------
 
 # Create scan control widgets
-new_scan_widget = create_new_scan(scan_pattern, original_x_points, original_y_points, shapes)
+new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes)
 close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
 update_scan_parameters_widget = create_update_scan_parameters(config_manager, scan_points_manager)
@@ -346,7 +346,7 @@ zoom_in_progress = False
 @shapes.events.data.connect
 def on_shape_added(event):
     """Handle zoom region selection in the GUI."""
-    global zoom_in_progress, original_x_points, original_y_points
+    global zoom_in_progress
 
     if zoom_in_progress:
         return
@@ -372,17 +372,18 @@ def on_shape_added(event):
     max_y = min(height, max_y)
 
     # Save current state for zoom history
-    scan_history.append((original_x_points, original_y_points))
+    current_x_points, current_y_points = scan_points_manager.get_points()
+    scan_history.append((current_x_points, current_y_points))
 
     # Calculate new scan points maintaining original resolution
     current_config = config_manager.get_config()
     current_x_res = current_config['resolution']['x']
     current_y_res = current_config['resolution']['y']
-    x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], current_x_res)
-    y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], current_y_res)
+    x_zoom = np.linspace(current_x_points[min_x], current_x_points[max_x - 1], current_x_res)
+    y_zoom = np.linspace(current_y_points[min_y], current_y_points[max_y - 1], current_y_res)
 
     def run_zoom():
-        global original_x_points, original_y_points, zoom_in_progress
+        global zoom_in_progress
         zoom_in_progress = True
         
         config_manager.update_scan_parameters(
@@ -399,7 +400,7 @@ def on_shape_added(event):
         )
         
         shapes.data = []
-        original_x_points, original_y_points = scan_pattern(x_zoom, y_zoom)
+        scan_pattern(x_zoom, y_zoom)
         zoom_manager.set_zoom_level(zoom_manager.get_zoom_level() + 1)
         update_widget_func()
         zoom_in_progress = False

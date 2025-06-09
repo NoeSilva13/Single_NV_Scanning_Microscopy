@@ -16,16 +16,18 @@ from magicgui import magicgui
 from napari.utils.notifications import show_info
 
 
-def new_scan(scan_pattern_func, original_x_points, original_y_points, shapes):
+def new_scan(scan_pattern_func, scan_points_manager, shapes):
     """Factory function to create new_scan widget with dependencies"""
     
     @magicgui(call_button="🔬 New Scan")
     def _new_scan():
-        """Initiates a new scan using the original (full-range) scan parameters.
+        """Initiates a new scan using the current scan parameters from scan_points_manager.
         Runs the scan in a separate thread to prevent UI freezing.
         """
         def run_new_scan():
-            scan_pattern_func(original_x_points, original_y_points)
+            # Get current scan points from the manager
+            x_points, y_points = scan_points_manager.get_points()
+            scan_pattern_func(x_points, y_points)
             shapes.data = []
         threading.Thread(target=run_new_scan, daemon=True).start()
         show_info("🔬 New scan started")
