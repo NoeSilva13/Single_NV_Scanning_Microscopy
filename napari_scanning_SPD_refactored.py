@@ -29,6 +29,7 @@ from galvo_controller import GalvoScannerController
 from data_manager import DataManager
 from live_plot_napari_widget import live_plot
 from plot_scan_results import plot_scan_results
+from utils import calculate_scale, MICRONS_PER_VOLT
 
 # Import extracted widgets
 from widgets.scan_controls import (
@@ -158,12 +159,7 @@ output_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
 output_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
 output_task.start()
 
-# --------------------- SCALE FUNCTION ---------------------
-def calculate_scale(V1, V2, image_width_px, microns_per_volt=87.5):
-    """Calculate microns per pixel based on empirical calibration"""
-    voltage_span = abs(V2 - V1)
-    scan_width_microns = voltage_span * microns_per_volt
-    return scan_width_microns / image_width_px
+# --------------------- SCALE FUNCTION (imported from utils) ---------------------
 
 # --------------------- NAPARI VIEWER SETUP ---------------------
 viewer = napari.Viewer(title="NV Scanning Microscopy")

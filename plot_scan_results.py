@@ -4,12 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import Normalize
 from pathlib import Path
-
-def calculate_scale(V1, V2, image_width_px, microns_per_volt=87.5):
-    """Calculate microns per pixel based on empirical calibration"""
-    voltage_span = abs(V2 - V1)
-    scan_width_microns = voltage_span * microns_per_volt
-    return scan_width_microns / image_width_px
+from utils import calculate_scale
 
 def plot_scan_results(scan_data, save_path):
     """
