@@ -11,33 +11,24 @@ The system provides real-time visualization and control through a Napari-based G
 This is a refactored version showing how the widgets are extracted to separate modules.
 """
 
-import sys
-import os
-from Camera import POACameraController
-import cv2
+# Standard library imports
+import json
+import threading
+import time
 
+# Third-party imports
 import numpy as np 
 import napari
-import time
-import json
 import nidaqmx
-from nidaqmx.constants import (TerminalConfiguration, Edge, CountDirection, AcquisitionType, SampleTimingType)
+from napari.utils.notifications import show_info
+from PyQt5.QtWidgets import QDesktopWidget
+from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual
+
+# Local imports
 from galvo_controller import GalvoScannerController
 from data_manager import DataManager
-import threading
-from magicgui import magicgui
-from napari.utils.notifications import show_info
 from live_plot_napari_widget import live_plot
-from TimeTagger import createTimeTagger, Countrate, Counter, createTimeTaggerVirtual  # Swabian TimeTagger API
 from plot_scan_results import plot_scan_results
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QFrame, QGridLayout, QDesktopWidget, QFileDialog
-from matplotlib.figure import Figure
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from PyQt5.QtCore import QObject, pyqtSignal, QThread, QTimerEvent, Qt
-from PyQt5.QtGui import QPalette, QColor
-from PyQt5.QtCore import pyqtSlot
-from piezo_controller import PiezoController, simulate_auto_focus
-import tifffile
 
 # Import extracted widgets
 from widgets.scan_controls import (
@@ -147,10 +138,8 @@ zoom_manager = ZoomLevelManager()
 galvo_controller = GalvoScannerController()
 data_manager = DataManager()
 
-# Extract scan parameters from config
+# Extract scan parameters from config for initial setup
 config = config_manager.get_config()
-x_range = config['scan_range']['x']
-y_range = config['scan_range']['y']
 x_res = config['resolution']['x']
 y_res = config['resolution']['y']
 
@@ -195,6 +184,8 @@ viewer.scale_bar.unit = "µm"
 viewer.scale_bar.position = "bottom_left"
 
 # Calculate scale (in microns/pixel)
+x_range = config['scan_range']['x']
+y_range = config['scan_range']['y']
 scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
 scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
 layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
@@ -219,6 +210,13 @@ def on_mouse_click(layer, event):
     """Handle mouse click events to move the galvo scanner to the clicked position."""
     coords = layer.world_to_data(event.position)
     x_idx, y_idx = int(round(coords[1])), int(round(coords[0]))
+    
+    # Get current ranges from config manager
+    config = config_manager.get_config()
+    x_range = config['scan_range']['x']
+    y_range = config['scan_range']['y']
+    x_res = config['resolution']['x']
+    y_res = config['resolution']['y']
     
     # Convert from pixel coordinates to voltage values
     x_voltage = np.interp(x_idx, [0, x_res-1], [x_range[0], x_range[1]])
@@ -315,14 +313,15 @@ def get_data_path():
 new_scan_widget = create_new_scan(scan_pattern, original_x_points, original_y_points, shapes)
 close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
+update_scan_parameters_widget = create_update_scan_parameters(config_manager, scan_points_manager)
+update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, config_manager)
+
 reset_zoom_widget = create_reset_zoom(
     scan_pattern, scan_history, original_x_points, original_y_points, 
     shapes, lambda **kwargs: config_manager.update_scan_parameters(**kwargs), 
-    lambda: None,  # Will be set later
+    update_widget_func,
     zoom_manager
 )
-update_scan_parameters_widget = create_update_scan_parameters(config_manager, scan_points_manager)
-update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, config_manager)
 
 # Create camera control widgets
 camera_live_widget = create_camera_live(viewer)
@@ -376,8 +375,11 @@ def on_shape_added(event):
     scan_history.append((original_x_points, original_y_points))
 
     # Calculate new scan points maintaining original resolution
-    x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], x_res)
-    y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], y_res)
+    current_config = config_manager.get_config()
+    current_x_res = current_config['resolution']['x']
+    current_y_res = current_config['resolution']['y']
+    x_zoom = np.linspace(original_x_points[min_x], original_x_points[max_x - 1], current_x_res)
+    y_zoom = np.linspace(original_y_points[min_y], original_y_points[max_y - 1], current_y_res)
 
     def run_zoom():
         global original_x_points, original_y_points, zoom_in_progress
@@ -386,14 +388,14 @@ def on_shape_added(event):
         config_manager.update_scan_parameters(
             x_range=[x_zoom[0], x_zoom[-1]],
             y_range=[y_zoom[0], y_zoom[-1]],
-            x_res=x_res,
-            y_res=y_res
+            x_res=current_x_res,
+            y_res=current_y_res
         )
         scan_points_manager.update_points(
             x_range=[x_zoom[0], x_zoom[-1]],
             y_range=[y_zoom[0], y_zoom[-1]],
-            x_res=x_res,
-            y_res=y_res
+            x_res=current_x_res,
+            y_res=current_y_res
         )
         
         shapes.data = []
@@ -453,5 +455,9 @@ def _on_close():
     except Exception as e:
         show_info(f"❌ Error resetting config: {str(e)}")
 
+def main():
+    """Main application entry point"""
+    napari.run()  # Start the Napari event loop
+
 if __name__ == "__main__":
-    napari.run()  # Start the Napari event loop 
+    main() 
