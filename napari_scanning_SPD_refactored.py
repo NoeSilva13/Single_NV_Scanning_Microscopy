@@ -444,13 +444,18 @@ default_config = {
 
 @viewer.window.qt_viewer.parent().destroyed.connect
 def _on_close():
-    """Reset config file to default values when closing the app"""
+    """Reset config file to default values and set scanner to zero when closing the app"""
     try:
+        # Set scanner to zero position before closing
+        output_task.write([0, 0])
+        show_info("🎯 Scanner set to zero position")
+        
+        # Reset config file to default values
         with open("config_template.json", 'w') as f:
             json.dump(default_config, f, indent=4)
         show_info("✨ Config reset to default values")
     except Exception as e:
-        show_info(f"❌ Error resetting config: {str(e)}")
+        show_info(f"❌ Error during app closure: {str(e)}")
 
 def main():
     """Main application entry point"""
