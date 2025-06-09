@@ -311,7 +311,7 @@ def get_data_path():
 
 # Create scan control widgets
 new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes)
-close_scanner_widget = create_close_scanner(output_task)
+close_scanner_widget = create_close_scanner(output_task, points_layer)
 save_image_widget = create_save_image(viewer, get_data_path)
 update_scan_parameters_widget = create_update_scan_parameters(config_manager, scan_points_manager)
 update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, config_manager)
