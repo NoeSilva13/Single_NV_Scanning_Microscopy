@@ -317,7 +317,7 @@ update_scan_parameters_widget = create_update_scan_parameters(config_manager, sc
 update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, config_manager)
 
 reset_zoom_widget = create_reset_zoom(
-    scan_pattern, scan_history, original_x_points, original_y_points, 
+    scan_pattern, scan_history, config_manager, scan_points_manager,
     shapes, lambda **kwargs: config_manager.update_scan_parameters(**kwargs), 
     update_widget_func,
     zoom_manager

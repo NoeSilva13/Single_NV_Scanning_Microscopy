@@ -70,7 +70,7 @@ def save_image(viewer, data_path_func):
     return _save_image
 
 
-def reset_zoom(scan_pattern_func, scan_history, original_x_points, original_y_points, 
+def reset_zoom(scan_pattern_func, scan_history, config_manager, scan_points_manager,
                shapes, update_scan_parameters_func, update_scan_parameters_widget_func,
                zoom_level_manager):
     """Factory function to create reset_zoom widget with dependencies"""
@@ -84,23 +84,35 @@ def reset_zoom(scan_pattern_func, scan_history, original_x_points, original_y_po
             show_info("🔁 You are already in the original view.")
             return
         
-        # Get original points from history
+        # Get original points from history or use default config values
         if scan_history:
             orig_x_points, orig_y_points = scan_history[0]
         else:
-            orig_x_points, orig_y_points = original_x_points, original_y_points
+            # Fallback to default config values
+            config = config_manager.get_config()
+            x_range = config['scan_range']['x']
+            y_range = config['scan_range']['y']
+            x_res = config['resolution']['x']
+            y_res = config['resolution']['y']
+            orig_x_points = np.linspace(x_range[0], x_range[1], x_res)
+            orig_y_points = np.linspace(y_range[0], y_range[1], y_res)
         
         scan_history.clear()
         zoom_level_manager.set_zoom_level(0)
 
         def run_reset():
+            # Update both managers with the original values
             update_scan_parameters_func(
-                x_min=orig_x_points[0],
-                x_max=orig_x_points[-1],
-                y_min=orig_y_points[0],
-                y_max=orig_y_points[-1],
-                x_resolution=len(orig_x_points),
-                y_resolution=len(orig_y_points)
+                x_range=[orig_x_points[0], orig_x_points[-1]],
+                y_range=[orig_y_points[0], orig_y_points[-1]],
+                x_res=len(orig_x_points),
+                y_res=len(orig_y_points)
+            )
+            scan_points_manager.update_points(
+                x_range=[orig_x_points[0], orig_x_points[-1]],
+                y_range=[orig_y_points[0], orig_y_points[-1]],
+                x_res=len(orig_x_points),
+                y_res=len(orig_y_points)
             )
             scan_pattern_func(orig_x_points, orig_y_points)
             shapes.data = []
