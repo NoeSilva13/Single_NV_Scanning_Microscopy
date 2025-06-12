@@ -63,9 +63,18 @@ def camera_live(viewer, get_camera_type_func=None):
         
         def update_layer(frame):
             """Update the Napari layer with new frame"""
-            # Reshape frame to 2D if it's 3D with single channel
+            # Check if camera is still running and layer exists
+            if not _camera_live.is_running or _camera_live.camera_layer is None:
+                return
+            
+            # Handle different frame formats
             if frame.ndim == 3 and frame.shape[2] == 1:
-                frame = frame.squeeze()  # Remove single-dimensional entries
+                # Single channel 3D array - convert to 2D grayscale
+                frame = frame.squeeze()
+            elif frame.ndim == 3 and frame.shape[2] == 3:
+                # RGB color image - keep as is for color display
+                pass
+            
             _camera_live.camera_layer.data = frame
             # Add text overlay with settings
             exp_ms = _camera_live.camera.get_exposure() / 1000
@@ -93,12 +102,24 @@ def camera_live(viewer, get_camera_type_func=None):
                     _camera_live.camera.disconnect()
                     return
                 
-                # Create initial frame with correct dimensions
-                initial_frame = np.zeros((height, width), dtype=np.uint8)
+                # Create initial frame with correct dimensions based on camera type
+                camera_type = "POA"  # Default
+                if get_camera_type_func:
+                    camera_type = get_camera_type_func()
+                
+                if camera_type == "ZWO":
+                    # ZWO is a color camera - create RGB frame
+                    initial_frame = np.zeros((height, width, 3), dtype=np.uint8)
+                    colormap = None  # Use default RGB display
+                else:
+                    # POA is grayscale
+                    initial_frame = np.zeros((height, width), dtype=np.uint8)
+                    colormap = "gray"
+                
                 _camera_live.camera_layer = viewer.add_image(
                     initial_frame,
                     name="Live",
-                    colormap="gray",
+                    colormap=colormap,
                     blending="additive",
                     visible=True
                 )
@@ -130,16 +151,21 @@ def camera_live(viewer, get_camera_type_func=None):
         else:
             # Stop camera feed
             _camera_live.is_running = False
+            
+            # Stop and disconnect the update thread first
             if _camera_live.update_thread:
+                _camera_live.update_thread.frame_ready.disconnect()  # Disconnect signal
                 _camera_live.update_thread.stop()
                 _camera_live.update_thread = None
-            _camera_live.camera.stop_stream()
-            _camera_live.camera.disconnect()
             
             # Remove the live video layer completely
             if hasattr(_camera_live, 'camera_layer') and _camera_live.camera_layer in viewer.layers:
                 viewer.layers.remove(_camera_live.camera_layer)
                 _camera_live.camera_layer = None
+            
+            # Stop camera stream and disconnect
+            _camera_live.camera.stop_stream()
+            _camera_live.camera.disconnect()
             
             show_info("🛑 Camera live view stopped")
             _camera_live.call_button.text = "🎥 Camera Live"
@@ -214,9 +240,17 @@ def capture_shot(viewer, settings_callback=None, get_camera_type_func=None):
             _capture_shot.camera.stop_stream()
             
             if frame is not None:
-                # Reshape frame if needed
+                # Handle different frame formats
                 if frame.ndim == 3 and frame.shape[2] == 1:
+                    # Single channel 3D array - convert to 2D grayscale
                     frame = frame.squeeze()
+                    colormap = "gray"
+                elif frame.ndim == 3 and frame.shape[2] == 3:
+                    # RGB color image - keep as is
+                    colormap = None  # Use default RGB display
+                else:
+                    # 2D grayscale image
+                    colormap = "gray"
                 
                 # Generate unique name for the layer including settings
                 timestamp = time.strftime("%H-%M-%S")
@@ -226,7 +260,7 @@ def capture_shot(viewer, settings_callback=None, get_camera_type_func=None):
                 viewer.add_image(
                     frame,
                     name=layer_name,
-                    colormap="gray",
+                    colormap=colormap,
                     blending="additive",
                     visible=True
                 )

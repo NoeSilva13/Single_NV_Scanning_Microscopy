@@ -95,8 +95,8 @@ class ZWOCameraController:
             self.img_width = roi[2]  # width
             self.img_height = roi[3]  # height
             
-            # Set image type to RAW8 for compatibility
-            self.camera.set_image_type(zwo_camera.ASI_IMG_RAW8)
+            # Set image type to RGB24 for color images (since this is a color camera)
+            self.camera.set_image_type(zwo_camera.ASI_IMG_RGB24)
             
             # Set initial exposure and gain
             self.set_exposure(self.exposure)
