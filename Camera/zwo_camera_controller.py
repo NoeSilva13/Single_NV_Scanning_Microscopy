@@ -179,6 +179,14 @@ class ZWOCameraController:
             # Use a reasonable timeout (1 second)
             timeout_ms = 1000
             frame = self.camera.capture_video_frame(timeout=timeout_ms)
+            
+            if frame is not None:
+                # Convert BGR to RGB for proper color display
+                # ZWO cameras typically output in BGR format, but Napari expects RGB
+                if frame.ndim == 3 and frame.shape[2] == 3:
+                    # Convert BGR to RGB by swapping the first and last channels
+                    frame = frame[:, :, ::-1]  # This reverses the channel order
+            
             return frame
         except zwo_camera.ZWO_Error as e:
             # Handle timeout gracefully
