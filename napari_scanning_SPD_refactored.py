@@ -41,9 +41,7 @@ from widgets.scan_controls import (
     update_scan_parameters_widget as create_update_scan_parameters_widget
 )
 from widgets.camera_controls import (
-    camera_live as create_camera_live,
-    capture_shot as create_capture_shot,
-    CameraControlWidget
+    create_camera_control_widget
 )
 from widgets.auto_focus import (
     auto_focus as create_auto_focus,
@@ -320,9 +318,7 @@ reset_zoom_widget = create_reset_zoom(
 )
 
 # Create camera control widgets
-camera_live_widget = create_camera_live(viewer)
-capture_shot_widget = create_capture_shot(viewer)
-camera_control_widget = CameraControlWidget(camera_live_widget, capture_shot_widget)
+camera_control_widget = create_camera_control_widget(viewer)
 
 # Create auto-focus widgets
 signal_bridge = SignalBridge(viewer)

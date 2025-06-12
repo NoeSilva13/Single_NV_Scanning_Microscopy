@@ -137,7 +137,7 @@ def camera_live(viewer):
     return _camera_live
 
 
-def capture_shot(viewer):
+def capture_shot(viewer, settings_callback=None):
     """Factory function to create capture_shot widget with dependencies"""
     
     @magicgui(call_button="📸 Single Shot")
@@ -148,14 +148,29 @@ def capture_shot(viewer):
             _capture_shot.camera = POACameraController()
         
         try:
+            # Get current settings from callback
+            if settings_callback is not None:
+                settings = settings_callback()
+                exposure_ms = settings['exposure_ms']
+                gain = settings['gain']
+            else:
+                # Fallback to hardcoded values if no callback available
+                exposure_ms = 50
+                gain = 300
+            
             # Connect to camera if not already connected
             if not _capture_shot.camera.is_connected:
                 if not _capture_shot.camera.connect(camera_index=0, width=1024, height=1024):
                     show_info("❌ Failed to connect to camera")
                     return
                 
-                _capture_shot.camera.set_exposure(50000)  # 50ms initial exposure
-                _capture_shot.camera.set_gain(300)        # Initial gain
+                # Set camera settings
+                _capture_shot.camera.set_exposure(exposure_ms * 1000)  # Convert ms to µs
+                _capture_shot.camera.set_gain(gain)
+            else:
+                # Update camera settings even if already connected
+                _capture_shot.camera.set_exposure(exposure_ms * 1000)  # Convert ms to µs
+                _capture_shot.camera.set_gain(gain)
             
             # Start stream temporarily
             if not _capture_shot.camera.start_stream():
@@ -183,9 +198,9 @@ def capture_shot(viewer):
                 if frame.ndim == 3 and frame.shape[2] == 1:
                     frame = frame.squeeze()
                 
-                # Generate unique name for the layer
+                # Generate unique name for the layer including settings
                 timestamp = time.strftime("%H-%M-%S")
-                layer_name = f"Camera Shot {timestamp}"
+                layer_name = f"Camera Shot {timestamp} (Exp: {exposure_ms}ms, Gain: {gain})"
                 
                 # Add as new layer
                 viewer.add_image(
@@ -284,4 +299,33 @@ class CameraControlWidget(QWidget):
         if hasattr(self.camera_live_widget, 'camera'):
             self.camera_live_widget.camera.set_gain(value)
         if hasattr(self.capture_shot_widget, 'camera'):
-            self.capture_shot_widget.camera.set_gain(value) 
+            self.capture_shot_widget.camera.set_gain(value)
+
+
+def create_camera_control_widget(viewer):
+    """Factory function to create a complete camera control widget with proper connections"""
+    # Create the camera live widget
+    camera_live_widget = camera_live(viewer)
+    
+    # Create a settings container to hold current values
+    camera_settings = {'exposure_ms': 50, 'gain': 300}
+    
+    # Create capture_shot widget with settings callback
+    capture_shot_widget = capture_shot(viewer, lambda: camera_settings)
+    
+    # Create the control widget
+    camera_control_widget = CameraControlWidget(camera_live_widget, capture_shot_widget)
+    
+    # Update the settings callback to get values from sliders
+    def update_settings():
+        camera_settings['exposure_ms'] = camera_control_widget.exposure_slider.value()
+        camera_settings['gain'] = camera_control_widget.gain_slider.value()
+    
+    # Connect slider changes to update the settings
+    camera_control_widget.exposure_slider.valueChanged.connect(lambda: update_settings())
+    camera_control_widget.gain_slider.valueChanged.connect(lambda: update_settings())
+    
+    # Initialize settings
+    update_settings()
+    
+    return camera_control_widget 
