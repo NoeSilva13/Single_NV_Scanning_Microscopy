@@ -168,7 +168,7 @@ viewer.window.resize(screen.width(), screen.height())
 # Add an image layer to display the live scan
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
 # Add a points layer to show current scanner position
-points_layer = viewer.add_points(ndim=2, name="scanner position", face_color='red', size=5, opacity=1, symbol='o')
+points_layer = viewer.add_points(ndim=2, name="scanner position", face_color='red', size=1, opacity=1, symbol='o')
 # Add a shapes layer to display the zoom area
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
