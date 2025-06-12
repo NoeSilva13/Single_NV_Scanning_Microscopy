@@ -136,13 +136,13 @@ def camera_live(viewer, get_camera_type_func=None):
             _camera_live.camera.stop_stream()
             _camera_live.camera.disconnect()
             
-            # Keep the layer but clear its data
+            # Remove the live video layer completely
             if hasattr(_camera_live, 'camera_layer') and _camera_live.camera_layer in viewer.layers:
-                width, height = _camera_live.camera_layer.data.shape
-                _camera_live.camera_layer.data = np.zeros((height, width), dtype=np.uint8)
+                viewer.layers.remove(_camera_live.camera_layer)
+                _camera_live.camera_layer = None
             
             show_info("🛑 Camera live view stopped")
-            _camera_live.call_button.text = "🎥Camera Live"
+            _camera_live.call_button.text = "🎥 Camera Live"
     
     return _camera_live
 
