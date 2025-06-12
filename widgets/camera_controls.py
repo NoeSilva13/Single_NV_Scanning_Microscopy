@@ -44,8 +44,8 @@ def camera_live(viewer, get_camera_type_func=None):
     @magicgui(call_button="🎥 Camera Live")
     def _camera_live():
         """Start/stop live camera feed in Napari viewer."""
-        # Initialize camera controller if not already done
-        if not hasattr(_camera_live, 'camera'):
+        # Initialize camera controller if not already done or if camera is None
+        if not hasattr(_camera_live, 'camera') or _camera_live.camera is None:
             # Get camera type from callback function
             camera_type = "POA"  # Default
             if get_camera_type_func:
@@ -153,8 +153,8 @@ def capture_shot(viewer, settings_callback=None, get_camera_type_func=None):
     @magicgui(call_button="📸 Single Shot")
     def _capture_shot():
         """Take a single image from the camera and display it in a new layer."""
-        # Initialize camera if needed
-        if not hasattr(_capture_shot, 'camera'):
+        # Initialize camera if needed or if camera is None
+        if not hasattr(_capture_shot, 'camera') or _capture_shot.camera is None:
             # Get camera type from callback function
             camera_type = "POA"  # Default
             if get_camera_type_func:
@@ -337,17 +337,27 @@ class CameraControlWidget(QWidget):
         """Handle camera type change"""
         # Reset camera instances when type changes
         if hasattr(self.camera_live_widget, 'camera'):
-            if self.camera_live_widget.is_running:
+            if hasattr(self.camera_live_widget, 'is_running') and self.camera_live_widget.is_running:
                 show_info("⚠️ Please stop camera live view before changing camera type")
                 return
             
             # Disconnect current camera
-            self.camera_live_widget.camera.disconnect()
-            del self.camera_live_widget.camera
+            try:
+                self.camera_live_widget.camera.disconnect()
+            except Exception as e:
+                print(f"Warning: Error disconnecting camera live widget: {e}")
+            
+            # Remove camera reference without using del (which triggers magicgui container removal)
+            self.camera_live_widget.camera = None
         
         if hasattr(self.capture_shot_widget, 'camera'):
-            self.capture_shot_widget.camera.disconnect()
-            del self.capture_shot_widget.camera
+            try:
+                self.capture_shot_widget.camera.disconnect()
+            except Exception as e:
+                print(f"Warning: Error disconnecting capture shot widget: {e}")
+            
+            # Remove camera reference without using del
+            self.capture_shot_widget.camera = None
         
         # Show info about the change
         camera_type = "ZWO" if camera_type_text == "ZWO Camera" else "POA"
@@ -355,16 +365,16 @@ class CameraControlWidget(QWidget):
     
     @pyqtSlot(int)
     def update_exposure(self, value):
-        if hasattr(self.camera_live_widget, 'camera'):
+        if hasattr(self.camera_live_widget, 'camera') and self.camera_live_widget.camera is not None:
             self.camera_live_widget.camera.set_exposure(value * 1000)  # Convert ms to µs
-        if hasattr(self.capture_shot_widget, 'camera'):
+        if hasattr(self.capture_shot_widget, 'camera') and self.capture_shot_widget.camera is not None:
             self.capture_shot_widget.camera.set_exposure(value * 1000)  # Convert ms to µs
     
     @pyqtSlot(int)
     def update_gain(self, value):
-        if hasattr(self.camera_live_widget, 'camera'):
+        if hasattr(self.camera_live_widget, 'camera') and self.camera_live_widget.camera is not None:
             self.camera_live_widget.camera.set_gain(value)
-        if hasattr(self.capture_shot_widget, 'camera'):
+        if hasattr(self.capture_shot_widget, 'camera') and self.capture_shot_widget.camera is not None:
             self.capture_shot_widget.camera.set_gain(value)
 
 
