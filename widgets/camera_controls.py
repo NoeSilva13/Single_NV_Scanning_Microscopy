@@ -10,11 +10,11 @@ Contains:
 
 import time
 import numpy as np
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QGridLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QGridLayout, QComboBox, QHBoxLayout
 from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot, Qt
-from magicgui import magicgui
+from magicgui import magicgui, widgets
 from napari.utils.notifications import show_info
-from Camera import POACameraController
+from Camera import POACameraController, ZWOCameraController
 
 
 class CameraUpdateThread(QThread):
@@ -38,7 +38,7 @@ class CameraUpdateThread(QThread):
         self.wait()
 
 
-def camera_live(viewer):
+def camera_live(viewer, get_camera_type_func=None):
     """Factory function to create camera_live widget with dependencies"""
     
     @magicgui(call_button="🎥 Camera Live")
@@ -46,10 +46,20 @@ def camera_live(viewer):
         """Start/stop live camera feed in Napari viewer."""
         # Initialize camera controller if not already done
         if not hasattr(_camera_live, 'camera'):
-            _camera_live.camera = POACameraController()
+            # Get camera type from callback function
+            camera_type = "POA"  # Default
+            if get_camera_type_func:
+                camera_type = get_camera_type_func()
+            
+            if camera_type == "ZWO":
+                _camera_live.camera = ZWOCameraController()
+            else:
+                _camera_live.camera = POACameraController()
+            
             _camera_live.is_running = False
             _camera_live.update_thread = None
             _camera_live.camera_layer = None
+            _camera_live.camera_type = camera_type
         
         def update_layer(frame):
             """Update the Napari layer with new frame"""
@@ -137,7 +147,7 @@ def camera_live(viewer):
     return _camera_live
 
 
-def capture_shot(viewer, settings_callback=None):
+def capture_shot(viewer, settings_callback=None, get_camera_type_func=None):
     """Factory function to create capture_shot widget with dependencies"""
     
     @magicgui(call_button="📸 Single Shot")
@@ -145,7 +155,17 @@ def capture_shot(viewer, settings_callback=None):
         """Take a single image from the camera and display it in a new layer."""
         # Initialize camera if needed
         if not hasattr(_capture_shot, 'camera'):
-            _capture_shot.camera = POACameraController()
+            # Get camera type from callback function
+            camera_type = "POA"  # Default
+            if get_camera_type_func:
+                camera_type = get_camera_type_func()
+            
+            if camera_type == "ZWO":
+                _capture_shot.camera = ZWOCameraController()
+            else:
+                _capture_shot.camera = POACameraController()
+            
+            _capture_shot.camera_type = camera_type
         
         try:
             # Get current settings from callback
@@ -227,7 +247,7 @@ def capture_shot(viewer, settings_callback=None):
 
 
 class CameraControlWidget(QWidget):
-    """Camera control widget with exposure and gain sliders"""
+    """Camera control widget with camera selection and exposure/gain sliders"""
     
     def __init__(self, camera_live_widget, capture_shot_widget, parent=None):
         super().__init__(parent)
@@ -239,11 +259,29 @@ class CameraControlWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         self.setLayout(layout)
         
-        # First row: Camera buttons (2 columns)
-        layout.addWidget(camera_live_widget.native, 0, 0)
-        layout.addWidget(capture_shot_widget.native, 0, 1)
+        # Camera type selection row
+        camera_type_widget = QWidget()
+        camera_type_layout = QHBoxLayout()
+        camera_type_layout.setSpacing(5)
+        camera_type_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Second row: Sliders
+        camera_type_label = QLabel("Camera Type:")
+        camera_type_layout.addWidget(camera_type_label)
+        
+        self.camera_type_combo = QComboBox()
+        self.camera_type_combo.addItem("POA Camera")
+        self.camera_type_combo.addItem("ZWO Camera")
+        self.camera_type_combo.currentTextChanged.connect(self.on_camera_type_changed)
+        camera_type_layout.addWidget(self.camera_type_combo)
+        
+        camera_type_widget.setLayout(camera_type_layout)
+        layout.addWidget(camera_type_widget, 0, 0, 1, 2)  # Span 2 columns
+        
+        # Second row: Camera buttons (2 columns)
+        layout.addWidget(camera_live_widget.native, 1, 0)
+        layout.addWidget(capture_shot_widget.native, 1, 1)
+        
+        # Third row: Sliders
         # Exposure control (first column)
         exposure_widget = QWidget()
         exposure_layout = QVBoxLayout()
@@ -262,7 +300,7 @@ class CameraControlWidget(QWidget):
         exposure_layout.addWidget(self.exposure_slider)
         
         exposure_widget.setLayout(exposure_layout)
-        layout.addWidget(exposure_widget, 1, 0)
+        layout.addWidget(exposure_widget, 2, 0)
         
         # Gain control (second column)
         gain_widget = QWidget()
@@ -282,10 +320,38 @@ class CameraControlWidget(QWidget):
         gain_layout.addWidget(self.gain_slider)
         
         gain_widget.setLayout(gain_layout)
-        layout.addWidget(gain_widget, 1, 1)
+        layout.addWidget(gain_widget, 2, 1)
         
         # Set fixed height for better appearance
-        self.setFixedHeight(120)
+        self.setFixedHeight(150)  # Increased to accommodate camera selection
+    
+    def get_camera_type(self):
+        """Get the currently selected camera type"""
+        if self.camera_type_combo.currentText() == "ZWO Camera":
+            return "ZWO"
+        else:
+            return "POA"
+    
+    @pyqtSlot(str)
+    def on_camera_type_changed(self, camera_type_text):
+        """Handle camera type change"""
+        # Reset camera instances when type changes
+        if hasattr(self.camera_live_widget, 'camera'):
+            if self.camera_live_widget.is_running:
+                show_info("⚠️ Please stop camera live view before changing camera type")
+                return
+            
+            # Disconnect current camera
+            self.camera_live_widget.camera.disconnect()
+            del self.camera_live_widget.camera
+        
+        if hasattr(self.capture_shot_widget, 'camera'):
+            self.capture_shot_widget.camera.disconnect()
+            del self.capture_shot_widget.camera
+        
+        # Show info about the change
+        camera_type = "ZWO" if camera_type_text == "ZWO Camera" else "POA"
+        show_info(f"📷 Switched to {camera_type} camera mode")
     
     @pyqtSlot(int)
     def update_exposure(self, value):
@@ -304,14 +370,24 @@ class CameraControlWidget(QWidget):
 
 def create_camera_control_widget(viewer):
     """Factory function to create a complete camera control widget with proper connections"""
-    # Create the camera live widget
-    camera_live_widget = camera_live(viewer)
-    
     # Create a settings container to hold current values
     camera_settings = {'exposure_ms': 50, 'gain': 300}
     
-    # Create capture_shot widget with settings callback
-    capture_shot_widget = capture_shot(viewer, lambda: camera_settings)
+    # We need to create the control widget first to have access to get_camera_type
+    # So we'll create placeholders first
+    camera_control_widget = None
+    
+    # Camera type callback function
+    def get_camera_type():
+        if camera_control_widget:
+            return camera_control_widget.get_camera_type()
+        return "POA"  # Default
+    
+    # Create the camera live widget with camera type callback
+    camera_live_widget = camera_live(viewer, get_camera_type)
+    
+    # Create capture_shot widget with settings callback and camera type callback
+    capture_shot_widget = capture_shot(viewer, lambda: camera_settings, get_camera_type)
     
     # Create the control widget
     camera_control_widget = CameraControlWidget(camera_live_widget, capture_shot_widget)
