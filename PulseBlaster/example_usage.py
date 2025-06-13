@@ -100,9 +100,9 @@ def channel_test():
             # Create a simple pulse on this channel
             from pulsestreamer import Sequence
             sequence = Sequence()
-            sequence.setDigital(channel, True)
-            sequence.wait(1000000)  # 1 ms pulse
-            sequence.setDigital(channel, False)
+            # Create pattern: 1 ms high pulse
+            pattern = [(1000000, 1)]  # 1 ms high
+            sequence.setDigital(channel, pattern)
             
             controller.run_sequence(sequence)
             time.sleep(0.5)
