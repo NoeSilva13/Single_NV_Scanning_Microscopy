@@ -139,8 +139,8 @@ def update_scan_parameters(config_manager, scan_points_manager):
         x_max={"widget_type": "FloatSpinBox", "value": x_range[1], "min": -10, "max": 10, "step": 0.1, "label": "X Max (V)"},
         y_min={"widget_type": "FloatSpinBox", "value": y_range[0], "min": -10, "max": 10, "step": 0.1, "label": "Y Min (V)"},
         y_max={"widget_type": "FloatSpinBox", "value": y_range[1], "min": -10, "max": 10, "step": 0.1, "label": "Y Max (V)"},
-        x_resolution={"widget_type": "SpinBox", "value": x_res, "min": 2, "max": 100, "label": "X Res (px)"},
-        y_resolution={"widget_type": "SpinBox", "value": y_res, "min": 2, "max": 100, "label": "Y Res (px)"},
+        x_resolution={"widget_type": "SpinBox", "value": x_res, "min": 2, "max": 200, "label": "X Res (px)"},
+        y_resolution={"widget_type": "SpinBox", "value": y_res, "min": 2, "max": 200, "label": "Y Res (px)"},
         call_button="Apply Changes"
     )
     def _update_scan_parameters(

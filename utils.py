@@ -3,7 +3,7 @@ Utility functions and constants for the Napari Scanning SPD application.
 """
 
 # Calibration constant: microns per volt based on empirical measurements
-MICRONS_PER_VOLT = 87.5
+MICRONS_PER_VOLT = 86
 
 
 def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):
