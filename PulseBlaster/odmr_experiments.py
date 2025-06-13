@@ -533,8 +533,8 @@ class ODMRExperiments:
 
 
 def run_example_experiments():
-    """Run example ODMR experiments"""
-    print("🚀 Starting ODMR Experiment Examples...")
+    """Run example ODMR experiments with RIGOL integration"""
+    print("🚀 Starting ODMR Experiment Examples with RIGOL DSG836...")
     
     # Initialize pulse controller
     controller = SwabianPulseController()
@@ -543,8 +543,20 @@ def run_example_experiments():
         print("❌ Pulse controller not connected. Running in simulation mode.")
         return
     
-    # Initialize experiments
-    experiments = ODMRExperiments(controller)
+    # Initialize RIGOL signal generator
+    try:
+        rigol = RigolDSG836Controller("192.168.0.222")
+        if rigol.connect():
+            print("✅ RIGOL DSG836 connected successfully")
+        else:
+            print("⚠️  RIGOL DSG836 not connected. Running without MW control.")
+            rigol = None
+    except Exception as e:
+        print(f"⚠️  RIGOL DSG836 connection failed: {e}. Running without MW control.")
+        rigol = None
+    
+    # Initialize experiments with both controllers
+    experiments = ODMRExperiments(controller, rigol)
     
     try:
         # 1. CW ODMR
@@ -577,6 +589,10 @@ def run_example_experiments():
         print(f"❌ Error during experiments: {e}")
     
     finally:
+        # Clean up connections
+        if rigol:
+            rigol.set_rf_output(False)  # Safety: turn off RF output
+            rigol.disconnect()
         controller.disconnect()
 
 
