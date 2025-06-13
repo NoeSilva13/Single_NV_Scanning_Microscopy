@@ -146,4 +146,4 @@ def live_plot(
         figsize,
         bg_color,
         plot_color
-    )
+    ) 
