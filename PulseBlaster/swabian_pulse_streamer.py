@@ -34,7 +34,7 @@ class SwabianPulseController:
     CHANNEL_MW = 1       # Microwave
     CHANNEL_SPD = 2      # SPD Gate
     
-    def __init__(self, ip_address: str = "169.254.8.2"):
+    def __init__(self, ip_address: str = "192.168.0.201"):
         """
         Initialize the Pulse Streamer controller.
         
