@@ -11,22 +11,26 @@ Date: 2025
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from swabian_pulse_streamer import SwabianPulseController
+from rigol_dsg836 import RigolDSG836Controller
 
 class ODMRExperiments:
     """
     Class containing various ODMR experiment implementations.
     """
     
-    def __init__(self, pulse_controller: SwabianPulseController):
+    def __init__(self, pulse_controller: SwabianPulseController, 
+                 mw_generator: Optional[RigolDSG836Controller] = None):
         """
-        Initialize ODMR experiments with a pulse controller.
+        Initialize ODMR experiments with a pulse controller and optional MW generator.
         
         Args:
             pulse_controller: Instance of SwabianPulseController
+            mw_generator: Optional instance of RigolDSG836Controller for MW control
         """
         self.pulse_controller = pulse_controller
+        self.mw_generator = mw_generator
         self.results = {}
     
     def continuous_wave_odmr(self, 
@@ -66,8 +70,10 @@ class ODMRExperiments:
             )
             
             if sequence:
-                # Here you would set the MW frequency on your MW source
-                # mw_generator.set_frequency(freq)
+                # Set MW frequency on the RIGOL signal generator
+                if self.mw_generator:
+                    self.mw_generator.set_odmr_frequency(freq / 1e9)  # Convert Hz to GHz
+                    self.mw_generator.set_rf_output(True)
                 
                 self.pulse_controller.run_sequence(sequence)
                 time.sleep(0.1)  # Let sequence complete
@@ -79,6 +85,11 @@ class ODMRExperiments:
                 count_rates.append(count_rate)
                 
                 self.pulse_controller.stop_sequence()
+                
+                # Turn off RF output after measurement
+                if self.mw_generator:
+                    self.mw_generator.set_rf_output(False)
+                
                 time.sleep(0.05)
         
         self.results['cw_odmr'] = {
@@ -111,6 +122,11 @@ class ODMRExperiments:
         durations = []
         count_rates = []
         
+        # Set MW frequency and power for Rabi oscillation
+        if self.mw_generator:
+            self.mw_generator.set_odmr_frequency(mw_frequency / 1e9)  # Convert Hz to GHz
+            self.mw_generator.prepare_for_odmr(mw_frequency / 1e9, -10.0)
+        
         for mw_duration in mw_durations:
             print(f"⏱️ MW duration: {mw_duration} ns")
             
@@ -126,6 +142,10 @@ class ODMRExperiments:
             )
             
             if sequence:
+                # Enable RF output for this measurement
+                if self.mw_generator:
+                    self.mw_generator.set_rf_output(True)
+                
                 self.pulse_controller.run_sequence(sequence)
                 time.sleep(0.1)
                 
@@ -136,6 +156,11 @@ class ODMRExperiments:
                 count_rates.append(count_rate)
                 
                 self.pulse_controller.stop_sequence()
+                
+                # Turn off RF output after measurement
+                if self.mw_generator:
+                    self.mw_generator.set_rf_output(False)
+                    
                 time.sleep(0.05)
         
         self.results['rabi'] = {
@@ -251,6 +276,92 @@ class ODMRExperiments:
         
         print("✅ Spin Echo measurement completed")
         return self.results['spin_echo']
+    
+    def automated_odmr_sweep(self,
+                           start_freq_ghz: float = 2.8,
+                           stop_freq_ghz: float = 2.9,
+                           num_points: int = 101,
+                           power_dbm: float = -10.0,
+                           laser_duration: int = 2000,
+                           detection_duration: int = 1000,
+                           measurements_per_point: int = 100) -> Dict:
+        """
+        Perform automated ODMR sweep using RIGOL's internal frequency sweep.
+        
+        Args:
+            start_freq_ghz: Start frequency in GHz
+            stop_freq_ghz: Stop frequency in GHz
+            num_points: Number of frequency points
+            power_dbm: MW power in dBm
+            laser_duration: Duration of laser pulse in ns
+            detection_duration: Duration of detection window in ns
+            measurements_per_point: Number of measurements per frequency point
+            
+        Returns:
+            Dictionary containing frequencies and corresponding count rates
+        """
+        if not self.mw_generator:
+            print("❌ MW generator not available for automated sweep")
+            return {}
+        
+        print(f"🔬 Starting automated ODMR sweep: {start_freq_ghz}-{stop_freq_ghz} GHz")
+        
+        # Setup frequency sweep on RIGOL
+        self.mw_generator.frequency_sweep_setup(
+            start_freq_ghz, stop_freq_ghz, num_points, power_dbm
+        )
+        
+        # Create ODMR sequence for each frequency point
+        sequence = self.pulse_controller.create_odmr_sequence(
+            laser_duration=laser_duration,
+            mw_duration=detection_duration,
+            detection_duration=detection_duration,
+            laser_delay=0,
+            mw_delay=laser_duration + 100,
+            detection_delay=laser_duration + 100,
+            repetitions=measurements_per_point
+        )
+        
+        frequencies = []
+        count_rates = []
+        
+        # Enable RF output
+        self.mw_generator.set_rf_output(True)
+        
+        for i in range(num_points):
+            # Trigger next frequency point
+            self.mw_generator.trigger_sweep_point()
+            
+            # Get current frequency for logging
+            current_freq = start_freq_ghz + (stop_freq_ghz - start_freq_ghz) * i / (num_points - 1)
+            print(f"📡 Point {i+1}/{num_points}: {current_freq:.4f} GHz")
+            
+            if sequence:
+                self.pulse_controller.run_sequence(sequence)
+                time.sleep(0.1)
+                
+                # Simulate count rate (replace with actual detector readout)
+                count_rate = self._simulate_odmr_signal(current_freq * 1e9, 2.87e9)
+                
+                frequencies.append(current_freq)
+                count_rates.append(count_rate)
+                
+                self.pulse_controller.stop_sequence()
+                time.sleep(0.05)
+        
+        # Turn off RF output
+        self.mw_generator.set_rf_output(False)
+        
+        # Turn off sweep mode
+        self.mw_generator.write(":SWE:STAT OFF")
+        
+        self.results['automated_odmr'] = {
+            'frequencies': frequencies,
+            'count_rates': count_rates
+        }
+        
+        print("✅ Automated ODMR sweep completed")
+        return self.results['automated_odmr']
     
     def _create_ramsey_sequence(self, pi_half_duration: int, tau: int, 
                                laser_duration: int, detection_duration: int):
@@ -385,11 +496,18 @@ class ODMRExperiments:
         
         plt.figure(figsize=(10, 6))
         
-        if experiment_type == 'cw_odmr':
-            plt.plot(np.array(data['frequencies'])/1e6, data['count_rates'], 'bo-')
+        if experiment_type == 'cw_odmr' or experiment_type == 'automated_odmr':
+            if experiment_type == 'cw_odmr':
+                freqs = np.array(data['frequencies'])/1e6  # Convert Hz to MHz
+                title = 'Continuous Wave ODMR'
+            else:
+                freqs = np.array(data['frequencies']) * 1000  # Convert GHz to MHz
+                title = 'Automated ODMR Sweep (RIGOL)'
+            
+            plt.plot(freqs, data['count_rates'], 'bo-')
             plt.xlabel('Frequency (MHz)')
             plt.ylabel('Count Rate (Hz)')
-            plt.title('Continuous Wave ODMR')
+            plt.title(title)
             
         elif experiment_type == 'rabi':
             plt.plot(data['durations'], data['count_rates'], 'ro-')

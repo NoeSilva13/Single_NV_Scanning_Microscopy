@@ -13,9 +13,10 @@ Date: 2025
 
 try:
     from .swabian_pulse_streamer import SwabianPulseController
+    from .rigol_dsg836 import RigolDSG836Controller
     from .odmr_experiments import ODMRExperiments
     
-    __all__ = ['SwabianPulseController', 'ODMRExperiments']
+    __all__ = ['SwabianPulseController', 'RigolDSG836Controller', 'ODMRExperiments']
     
 except ImportError as e:
     print(f"Warning: Could not import all PulseBlaster modules: {e}")
