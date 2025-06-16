@@ -34,6 +34,48 @@ class SwabianPulseController:
     CHANNEL_MW = 1       # Microwave
     CHANNEL_SPD = 2      # SPD Gate
     
+    # Pulse Streamer timing constants
+    TIMING_RESOLUTION = 8  # 8 ns minimum timing resolution
+    
+    @staticmethod
+    def align_timing(duration_ns: int) -> int:
+        """
+        Align timing to 8 ns boundaries required by Pulse Streamer hardware.
+        
+        Args:
+            duration_ns: Duration in nanoseconds
+            
+        Returns:
+            Duration aligned to nearest 8 ns boundary (rounded up)
+        """
+        return ((duration_ns + 7) // 8) * 8
+    
+    @staticmethod
+    def round_to_nearest_8ns(value: int) -> int:
+        """
+        Round value to nearest multiple of 8 ns (matches reference code approach).
+        
+        Args:
+            value: Value in nanoseconds
+            
+        Returns:
+            Value rounded to nearest 8 ns multiple
+        """
+        return round(value / 8) * 8
+    
+    @staticmethod
+    def validate_timing(duration_ns: int) -> bool:
+        """
+        Check if timing is aligned to 8 ns boundaries.
+        
+        Args:
+            duration_ns: Duration in nanoseconds
+            
+        Returns:
+            True if aligned, False otherwise
+        """
+        return duration_ns % 8 == 0
+    
     def __init__(self, ip_address: str = "192.168.0.201"):
         """
         Initialize the Pulse Streamer controller.
@@ -45,15 +87,15 @@ class SwabianPulseController:
         self.pulse_streamer = None
         self.is_connected = False
         
-        # Default timing parameters (in nanoseconds)
+        # Default timing parameters (in nanoseconds) - All values must be multiples of 8 ns
         self.default_params = {
-            'laser_duration': 1000,      # 1 µs laser pulse
-            'mw_duration': 100,          # 100 ns MW pulse
-            'detection_duration': 500,   # 500 ns detection window
-            'laser_delay': 50,           # 50 ns delay before laser
-            'mw_delay': 100,             # 100 ns delay before MW
-            'detection_delay': 200,      # 200 ns delay before detection
-            'sequence_interval': 10000,  # 10 µs between sequences
+            'laser_duration': 1000,      # 1 µs laser pulse (125 * 8)
+            'mw_duration': 104,          # 104 ns MW pulse (13 * 8)
+            'detection_duration': 504,   # 504 ns detection window (63 * 8)
+            'laser_delay': 48,           # 48 ns delay before laser (6 * 8)
+            'mw_delay': 104,             # 104 ns delay before MW (13 * 8)
+            'detection_delay': 200,      # 200 ns delay before detection (25 * 8)
+            'sequence_interval': 10000,  # 10 µs between sequences (1250 * 8)
         }
         
         self.connect()
@@ -115,7 +157,7 @@ class SwabianPulseController:
                            detection_delay: int = None,
                            repetitions: int = 1) -> Optional[Sequence]:
         """
-        Create an ODMR pulse sequence.
+        Create an ODMR pulse sequence following proper 8ns pattern building.
         
         Args:
             laser_duration: Duration of laser pulse in ns
@@ -133,85 +175,123 @@ class SwabianPulseController:
             print("❌ Device not connected")
             return None
         
-        # Use default parameters if not specified
+        # Use default parameters if not specified and align all timing to 8 ns boundaries
         params = self.default_params.copy()
         if laser_duration is not None:
-            params['laser_duration'] = laser_duration
+            params['laser_duration'] = self.align_timing(laser_duration)
         if mw_duration is not None:
-            params['mw_duration'] = mw_duration
+            params['mw_duration'] = self.align_timing(mw_duration)
         if detection_duration is not None:
-            params['detection_duration'] = detection_duration
+            params['detection_duration'] = self.align_timing(detection_duration)
         if laser_delay is not None:
-            params['laser_delay'] = laser_delay
+            params['laser_delay'] = self.align_timing(laser_delay)
         if mw_delay is not None:
-            params['mw_delay'] = mw_delay
+            params['mw_delay'] = self.align_timing(mw_delay)
         if detection_delay is not None:
-            params['detection_delay'] = detection_delay
+            params['detection_delay'] = self.align_timing(detection_delay)
         
         try:
-            # Create patterns for each channel
-            aom_pattern = []
-            mw_pattern = []
-            spd_pattern = []
+            # Calculate total sequence duration per repetition
+            single_seq_duration = max(
+                params['laser_delay'] + params['laser_duration'],
+                params['mw_delay'] + params['mw_duration'],
+                params['detection_delay'] + params['detection_duration']
+            )
             
-            for rep in range(repetitions):
-                # Add inter-sequence delay if not first repetition
-                if rep > 0:
-                    inter_delay = params['sequence_interval']
-                    aom_pattern.append((inter_delay, 0))
-                    mw_pattern.append((inter_delay, 0))
-                    spd_pattern.append((inter_delay, 0))
-                
-                # Build the pulse sequence for each channel
-                # AOM (Laser) pulse
-                if params['laser_delay'] > 0:
-                    aom_pattern.append((params['laser_delay'], 0))  # Initial delay
-                aom_pattern.append((params['laser_duration'], 1))    # Laser ON
-                
-                # MW pulse
-                if params['mw_delay'] > 0:
-                    mw_pattern.append((params['mw_delay'], 0))       # Initial delay
-                mw_pattern.append((params['mw_duration'], 1))        # MW ON
-                
-                # SPD gate
-                if params['detection_delay'] > 0:
-                    spd_pattern.append((params['detection_delay'], 0))  # Initial delay
-                spd_pattern.append((params['detection_duration'], 1))   # SPD ON
-                
-                # Calculate remaining time to pad all channels to same duration
-                total_duration = max(
-                    params['laser_delay'] + params['laser_duration'],
-                    params['mw_delay'] + params['mw_duration'],
-                    params['detection_delay'] + params['detection_duration']
-                )
-                
-                # Pad each channel to total duration
-                aom_total = sum(duration for duration, _ in aom_pattern)
-                mw_total = sum(duration for duration, _ in mw_pattern)
-                spd_total = sum(duration for duration, _ in spd_pattern)
-                
-                if aom_total < total_duration:
-                    aom_pattern.append((total_duration - aom_total, 0))
-                if mw_total < total_duration:
-                    mw_pattern.append((total_duration - mw_total, 0))
-                if spd_total < total_duration:
-                    spd_pattern.append((total_duration - spd_total, 0))
+            # Ensure single sequence duration is 8ns aligned
+            single_seq_duration = self.align_timing(single_seq_duration)
             
-            # Create sequence and assign patterns
-            sequence = Sequence()
-            if aom_pattern:
-                sequence.setDigital(self.CHANNEL_AOM, aom_pattern)
-            if mw_pattern:
-                sequence.setDigital(self.CHANNEL_MW, mw_pattern)
-            if spd_pattern:
-                sequence.setDigital(self.CHANNEL_SPD, spd_pattern)
+            # Create pattern arrays following the working approach
+            aom_pattern = self._create_laser_pattern(params, single_seq_duration, repetitions)
+            mw_pattern = self._create_mw_pattern(params, single_seq_duration, repetitions)
+            spd_pattern = self._create_spd_pattern(params, single_seq_duration, repetitions)
             
-            print(f"✅ ODMR sequence created with {repetitions} repetitions")
+            # Validate total pattern duration is 8ns aligned
+            total_duration = sum(duration for duration, _ in aom_pattern)
+            if total_duration % 8 != 0:
+                print(f"❌ Error: Total sequence length ({total_duration} ns) not multiple of 8 ns")
+                return None
+            
+            # Create sequence using createSequence method like in working code
+            sequence = self.pulse_streamer.createSequence()
+            
+            # Set patterns for each channel
+            sequence.setDigital(self.CHANNEL_AOM, aom_pattern)
+            sequence.setDigital(self.CHANNEL_MW, mw_pattern)
+            sequence.setDigital(self.CHANNEL_SPD, spd_pattern)
+            
+            print(f"✅ ODMR sequence created: {repetitions} reps, {total_duration} ns total (8ns aligned)")
             return sequence
             
         except Exception as e:
             print(f"❌ Error creating ODMR sequence: {e}")
             return None
+    
+    def _create_laser_pattern(self, params: Dict, seq_duration: int, repetitions: int) -> List[Tuple[int, int]]:
+        """Create laser (AOM) pattern array."""
+        pattern = []
+        
+        for rep in range(repetitions):
+            # Add inter-sequence delay if not first repetition
+            if rep > 0:
+                pattern.append((params['sequence_interval'], 0))
+            
+            # Laser pulse timing
+            if params['laser_delay'] > 0:
+                pattern.append((params['laser_delay'], 0))
+            pattern.append((params['laser_duration'], 1))
+            
+            # Calculate remaining time to fill sequence duration
+            used_time = params['laser_delay'] + params['laser_duration']
+            remaining_time = seq_duration - used_time
+            if remaining_time > 0:
+                pattern.append((remaining_time, 0))
+        
+        return pattern
+    
+    def _create_mw_pattern(self, params: Dict, seq_duration: int, repetitions: int) -> List[Tuple[int, int]]:
+        """Create microwave pattern array."""
+        pattern = []
+        
+        for rep in range(repetitions):
+            # Add inter-sequence delay if not first repetition
+            if rep > 0:
+                pattern.append((params['sequence_interval'], 0))
+            
+            # MW pulse timing
+            if params['mw_delay'] > 0:
+                pattern.append((params['mw_delay'], 0))
+            pattern.append((params['mw_duration'], 1))
+            
+            # Calculate remaining time to fill sequence duration
+            used_time = params['mw_delay'] + params['mw_duration']
+            remaining_time = seq_duration - used_time
+            if remaining_time > 0:
+                pattern.append((remaining_time, 0))
+        
+        return pattern
+    
+    def _create_spd_pattern(self, params: Dict, seq_duration: int, repetitions: int) -> List[Tuple[int, int]]:
+        """Create SPD gate pattern array."""
+        pattern = []
+        
+        for rep in range(repetitions):
+            # Add inter-sequence delay if not first repetition
+            if rep > 0:
+                pattern.append((params['sequence_interval'], 0))
+            
+            # SPD gate timing
+            if params['detection_delay'] > 0:
+                pattern.append((params['detection_delay'], 0))
+            pattern.append((params['detection_duration'], 1))
+            
+            # Calculate remaining time to fill sequence duration
+            used_time = params['detection_delay'] + params['detection_duration']
+            remaining_time = seq_duration - used_time
+            if remaining_time > 0:
+                pattern.append((remaining_time, 0))
+        
+        return pattern
     
     def _create_overlapping_sequence(self, params: Dict, repetitions: int) -> Optional[Sequence]:
         """Create sequence with overlapping pulses using more complex timing."""
@@ -300,7 +380,7 @@ class SwabianPulseController:
     
     def create_simple_laser_pulse(self, duration_ns: int = 1000) -> Optional[Sequence]:
         """
-        Create a simple laser pulse for testing.
+        Create a simple laser pulse for testing with proper 8 ns timing alignment.
         
         Args:
             duration_ns: Duration of the laser pulse in nanoseconds
@@ -311,13 +391,23 @@ class SwabianPulseController:
         if not self.is_connected:
             return None
         
+        # Align duration to 8 ns boundary
+        aligned_duration = self.align_timing(duration_ns)
+        
+        if aligned_duration != duration_ns:
+            print(f"🔧 Pulse duration aligned from {duration_ns} ns to {aligned_duration} ns")
+        
         try:
-            sequence = Sequence()
-            # Create pattern: duration in ns, level (0 or 1)
-            laser_pattern = [(duration_ns, 1)]  # High for duration_ns
+            # Create sequence using createSequence like working code
+            sequence = self.pulse_streamer.createSequence()
+            
+            # Create pattern array: [(duration, level)]
+            laser_pattern = [(aligned_duration, 1)]
+            
+            # Set digital pattern for AOM channel
             sequence.setDigital(self.CHANNEL_AOM, laser_pattern)
             
-            print(f"✅ Simple laser pulse created ({duration_ns} ns)")
+            print(f"✅ Simple laser pulse created ({aligned_duration} ns, 8 ns aligned)")
             return sequence
         except Exception as e:
             print(f"❌ Error creating laser pulse: {e}")
@@ -327,7 +417,7 @@ class SwabianPulseController:
                            laser_duration: int = 1000,
                            detection_duration: int = 500) -> Optional[Sequence]:
         """
-        Create a Rabi oscillation measurement sequence.
+        Create a Rabi oscillation measurement sequence with proper 8 ns timing alignment.
         
         Args:
             mw_durations: List of MW pulse durations in ns
@@ -340,48 +430,68 @@ class SwabianPulseController:
         if not self.is_connected:
             return None
         
+        # Align all timing parameters to 8 ns boundaries
+        laser_duration = self.align_timing(laser_duration)
+        detection_duration = self.align_timing(detection_duration)
+        mw_durations = [self.align_timing(d) for d in mw_durations]
+        
         try:
-            # Create patterns for each channel
+            # Create pattern arrays for each channel
             aom_pattern = []
             mw_pattern = []
             spd_pattern = []
             
+            # Build patterns for each MW duration
             for i, mw_duration in enumerate(mw_durations):
                 # Add inter-sequence delay if not first sequence
                 if i > 0:
-                    inter_delay = 10000  # 10 µs
+                    inter_delay = self.align_timing(10000)  # 10 µs aligned
                     aom_pattern.append((inter_delay, 0))
                     mw_pattern.append((inter_delay, 0))
                     spd_pattern.append((inter_delay, 0))
                 
-                # AOM pattern: laser for initialization
-                aom_pattern.append((laser_duration, 1))  # Laser ON
-                aom_pattern.append((1000, 0))             # Wait 1 µs
-                aom_pattern.append((mw_duration, 0))      # MW period (laser OFF)
-                aom_pattern.append((detection_duration, 0))  # Detection period (laser OFF)
+                # Timing constants
+                wait_time = self.align_timing(1000)  # 1 µs wait time
                 
-                # MW pattern: off during laser, then MW pulse
-                mw_pattern.append((laser_duration, 0))    # Laser period (MW OFF)
-                mw_pattern.append((1000, 0))              # Wait period (MW OFF)
-                mw_pattern.append((mw_duration, 1))       # MW ON
-                mw_pattern.append((detection_duration, 0))   # Detection period (MW OFF)
+                # AOM pattern: initialization laser -> wait -> off during MW -> off during detection
+                aom_pattern.extend([
+                    (laser_duration, 1),       # Initialization laser ON
+                    (wait_time, 0),            # Wait period
+                    (mw_duration, 0),          # MW period (laser OFF)
+                    (detection_duration, 0)    # Detection period (laser OFF)
+                ])
                 
-                # SPD pattern: off during laser and MW, then detect
-                spd_pattern.append((laser_duration, 0))    # Laser period (SPD OFF)
-                spd_pattern.append((1000, 0))              # Wait period (SPD OFF)
-                spd_pattern.append((mw_duration, 0))       # MW period (SPD OFF)
-                spd_pattern.append((detection_duration, 1))   # SPD ON
+                # MW pattern: off during laser -> off during wait -> MW pulse -> off during detection
+                mw_pattern.extend([
+                    (laser_duration, 0),       # Laser period (MW OFF)
+                    (wait_time, 0),            # Wait period (MW OFF)
+                    (mw_duration, 1),          # MW ON
+                    (detection_duration, 0)    # Detection period (MW OFF)
+                ])
+                
+                # SPD pattern: off during laser -> off during wait -> off during MW -> detection gate
+                spd_pattern.extend([
+                    (laser_duration, 0),       # Laser period (SPD OFF)
+                    (wait_time, 0),            # Wait period (SPD OFF)
+                    (mw_duration, 0),          # MW period (SPD OFF)
+                    (detection_duration, 1)    # SPD ON for detection
+                ])
             
-            # Create sequence and assign patterns
-            sequence = Sequence()
-            if aom_pattern:
-                sequence.setDigital(self.CHANNEL_AOM, aom_pattern)
-            if mw_pattern:
-                sequence.setDigital(self.CHANNEL_MW, mw_pattern)
-            if spd_pattern:
-                sequence.setDigital(self.CHANNEL_SPD, spd_pattern)
+            # Validate total pattern duration is 8ns aligned
+            total_duration = sum(duration for duration, _ in aom_pattern)
+            if total_duration % 8 != 0:
+                print(f"❌ Error: Rabi sequence length ({total_duration} ns) not multiple of 8 ns")
+                return None
             
-            print(f"✅ Rabi sequence created with {len(mw_durations)} MW durations")
+            # Create sequence using createSequence like working code
+            sequence = self.pulse_streamer.createSequence()
+            
+            # Set patterns for each channel
+            sequence.setDigital(self.CHANNEL_AOM, aom_pattern)
+            sequence.setDigital(self.CHANNEL_MW, mw_pattern)
+            sequence.setDigital(self.CHANNEL_SPD, spd_pattern)
+            
+            print(f"✅ Rabi sequence created: {len(mw_durations)} MW durations, {total_duration} ns total")
             return sequence
             
         except Exception as e:

@@ -566,22 +566,22 @@ def run_example_experiments():
         experiments.plot_results('cw_odmr')
         
         # 2. Rabi oscillation
-        print("\n" + "="*50)
-        mw_durations = np.arange(0, 200, 5)  # 0-200 ns in 5 ns steps
-        rabi_result = experiments.rabi_oscillation(mw_durations)
-        experiments.plot_results('rabi')
+        #print("\n" + "="*50)
+        #mw_durations = np.arange(0, 200, 5)  # 0-200 ns in 5 ns steps
+        #rabi_result = experiments.rabi_oscillation(mw_durations)
+        #experiments.plot_results('rabi')
         
         # 3. Ramsey experiment
-        print("\n" + "="*50)
-        tau_delays = np.arange(0, 2000, 50)  # 0-2 µs in 50 ns steps
-        ramsey_result = experiments.ramsey_experiment(tau_delays)
-        experiments.plot_results('ramsey')
+        #print("\n" + "="*50)
+        #tau_delays = np.arange(0, 2000, 50)  # 0-2 µs in 50 ns steps
+        #ramsey_result = experiments.ramsey_experiment(tau_delays)
+        #experiments.plot_results('ramsey')
         
         # 4. Spin echo
-        print("\n" + "="*50)
-        tau_delays = np.arange(100, 10000, 200)  # 100 ns - 10 µs
-        echo_result = experiments.spin_echo(tau_delays)
-        experiments.plot_results('spin_echo')
+        #print("\n" + "="*50)
+        #tau_delays = np.arange(100, 10000, 200)  # 100 ns - 10 µs
+        #echo_result = experiments.spin_echo(tau_delays)
+        #experiments.plot_results('spin_echo')
         
         print("\n✅ All example experiments completed!")
         
