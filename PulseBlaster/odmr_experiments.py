@@ -73,6 +73,7 @@ class ODMRExperiments:
     def continuous_wave_odmr(self, 
                            mw_frequencies: List[float],
                            laser_duration: int = 2000,
+                           mw_duration: int = 2000,
                            detection_duration: int = 1000,
                            measurements_per_point: int = 100) -> Dict:
         """
@@ -98,7 +99,7 @@ class ODMRExperiments:
             # Create CW ODMR sequence
             sequence = self.pulse_controller.create_odmr_sequence(
                 laser_duration=laser_duration,
-                mw_duration=detection_duration,  # MW on during detection
+                mw_duration=mw_duration,  # MW on during detection
                 detection_duration=detection_duration,
                 laser_delay=0,
                 mw_delay=laser_duration + 100,  # MW after laser
@@ -600,7 +601,7 @@ def run_example_experiments():
         # 1. CW ODMR
         print("\n" + "="*50)
         frequencies = np.linspace(2.85e9, 2.89e9, 50)  # 2.85-2.89 GHz
-        cw_result = experiments.continuous_wave_odmr(frequencies, laser_duration=5000, detection_duration=5000, measurements_per_point=5)
+        cw_result = experiments.continuous_wave_odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, measurements_per_point=5)
         experiments.plot_results('cw_odmr')
         
         # 2. Rabi oscillation
