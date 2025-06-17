@@ -155,6 +155,7 @@ class SwabianPulseController:
                            laser_delay: int = None,
                            mw_delay: int = None,
                            detection_delay: int = None,
+                           sequence_interval: int = None,
                            repetitions: int = 1) -> Optional[Sequence]:
         """
         Create an ODMR pulse sequence following proper 8ns pattern building.
@@ -166,6 +167,7 @@ class SwabianPulseController:
             laser_delay: Delay before laser pulse in ns
             mw_delay: Delay before MW pulse in ns
             detection_delay: Delay before detection in ns
+            sequence_interval: Dead time between sequence repetitions in ns
             repetitions: Number of sequence repetitions
             
         Returns:
@@ -189,6 +191,8 @@ class SwabianPulseController:
             params['mw_delay'] = self.align_timing(mw_delay)
         if detection_delay is not None:
             params['detection_delay'] = self.align_timing(detection_delay)
+        if sequence_interval is not None:
+            params['sequence_interval'] = self.align_timing(sequence_interval)
         
         try:
             # Calculate total sequence duration per repetition
@@ -212,6 +216,9 @@ class SwabianPulseController:
                 print(f"❌ Error: Total sequence length ({total_duration} ns) not multiple of 8 ns")
                 return None
             
+            # Calculate actual experiment time including intervals
+            sequence_time = single_seq_duration * repetitions + params['sequence_interval'] * (repetitions - 1)
+            
             # Create sequence using createSequence method like in working code
             sequence = self.pulse_streamer.createSequence()
             
@@ -220,7 +227,7 @@ class SwabianPulseController:
             sequence.setDigital(self.CHANNEL_MW, mw_pattern)
             sequence.setDigital(self.CHANNEL_SPD, spd_pattern)
             
-            print(f"✅ ODMR sequence created: {repetitions} reps, {total_duration} ns total (8ns aligned)")
+            print(f"✅ ODMR sequence created: {repetitions} reps, {total_duration} ns total, {params['sequence_interval']} ns intervals (8ns aligned)")
             return sequence
             
         except Exception as e:
