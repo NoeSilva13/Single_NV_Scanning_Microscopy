@@ -15,6 +15,9 @@ from typing import List, Tuple, Dict, Optional
 from swabian_pulse_streamer import SwabianPulseController
 from rigol_dsg836 import RigolDSG836Controller
 
+# TimeTagger imports for real data acquisition
+from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual
+
 class ODMRExperiments:
     """
     Class containing various ODMR experiment implementations.
@@ -32,6 +35,40 @@ class ODMRExperiments:
         self.pulse_controller = pulse_controller
         self.mw_generator = mw_generator
         self.results = {}
+        
+        # Initialize TimeTagger for real data acquisition
+        try:
+            self.tagger = createTimeTagger()
+            self.tagger.reset()
+            print("✅ Connected to real TimeTagger device")
+        except Exception as e:
+            print("⚠️ Real TimeTagger not detected, using virtual device")
+            self.tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+            self.tagger.run()
+        
+        # Set bin width to 5 ns and initialize counter
+        self.binwidth = int(5e9)  # 5 ns in ps
+        n_values = 1
+        self.counter = Counter(self.tagger, [1], self.binwidth, n_values)
+    
+    def _get_count_rate(self) -> float:
+        """
+        Get count rate from TimeTagger.
+        
+        Returns:
+            Count rate in Hz
+        """
+        counts = self.counter.getData()[0][0]/(self.binwidth/1e12)
+        return counts
+    
+    def cleanup(self):
+        """
+        Clean up TimeTagger resources.
+        Call this when done with experiments.
+        """
+        if hasattr(self, 'tagger'):
+            self.tagger.reset()
+            print("✅ TimeTagger resources cleaned up")
     
     def continuous_wave_odmr(self, 
                            mw_frequencies: List[float],
@@ -78,8 +115,8 @@ class ODMRExperiments:
                 self.pulse_controller.run_sequence(sequence)
                 time.sleep(0.1)  # Let sequence complete
                 
-                # Simulate count rate (replace with actual detector readout)
-                count_rate = self._simulate_odmr_signal(freq, 2.87e9)  # 2.87 GHz resonance
+                # Get real count rate from TimeTagger
+                count_rate = self._get_count_rate()
                 
                 frequencies.append(freq)
                 count_rates.append(count_rate)
@@ -149,8 +186,8 @@ class ODMRExperiments:
                 self.pulse_controller.run_sequence(sequence)
                 time.sleep(0.1)
                 
-                # Simulate Rabi oscillation (replace with actual measurement)
-                count_rate = self._simulate_rabi_signal(mw_duration, 50)  # 50 ns pi pulse
+                # Get real count rate from TimeTagger
+                count_rate = self._get_count_rate()
                 
                 durations.append(mw_duration)
                 count_rates.append(count_rate)
@@ -207,8 +244,8 @@ class ODMRExperiments:
                 self.pulse_controller.run_sequence(sequence)
                 time.sleep(0.1)
                 
-                # Simulate Ramsey fringes (replace with actual measurement)
-                count_rate = self._simulate_ramsey_signal(tau, 1000)  # 1 µs T2*
+                # Get real count rate from TimeTagger
+                count_rate = self._get_count_rate()
                 
                 delays.append(tau)
                 count_rates.append(count_rate)
@@ -260,8 +297,8 @@ class ODMRExperiments:
                 self.pulse_controller.run_sequence(sequence)
                 time.sleep(0.1)
                 
-                # Simulate spin echo decay (replace with actual measurement)
-                count_rate = self._simulate_spin_echo_signal(tau, 10000)  # 10 µs T2
+                # Get real count rate from TimeTagger
+                count_rate = self._get_count_rate()
                 
                 delays.append(tau)
                 count_rates.append(count_rate)
@@ -340,8 +377,8 @@ class ODMRExperiments:
                 self.pulse_controller.run_sequence(sequence)
                 time.sleep(0.1)
                 
-                # Simulate count rate (replace with actual detector readout)
-                count_rate = self._simulate_odmr_signal(current_freq * 1e9, 2.87e9)
+                # Get real count rate from TimeTagger
+                count_rate = self._get_count_rate()
                 
                 frequencies.append(current_freq)
                 count_rates.append(count_rate)
@@ -590,6 +627,7 @@ def run_example_experiments():
     
     finally:
         # Clean up connections
+        experiments.cleanup()  # Clean up TimeTagger resources
         if rigol:
             rigol.set_rf_output(False)  # Safety: turn off RF output
             rigol.disconnect()
