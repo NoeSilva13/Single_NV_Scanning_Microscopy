@@ -103,7 +103,7 @@ class ODMRExperiments:
                 laser_delay=0,
                 mw_delay=laser_duration + 100,  # MW after laser
                 detection_delay=0,
-                sequence_interval=20000,
+                sequence_interval=10000,
                 repetitions=measurements_per_point
             )
             
