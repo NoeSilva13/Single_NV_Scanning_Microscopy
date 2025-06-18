@@ -97,6 +97,8 @@ class ODMRExperiments:
         
         frequencies = []
         count_rates = []
+
+        self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
         
         for freq in mw_frequencies:
             print(f"📡 Measuring at {freq/1e6:.2f} MHz")
@@ -119,7 +121,7 @@ class ODMRExperiments:
                     self.mw_generator.set_odmr_frequency(freq / 1e9)  # Convert Hz to GHz
                     self.mw_generator.set_rf_output(True)
                 
-                self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
+                
                 self.counter.clear()
                 self.pulse_controller.run_sequence(sequence)
                 time.sleep(total_duration/1e9)  # Let sequence complete
