@@ -124,7 +124,6 @@ class ODMRExperiments:
                 
                 self.counter.clear()
                 print(f"{self.counter.getData()}")
-                time.sleep(0.1)
                 self.pulse_controller.run_sequence(sequence)
                 while self.counter.ready() == False:
                     print("Waiting for sequence to complete")
