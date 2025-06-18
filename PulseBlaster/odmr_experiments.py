@@ -97,54 +97,41 @@ class ODMRExperiments:
         
         frequencies = []
         count_rates = []
-
+        # Create CW ODMR sequence
+        sequence, total_duration = self.pulse_controller.create_odmr_sequence(
+            laser_duration=laser_duration,
+            mw_duration=mw_duration,  # MW on during detection
+            detection_duration=detection_duration,
+            laser_delay=laser_delay,
+            mw_delay=mw_delay,  # MW after laser
+            detection_delay=detection_delay,
+            sequence_interval=sequence_interval,
+            repetitions=repetitions
+            )
         #self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
         self.counter = Countrate(tagger=self.tagger, channels=[1])
+        if self.mw_generator:
+            self.mw_generator.set_rf_output(True)
         for freq in mw_frequencies:
             print(f"📡 Measuring at {freq/1e6:.2f} MHz")
-            
-            # Create CW ODMR sequence
-            sequence, total_duration = self.pulse_controller.create_odmr_sequence(
-                laser_duration=laser_duration,
-                mw_duration=mw_duration,  # MW on during detection
-                detection_duration=detection_duration,
-                laser_delay=laser_delay,
-                mw_delay=mw_delay,  # MW after laser
-                detection_delay=detection_delay,
-                sequence_interval=sequence_interval,
-                repetitions=repetitions
-            )
-            
-            if sequence:
-                # Set MW frequency on the RIGOL signal generator
-                if self.mw_generator:
-                    self.mw_generator.set_odmr_frequency(freq / 1e9)  # Convert Hz to GHz
-                    self.mw_generator.set_rf_output(True)
+            # Set MW frequency on the RIGOL signal generator
+            if self.mw_generator:
+                self.mw_generator.set_odmr_frequency(freq / 1e9)  # Convert Hz to GHz
                 
+            self.counter.clear() 
+            self.pulse_controller.run_sequence(sequence)
+            time.sleep(total_duration/1e9)  # Let sequence complete
+            self.pulse_controller.stop_sequence()
                 
-                self.counter.clear()
-                #print(f"Total counts: {self.counter.getCountsTotal()}")
-                self.pulse_controller.run_sequence(sequence)
-                time.sleep(total_duration/1e9)  # Let sequence complete
-                    
-                self.pulse_controller.stop_sequence()
-                #print(f"{self.counter.getData()}")
-                #print(f"Total counts after sequence: {self.counter.getCountsTotal()}")
-                # Get real count rate from TimeTagger
-                count_rate = np.mean(self.counter.getData())
-                print(f"Count rate: {count_rate} Hz")
+            # Get real count rate from TimeTagger
+            count_rate = np.mean(self.counter.getData())
+            print(f"Count rate: {count_rate} Hz")
                 
-                frequencies.append(freq)
-                count_rates.append(count_rate)
-                
-                
-                
-                # Turn off RF output after measurement
-                if self.mw_generator:
+            frequencies.append(freq)
+            count_rates.append(count_rate)
+        # Turn off RF output after measurement
+        if self.mw_generator:
                     self.mw_generator.set_rf_output(False)
-                
-                time.sleep(0.05)
-        
         self.results['cw_odmr'] = {
             'frequencies': frequencies,
             'count_rates': count_rates
