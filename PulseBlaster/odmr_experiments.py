@@ -122,11 +122,10 @@ class ODMRExperiments:
                 self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
                 self.counter.clear()
                 self.pulse_controller.run_sequence(sequence)
-                print(f"Total duration: {total_duration+sequence_interval} ns")
-                #time.sleep(0.1)  # Let sequence complete
-                
+                time.sleep(total_duration/1e9)  # Let sequence complete
                 # Get real count rate from TimeTagger
-                count_rate = 0
+                count_rate = np.mean(self.counter.getData())
+                print(f"Count rate: {count_rate} Hz")
                 
                 frequencies.append(freq)
                 count_rates.append(count_rate)
@@ -609,7 +608,7 @@ def run_example_experiments():
         # 1. CW ODMR
         print("\n" + "="*50)
         frequencies = np.linspace(2.85e9, 2.89e9, 50)  # 2.85-2.89 GHz
-        cw_result = experiments.continuous_wave_odmr(frequencies, laser_duration=5000, mw_duration=5000, mw_delay=5000, detection_duration=5000, repetitions=5)
+        cw_result = experiments.continuous_wave_odmr(frequencies, laser_duration=5000, mw_duration=5000, mw_delay=5000, detection_duration=5000, repetitions=5000)
         experiments.plot_results('cw_odmr')
         
         # 2. Rabi oscillation
