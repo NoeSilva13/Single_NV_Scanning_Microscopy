@@ -16,7 +16,7 @@ from swabian_pulse_streamer import SwabianPulseController
 from rigol_dsg836 import RigolDSG836Controller
 
 # TimeTagger imports for real data acquisition
-from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual
+from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual, CountBetweenMarkers
 
 class ODMRExperiments:
     """
@@ -47,9 +47,9 @@ class ODMRExperiments:
             self.tagger.run()
         
         # Set bin width to 5 ns and initialize counter
-        self.binwidth = int(5e9)  # 5 ns in ps
-        n_values = 1
-        self.counter = Counter(self.tagger, [1], self.binwidth, n_values)
+        #self.binwidth = int(5e9)  # 5 ns in ps
+        #n_values = 1
+        #self.counter = Counter(self.tagger, [1], self.binwidth, n_values)
     
     def _get_count_rate(self) -> float:
         """
@@ -58,8 +58,9 @@ class ODMRExperiments:
         Returns:
             Count rate in Hz
         """
-        counts = self.counter.getData()[0][0]/(self.binwidth/1e12)
-        return counts
+        #counts = self.counter.getData()[0][0]/(self.binwidth/1e12)
+        #return counts
+        return 0
     
     def cleanup(self):
         """
@@ -75,7 +76,11 @@ class ODMRExperiments:
                            laser_duration: int = 2000,
                            mw_duration: int = 2000,
                            detection_duration: int = 1000,
-                           measurements_per_point: int = 100) -> Dict:
+                           laser_delay: int = 0,
+                           mw_delay: int = 0,
+                           detection_delay: int = 0,
+                           sequence_interval: int = 10000,
+                           repetitions: int = 100) -> Dict:
         """
         Perform continuous wave ODMR measurement.
         
@@ -97,15 +102,15 @@ class ODMRExperiments:
             print(f"📡 Measuring at {freq/1e6:.2f} MHz")
             
             # Create CW ODMR sequence
-            sequence = self.pulse_controller.create_odmr_sequence(
+            sequence, total_duration = self.pulse_controller.create_odmr_sequence(
                 laser_duration=laser_duration,
                 mw_duration=mw_duration,  # MW on during detection
                 detection_duration=detection_duration,
-                laser_delay=0,
-                mw_delay=laser_duration + 100,  # MW after laser
-                detection_delay=0,
-                sequence_interval=10000,
-                repetitions=measurements_per_point
+                laser_delay=laser_delay,
+                mw_delay=mw_delay,  # MW after laser
+                detection_delay=detection_delay,
+                sequence_interval=sequence_interval,
+                repetitions=repetitions
             )
             
             if sequence:
@@ -114,11 +119,14 @@ class ODMRExperiments:
                     self.mw_generator.set_odmr_frequency(freq / 1e9)  # Convert Hz to GHz
                     self.mw_generator.set_rf_output(True)
                 
+                self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
+                self.counter.clear()
                 self.pulse_controller.run_sequence(sequence)
-                time.sleep(0.1)  # Let sequence complete
+                print(f"Total duration: {total_duration+sequence_interval} ns")
+                #time.sleep(0.1)  # Let sequence complete
                 
                 # Get real count rate from TimeTagger
-                count_rate = self._get_count_rate()
+                count_rate = 0
                 
                 frequencies.append(freq)
                 count_rates.append(count_rate)
@@ -601,7 +609,7 @@ def run_example_experiments():
         # 1. CW ODMR
         print("\n" + "="*50)
         frequencies = np.linspace(2.85e9, 2.89e9, 50)  # 2.85-2.89 GHz
-        cw_result = experiments.continuous_wave_odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, measurements_per_point=5)
+        cw_result = experiments.continuous_wave_odmr(frequencies, laser_duration=5000, mw_duration=5000, mw_delay=5000, detection_duration=5000, repetitions=5)
         experiments.plot_results('cw_odmr')
         
         # 2. Rabi oscillation

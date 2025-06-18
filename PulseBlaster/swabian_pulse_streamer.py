@@ -228,7 +228,7 @@ class SwabianPulseController:
             sequence.setDigital(self.CHANNEL_SPD, spd_pattern)
             
             print(f"✅ ODMR sequence created: {repetitions} reps, {total_duration} ns total, {params['sequence_interval']} ns intervals (8ns aligned)")
-            return sequence
+            return sequence, total_duration
             
         except Exception as e:
             print(f"❌ Error creating ODMR sequence: {e}")
