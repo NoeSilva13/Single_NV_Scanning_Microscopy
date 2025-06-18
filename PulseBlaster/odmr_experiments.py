@@ -99,7 +99,7 @@ class ODMRExperiments:
         count_rates = []
 
         self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
-        
+
         for freq in mw_frequencies:
             print(f"📡 Measuring at {freq/1e6:.2f} MHz")
             
@@ -123,8 +123,14 @@ class ODMRExperiments:
                 
                 
                 self.counter.clear()
+                print(f"{self.counter.getData()}")
+                time.sleep(0.1)
                 self.pulse_controller.run_sequence(sequence)
-                time.sleep(total_duration/1e9)  # Let sequence complete
+                while self.counter.ready() == False:
+                    time.sleep(total_duration/1e9)  # Let sequence complete
+                    print("Waiting for sequence to complete")
+                self.pulse_controller.stop_sequence()
+                print(f"{self.counter.getData()}")
                 # Get real count rate from TimeTagger
                 count_rate = np.mean(self.counter.getData())
                 print(f"Count rate: {count_rate} Hz")
@@ -132,7 +138,7 @@ class ODMRExperiments:
                 frequencies.append(freq)
                 count_rates.append(count_rate)
                 
-                self.pulse_controller.stop_sequence()
+                
                 
                 # Turn off RF output after measurement
                 if self.mw_generator:
@@ -610,7 +616,7 @@ def run_example_experiments():
         # 1. CW ODMR
         print("\n" + "="*50)
         frequencies = np.linspace(2.85e9, 2.89e9, 50)  # 2.85-2.89 GHz
-        cw_result = experiments.continuous_wave_odmr(frequencies, laser_duration=5000, mw_duration=5000, mw_delay=5000, detection_duration=5000, repetitions=5000)
+        cw_result = experiments.continuous_wave_odmr(frequencies, laser_duration=5000, mw_duration=5000, mw_delay=5000, detection_duration=5000, repetitions=5)
         experiments.plot_results('cw_odmr')
         
         # 2. Rabi oscillation
