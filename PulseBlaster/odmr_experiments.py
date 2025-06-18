@@ -127,8 +127,9 @@ class ODMRExperiments:
                 time.sleep(0.1)
                 self.pulse_controller.run_sequence(sequence)
                 while self.counter.ready() == False:
-                    time.sleep(total_duration/1e9)  # Let sequence complete
                     print("Waiting for sequence to complete")
+                    time.sleep(total_duration/1e9)  # Let sequence complete
+                    
                 self.pulse_controller.stop_sequence()
                 print(f"{self.counter.getData()}")
                 # Get real count rate from TimeTagger
@@ -616,7 +617,7 @@ def run_example_experiments():
         # 1. CW ODMR
         print("\n" + "="*50)
         frequencies = np.linspace(2.85e9, 2.89e9, 50)  # 2.85-2.89 GHz
-        cw_result = experiments.continuous_wave_odmr(frequencies, laser_duration=5000, mw_duration=5000, mw_delay=5000, detection_duration=5000, repetitions=5)
+        cw_result = experiments.continuous_wave_odmr(frequencies, laser_duration=5000, mw_duration=5000, mw_delay=5000, detection_duration=5000, repetitions=5000)
         experiments.plot_results('cw_odmr')
         
         # 2. Rabi oscillation
