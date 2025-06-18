@@ -99,7 +99,7 @@ class ODMRExperiments:
         count_rates = []
 
         self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
-
+        self.tagger.setTriggerLevel(channel=3, level=0.5)
         for freq in mw_frequencies:
             print(f"📡 Measuring at {freq/1e6:.2f} MHz")
             
