@@ -212,7 +212,6 @@ class DeviceStatusWidget(QGroupBox):
         ps_layout.addWidget(self.ps_status)
         ps_layout.addStretch()
         self.ps_connect_btn = QPushButton("Connect")
-        self.ps_connect_btn.setFixedSize(80, 30)
         ps_layout.addWidget(self.ps_connect_btn)
         layout.addLayout(ps_layout)
         
@@ -220,14 +219,12 @@ class DeviceStatusWidget(QGroupBox):
         rigol_layout = QHBoxLayout()
         rigol_layout.addWidget(QLabel("RIGOL DSG836:"))
         self.rigol_ip = QLineEdit("192.168.0.222")
-        self.rigol_ip.setFixedWidth(120)
         rigol_layout.addWidget(self.rigol_ip)
         self.rigol_status = QLabel("Disconnected")
         self.rigol_status.setStyleSheet("color: red; font-weight: bold;")
         rigol_layout.addWidget(self.rigol_status)
         rigol_layout.addStretch()
         self.rigol_connect_btn = QPushButton("Connect")
-        self.rigol_connect_btn.setFixedSize(80, 30)
         rigol_layout.addWidget(self.rigol_connect_btn)
         layout.addLayout(rigol_layout)
         
