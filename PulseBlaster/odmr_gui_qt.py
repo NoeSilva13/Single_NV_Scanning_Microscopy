@@ -1,0 +1,760 @@
+"""
+ODMR Control Center - Qt GUI Application
+----------------------------------------
+Professional GUI for controlling continuous wave ODMR experiments.
+Designed with the same visual style and organization as the NV scanning microscopy software.
+
+Author: NV Lab
+Date: 2025
+"""
+
+import sys
+import json
+import threading
+import time
+import os
+from typing import Dict, List, Optional
+import numpy as np
+
+# Qt imports
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+    QGridLayout, QLabel, QLineEdit, QPushButton, QProgressBar,
+    QTextEdit, QGroupBox, QTabWidget, QFileDialog, QMessageBox,
+    QSplitter, QFrame, QScrollArea, QSpacerItem, QSizePolicy
+)
+from PyQt5.QtCore import QThread, pyqtSignal, QTimer, Qt
+from PyQt5.QtGui import QFont, QPalette, QColor
+
+# Matplotlib imports for real-time plotting
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import matplotlib.style as mplstyle
+
+# Import ODMR experiment classes
+from swabian_pulse_streamer import SwabianPulseController
+from rigol_dsg836 import RigolDSG836Controller
+from odmr_experiments import ODMRExperiments
+
+
+class ODMRWorker(QThread):
+    """Worker thread for running ODMR measurements"""
+    
+    progress_updated = pyqtSignal(int)
+    status_updated = pyqtSignal(str)
+    data_updated = pyqtSignal(list, list)  # frequencies, count_rates
+    measurement_finished = pyqtSignal()
+    error_occurred = pyqtSignal(str)
+    
+    def __init__(self, experiments, parameters):
+        super().__init__()
+        self.experiments = experiments
+        self.parameters = parameters
+        self.is_running = True
+    
+    def stop(self):
+        """Stop the measurement"""
+        self.is_running = False
+    
+    def run(self):
+        """Run the ODMR measurement"""
+        try:
+            frequencies = self.parameters['mw_frequencies']
+            total_points = len(frequencies)
+            
+            all_frequencies = []
+            all_count_rates = []
+            
+            for i, freq in enumerate(frequencies):
+                if not self.is_running:
+                    break
+                
+                # Update progress and status
+                progress = int((i / total_points) * 100)
+                self.progress_updated.emit(progress)
+                self.status_updated.emit(f"Measuring {freq/1e9:.4f} GHz ({i+1}/{total_points})")
+                
+                # Run single frequency measurement
+                single_params = self.parameters.copy()
+                single_params['mw_frequencies'] = [freq]
+                
+                result = self.experiments.continuous_wave_odmr(**single_params)
+                
+                if result and 'count_rates' in result and len(result['count_rates']) > 0:
+                    all_frequencies.append(freq)
+                    all_count_rates.append(result['count_rates'][0])
+                    
+                    # Emit data update for real-time plotting
+                    self.data_updated.emit(all_frequencies.copy(), all_count_rates.copy())
+            
+            if self.is_running:
+                self.progress_updated.emit(100)
+                self.status_updated.emit("ODMR measurement completed!")
+            
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+        finally:
+            self.measurement_finished.emit()
+
+
+class LivePlotWidget(QWidget):
+    """Real-time plotting widget for ODMR spectrum"""
+    
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+        self.frequencies = []
+        self.count_rates = []
+    
+    def init_ui(self):
+        layout = QVBoxLayout()
+        
+        # Create matplotlib figure
+        self.figure = Figure(figsize=(8, 6), dpi=100)
+        self.canvas = FigureCanvas(self.figure)
+        self.ax = self.figure.add_subplot(111)
+        
+        # Style the plot
+        mplstyle.use('seaborn-v0_8-whitegrid')
+        self.ax.set_xlabel('Frequency (GHz)', fontsize=12)
+        self.ax.set_ylabel('Count Rate (Hz)', fontsize=12)
+        self.ax.set_title('ODMR Spectrum (Live)', fontsize=14, fontweight='bold')
+        self.ax.grid(True, alpha=0.3)
+        
+        layout.addWidget(self.canvas)
+        self.setLayout(layout)
+    
+    def update_plot(self, frequencies, count_rates):
+        """Update the plot with new data"""
+        self.frequencies = frequencies
+        self.count_rates = count_rates
+        
+        self.ax.clear()
+        
+        if len(frequencies) > 0:
+            freq_ghz = np.array(frequencies) / 1e9
+            self.ax.plot(freq_ghz, count_rates, 'bo-', markersize=4, linewidth=1.5, color='#2E86AB')
+        
+        self.ax.set_xlabel('Frequency (GHz)', fontsize=12)
+        self.ax.set_ylabel('Count Rate (Hz)', fontsize=12)
+        self.ax.set_title('ODMR Spectrum (Live)', fontsize=14, fontweight='bold')
+        self.ax.grid(True, alpha=0.3)
+        
+        # Auto-scale with padding
+        if len(frequencies) > 1:
+            freq_range = max(frequencies) - min(frequencies)
+            self.ax.set_xlim((min(frequencies) - 0.05*freq_range)/1e9, 
+                           (max(frequencies) + 0.05*freq_range)/1e9)
+        
+        if len(count_rates) > 1:
+            count_range = max(count_rates) - min(count_rates)
+            if count_range > 0:
+                self.ax.set_ylim(min(count_rates) - 0.1*count_range,
+                               max(count_rates) + 0.1*count_range)
+        
+        self.figure.tight_layout()
+        self.canvas.draw()
+
+
+class ParameterGroupBox(QGroupBox):
+    """Custom group box for parameter input sections"""
+    
+    def __init__(self, title):
+        super().__init__(title)
+        self.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #cccccc;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        self.layout = QGridLayout()
+        self.setLayout(self.layout)
+        self.row_count = 0
+    
+    def add_parameter(self, label_text, default_value="", tooltip=""):
+        """Add a parameter input field"""
+        label = QLabel(label_text)
+        entry = QLineEdit(default_value)
+        entry.setToolTip(tooltip)
+        entry.setStyleSheet("""
+            QLineEdit {
+                padding: 5px;
+                border: 1px solid #cccccc;
+                border-radius: 4px;
+                font-size: 10pt;
+            }
+            QLineEdit:focus {
+                border: 2px solid #2E86AB;
+            }
+        """)
+        
+        self.layout.addWidget(label, self.row_count, 0)
+        self.layout.addWidget(entry, self.row_count, 1)
+        self.row_count += 1
+        
+        return entry
+
+
+class DeviceStatusWidget(QGroupBox):
+    """Widget for displaying device connection status"""
+    
+    def __init__(self, title):
+        super().__init__(title)
+        self.init_ui()
+    
+    def init_ui(self):
+        layout = QVBoxLayout()
+        
+        # Pulse Streamer status
+        ps_layout = QHBoxLayout()
+        ps_layout.addWidget(QLabel("Pulse Streamer:"))
+        self.ps_status = QLabel("Disconnected")
+        self.ps_status.setStyleSheet("color: red; font-weight: bold;")
+        ps_layout.addWidget(self.ps_status)
+        ps_layout.addStretch()
+        self.ps_connect_btn = QPushButton("Connect")
+        self.ps_connect_btn.setFixedSize(80, 30)
+        ps_layout.addWidget(self.ps_connect_btn)
+        layout.addLayout(ps_layout)
+        
+        # RIGOL status
+        rigol_layout = QHBoxLayout()
+        rigol_layout.addWidget(QLabel("RIGOL DSG836:"))
+        self.rigol_ip = QLineEdit("192.168.0.222")
+        self.rigol_ip.setFixedWidth(120)
+        rigol_layout.addWidget(self.rigol_ip)
+        self.rigol_status = QLabel("Disconnected")
+        self.rigol_status.setStyleSheet("color: red; font-weight: bold;")
+        rigol_layout.addWidget(self.rigol_status)
+        rigol_layout.addStretch()
+        self.rigol_connect_btn = QPushButton("Connect")
+        self.rigol_connect_btn.setFixedSize(80, 30)
+        rigol_layout.addWidget(self.rigol_connect_btn)
+        layout.addLayout(rigol_layout)
+        
+        # MW Power setting
+        power_layout = QHBoxLayout()
+        power_layout.addWidget(QLabel("MW Power (dBm):"))
+        self.mw_power = QLineEdit("-10.0")
+        self.mw_power.setFixedWidth(80)
+        power_layout.addWidget(self.mw_power)
+        power_layout.addStretch()
+        layout.addLayout(power_layout)
+        
+        self.setLayout(layout)
+        self.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #cccccc;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+        """)
+    
+    def update_ps_status(self, connected):
+        """Update Pulse Streamer connection status"""
+        if connected:
+            self.ps_status.setText("Connected")
+            self.ps_status.setStyleSheet("color: green; font-weight: bold;")
+        else:
+            self.ps_status.setText("Disconnected")
+            self.ps_status.setStyleSheet("color: red; font-weight: bold;")
+    
+    def update_rigol_status(self, connected):
+        """Update RIGOL connection status"""
+        if connected:
+            self.rigol_status.setText("Connected")
+            self.rigol_status.setStyleSheet("color: green; font-weight: bold;")
+        else:
+            self.rigol_status.setText("Disconnected")
+            self.rigol_status.setStyleSheet("color: red; font-weight: bold;")
+
+
+class ODMRControlCenter(QMainWindow):
+    """Main ODMR Control Center application"""
+    
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+        self.init_hardware()
+        self.current_results = {'frequencies': [], 'count_rates': []}
+        self.worker = None
+        
+    def init_ui(self):
+        """Initialize the user interface"""
+        self.setWindowTitle("ODMR Control Center - NV Lab")
+        self.setGeometry(100, 100, 1400, 900)
+        
+        # Apply application style
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f5f5f5;
+            }
+            QPushButton {
+                background-color: #2E86AB;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #1a5f7a;
+            }
+            QPushButton:pressed {
+                background-color: #0d3c4f;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        
+        # Create central widget
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        # Create main horizontal splitter
+        main_splitter = QSplitter(Qt.Horizontal)
+        central_widget_layout = QHBoxLayout()
+        central_widget_layout.addWidget(main_splitter)
+        central_widget.setLayout(central_widget_layout)
+        
+        # Create left control panel
+        self.create_control_panel(main_splitter)
+        
+        # Create right visualization panel
+        self.create_visualization_panel(main_splitter)
+        
+        # Set splitter sizes (1:2 ratio)
+        main_splitter.setSizes([400, 800])
+        
+        # Create status bar
+        self.statusBar().showMessage("Ready")
+        
+    def create_control_panel(self, parent):
+        """Create the left control panel"""
+        control_widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Create scroll area for controls
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout()
+        
+        # Device connections
+        self.device_widget = DeviceStatusWidget("Device Connections")
+        self.device_widget.ps_connect_btn.clicked.connect(self.connect_pulse_streamer)
+        self.device_widget.rigol_connect_btn.clicked.connect(self.connect_rigol)
+        scroll_layout.addWidget(self.device_widget)
+        
+        # Frequency parameters
+        freq_group = ParameterGroupBox("Frequency Parameters")
+        self.start_freq = freq_group.add_parameter("Start Freq (GHz):", "2.80", "Starting frequency for ODMR sweep")
+        self.stop_freq = freq_group.add_parameter("Stop Freq (GHz):", "2.90", "Ending frequency for ODMR sweep")
+        self.num_points = freq_group.add_parameter("Number of Points:", "51", "Number of frequency points to measure")
+        scroll_layout.addWidget(freq_group)
+        
+        # Timing parameters
+        timing_group = ParameterGroupBox("Timing Parameters (ns)")
+        self.laser_duration = timing_group.add_parameter("Laser Duration:", "2000", "Duration of laser pulse")
+        self.mw_duration = timing_group.add_parameter("MW Duration:", "2000", "Duration of microwave pulse")
+        self.detection_duration = timing_group.add_parameter("Detection Duration:", "1000", "Duration of detection window")
+        scroll_layout.addWidget(timing_group)
+        
+        # Delay parameters
+        delay_group = ParameterGroupBox("Delay Parameters (ns)")
+        self.laser_delay = delay_group.add_parameter("Laser Delay:", "0", "Delay before laser pulse")
+        self.mw_delay = delay_group.add_parameter("MW Delay:", "0", "Delay before microwave pulse")
+        self.detection_delay = delay_group.add_parameter("Detection Delay:", "0", "Delay before detection window")
+        scroll_layout.addWidget(delay_group)
+        
+        # Sequence parameters
+        seq_group = ParameterGroupBox("Sequence Parameters")
+        self.sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "10000", "Time between sequence repetitions")
+        self.repetitions = seq_group.add_parameter("Repetitions:", "100", "Number of sequence repetitions")
+        scroll_layout.addWidget(seq_group)
+        
+        # Control buttons
+        button_group = QGroupBox("Measurement Control")
+        button_layout = QVBoxLayout()
+        
+        self.start_btn = QPushButton("🚀 Start ODMR")
+        self.start_btn.setFixedHeight(40)
+        self.start_btn.clicked.connect(self.start_measurement)
+        button_layout.addWidget(self.start_btn)
+        
+        self.stop_btn = QPushButton("⏹️ Stop")
+        self.stop_btn.setFixedHeight(40)
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.clicked.connect(self.stop_measurement)
+        button_layout.addWidget(self.stop_btn)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        button_layout.addWidget(self.progress_bar)
+        
+        button_group.setLayout(button_layout)
+        scroll_layout.addWidget(button_group)
+        
+        # File operations
+        file_group = QGroupBox("File Operations")
+        file_layout = QVBoxLayout()
+        
+        save_params_btn = QPushButton("💾 Save Parameters")
+        save_params_btn.clicked.connect(self.save_parameters)
+        file_layout.addWidget(save_params_btn)
+        
+        load_params_btn = QPushButton("📁 Load Parameters")
+        load_params_btn.clicked.connect(self.load_parameters)
+        file_layout.addWidget(load_params_btn)
+        
+        save_results_btn = QPushButton("📊 Save Results")
+        save_results_btn.clicked.connect(self.save_results)
+        file_layout.addWidget(save_results_btn)
+        
+        file_group.setLayout(file_layout)
+        scroll_layout.addWidget(file_group)
+        
+        # Add stretch to push everything to top
+        scroll_layout.addStretch()
+        
+        scroll_widget.setLayout(scroll_layout)
+        scroll_area.setWidget(scroll_widget)
+        scroll_area.setWidgetResizable(True)
+        
+        layout.addWidget(scroll_area)
+        control_widget.setLayout(layout)
+        parent.addWidget(control_widget)
+        
+    def create_visualization_panel(self, parent):
+        """Create the right visualization panel"""
+        viz_widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Create plot widget
+        self.plot_widget = LivePlotWidget()
+        layout.addWidget(self.plot_widget)
+        
+        # Status log
+        log_group = QGroupBox("Status Log")
+        log_layout = QVBoxLayout()
+        
+        self.status_log = QTextEdit()
+        self.status_log.setMaximumHeight(150)
+        self.status_log.setReadOnly(True)
+        self.status_log.setStyleSheet("""
+            QTextEdit {
+                background-color: #2d3748;
+                color: #e2e8f0;
+                border: 1px solid #4a5568;
+                border-radius: 4px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 9pt;
+            }
+        """)
+        log_layout.addWidget(self.status_log)
+        log_group.setLayout(log_layout)
+        layout.addWidget(log_group)
+        
+        viz_widget.setLayout(layout)
+        parent.addWidget(viz_widget)
+    
+    def init_hardware(self):
+        """Initialize hardware connections"""
+        self.pulse_controller = None
+        self.mw_generator = None
+        self.experiments = None
+        
+        # Try to connect on startup
+        self.connect_pulse_streamer()
+        self.connect_rigol()
+    
+    def connect_pulse_streamer(self):
+        """Connect to Swabian Pulse Streamer"""
+        try:
+            self.pulse_controller = SwabianPulseController()
+            if self.pulse_controller.is_connected:
+                self.device_widget.update_ps_status(True)
+                self.log_message("✅ Pulse Streamer connected")
+            else:
+                self.device_widget.update_ps_status(False)
+                self.log_message("❌ Pulse Streamer connection failed")
+        except Exception as e:
+            self.device_widget.update_ps_status(False)
+            self.log_message(f"❌ Pulse Streamer error: {e}")
+    
+    def connect_rigol(self):
+        """Connect to RIGOL DSG836"""
+        try:
+            ip = self.device_widget.rigol_ip.text()
+            self.mw_generator = RigolDSG836Controller(ip)
+            if self.mw_generator.connect():
+                self.device_widget.update_rigol_status(True)
+                self.log_message(f"✅ RIGOL connected at {ip}")
+            else:
+                self.device_widget.update_rigol_status(False)
+                self.log_message(f"❌ RIGOL connection failed at {ip}")
+                self.mw_generator = None
+        except Exception as e:
+            self.device_widget.update_rigol_status(False)
+            self.log_message(f"❌ RIGOL error: {e}")
+            self.mw_generator = None
+    
+    def log_message(self, message):
+        """Add message to status log"""
+        timestamp = time.strftime("%H:%M:%S")
+        formatted_message = f"[{timestamp}] {message}"
+        self.status_log.append(formatted_message)
+        self.statusBar().showMessage(message)
+    
+    def get_parameters(self):
+        """Get all parameters from the GUI"""
+        try:
+            start_freq = float(self.start_freq.text()) * 1e9
+            stop_freq = float(self.stop_freq.text()) * 1e9
+            num_points = int(self.num_points.text())
+            frequencies = np.linspace(start_freq, stop_freq, num_points)
+            
+            return {
+                'mw_frequencies': frequencies.tolist(),
+                'laser_duration': int(self.laser_duration.text()),
+                'mw_duration': int(self.mw_duration.text()),
+                'detection_duration': int(self.detection_duration.text()),
+                'laser_delay': int(self.laser_delay.text()),
+                'mw_delay': int(self.mw_delay.text()),
+                'detection_delay': int(self.detection_delay.text()),
+                'sequence_interval': int(self.sequence_interval.text()),
+                'repetitions': int(self.repetitions.text())
+            }
+        except ValueError as e:
+            QMessageBox.warning(self, "Parameter Error", f"Invalid parameter value: {e}")
+            return None
+    
+    def start_measurement(self):
+        """Start ODMR measurement"""
+        if not self.pulse_controller or not self.pulse_controller.is_connected:
+            QMessageBox.warning(self, "Connection Error", "Pulse Streamer not connected!")
+            return
+        
+        parameters = self.get_parameters()
+        if parameters is None:
+            return
+        
+        # Initialize experiments
+        if not self.experiments:
+            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator)
+        
+        # Set MW power
+        if self.mw_generator:
+            try:
+                power = float(self.device_widget.mw_power.text())
+                self.mw_generator.set_power(power)
+            except:
+                pass
+        
+        # Update UI
+        self.start_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        self.current_results = {'frequencies': [], 'count_rates': []}
+        
+        # Start worker thread
+        self.worker = ODMRWorker(self.experiments, parameters)
+        self.worker.progress_updated.connect(self.progress_bar.setValue)
+        self.worker.status_updated.connect(self.log_message)
+        self.worker.data_updated.connect(self.update_plot)
+        self.worker.measurement_finished.connect(self.measurement_finished)
+        self.worker.error_occurred.connect(self.handle_error)
+        self.worker.start()
+        
+        self.log_message("🚀 ODMR measurement started")
+    
+    def stop_measurement(self):
+        """Stop ODMR measurement"""
+        if self.worker:
+            self.worker.stop()
+            self.log_message("⏹️ Stopping measurement...")
+    
+    def update_plot(self, frequencies, count_rates):
+        """Update the real-time plot"""
+        self.current_results['frequencies'] = frequencies
+        self.current_results['count_rates'] = count_rates
+        self.plot_widget.update_plot(frequencies, count_rates)
+    
+    def measurement_finished(self):
+        """Handle measurement completion"""
+        self.start_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        self.progress_bar.setVisible(False)
+        
+        # Turn off MW output
+        if self.mw_generator:
+            try:
+                self.mw_generator.set_rf_output(False)
+            except:
+                pass
+    
+    def handle_error(self, error_message):
+        """Handle measurement errors"""
+        QMessageBox.critical(self, "Measurement Error", f"Error during measurement:\n{error_message}")
+        self.measurement_finished()
+    
+    def save_parameters(self):
+        """Save current parameters to JSON file"""
+        try:
+            params = self.get_parameters()
+            if params is None:
+                return
+            
+            # Add UI-specific parameters
+            params['start_freq_ghz'] = float(self.start_freq.text())
+            params['stop_freq_ghz'] = float(self.stop_freq.text())
+            params['num_points'] = int(self.num_points.text())
+            params['mw_power_dbm'] = float(self.device_widget.mw_power.text())
+            
+            filename, _ = QFileDialog.getSaveFileName(
+                self, "Save Parameters", "", "JSON files (*.json);;All files (*.*)"
+            )
+            
+            if filename:
+                with open(filename, 'w') as f:
+                    json.dump(params, f, indent=2)
+                self.log_message(f"💾 Parameters saved to {filename}")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Save Error", f"Error saving parameters: {e}")
+    
+    def load_parameters(self):
+        """Load parameters from JSON file"""
+        try:
+            filename, _ = QFileDialog.getOpenFileName(
+                self, "Load Parameters", "", "JSON files (*.json);;All files (*.*)"
+            )
+            
+            if filename:
+                with open(filename, 'r') as f:
+                    params = json.load(f)
+                
+                # Set UI parameters
+                if 'start_freq_ghz' in params:
+                    self.start_freq.setText(str(params['start_freq_ghz']))
+                if 'stop_freq_ghz' in params:
+                    self.stop_freq.setText(str(params['stop_freq_ghz']))
+                if 'num_points' in params:
+                    self.num_points.setText(str(params['num_points']))
+                
+                # Set timing parameters
+                for param in ['laser_duration', 'mw_duration', 'detection_duration',
+                             'laser_delay', 'mw_delay', 'detection_delay',
+                             'sequence_interval', 'repetitions']:
+                    if param in params:
+                        getattr(self, param).setText(str(params[param]))
+                
+                if 'mw_power_dbm' in params:
+                    self.device_widget.mw_power.setText(str(params['mw_power_dbm']))
+                
+                self.log_message(f"📁 Parameters loaded from {filename}")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Load Error", f"Error loading parameters: {e}")
+    
+    def save_results(self):
+        """Save measurement results"""
+        if not self.current_results['frequencies']:
+            QMessageBox.warning(self, "No Data", "No results to save!")
+            return
+        
+        try:
+            filename, file_type = QFileDialog.getSaveFileName(
+                self, "Save Results", "", 
+                "JSON files (*.json);;CSV files (*.csv);;All files (*.*)"
+            )
+            
+            if filename:
+                if filename.endswith('.csv') or 'CSV' in file_type:
+                    # Save as CSV
+                    import csv
+                    with open(filename, 'w', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(['Frequency_GHz', 'Count_Rate_Hz'])
+                        for freq, count in zip(self.current_results['frequencies'],
+                                             self.current_results['count_rates']):
+                            writer.writerow([freq/1e9, count])
+                else:
+                    # Save as JSON
+                    data = {
+                        'frequencies_hz': self.current_results['frequencies'],
+                        'count_rates_hz': self.current_results['count_rates'],
+                        'parameters': self.get_parameters(),
+                        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    with open(filename, 'w') as f:
+                        json.dump(data, f, indent=2)
+                
+                self.log_message(f"📊 Results saved to {filename}")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Save Error", f"Error saving results: {e}")
+    
+    def closeEvent(self, event):
+        """Handle application closing"""
+        if self.worker and self.worker.isRunning():
+            reply = QMessageBox.question(
+                self, "Quit", "Measurement in progress. Stop and quit?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                self.stop_measurement()
+                self.worker.wait(3000)  # Wait up to 3 seconds
+            else:
+                event.ignore()
+                return
+        
+        # Clean up hardware connections
+        try:
+            if self.experiments:
+                self.experiments.cleanup()
+            if self.mw_generator:
+                self.mw_generator.set_rf_output(False)
+                self.mw_generator.disconnect()
+            if self.pulse_controller:
+                self.pulse_controller.disconnect()
+        except:
+            pass
+        
+        event.accept()
+
+
+def main():
+    """Main application entry point"""
+    app = QApplication(sys.argv)
+    
+    # Set application properties
+    app.setApplicationName("ODMR Control Center")
+    app.setApplicationVersion("1.0")
+    app.setOrganizationName("NV Lab")
+    
+    # Create and show main window
+    window = ODMRControlCenter()
+    window.show()
+    
+    # Start event loop
+    sys.exit(app.exec_())
+
+
+if __name__ == "__main__":
+    main() 
