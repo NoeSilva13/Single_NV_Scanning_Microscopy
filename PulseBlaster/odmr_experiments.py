@@ -108,9 +108,8 @@ class ODMRExperiments:
             sequence_interval=sequence_interval,
             repetitions=repetitions
             )
-        self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
-        self.counter.start()
-        #self.counter = Countrate(tagger=self.tagger, channels=[1])
+        #self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
+        self.counter = Countrate(tagger=self.tagger, channels=[1])
         if self.mw_generator:
             self.mw_generator.set_rf_output(True)
         for freq in mw_frequencies:
@@ -121,9 +120,9 @@ class ODMRExperiments:
                 
             self.counter.clear() 
             self.pulse_controller.run_sequence(sequence)
-
-            while self.counter.ready() == False:
-                time.sleep(0.2)
+            time.sleep(total_duration/1e9)  # Let sequence complete
+            self.pulse_controller.stop_sequence()
+                
             # Get real count rate from TimeTagger
             count_rate = np.mean(self.counter.getData())
             print(f"Count rate: {count_rate} Hz")
