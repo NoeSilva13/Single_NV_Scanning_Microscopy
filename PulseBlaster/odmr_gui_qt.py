@@ -110,17 +110,21 @@ class LivePlotWidget(QWidget):
     def init_ui(self):
         layout = QVBoxLayout()
         
-        # Create matplotlib figure
-        self.figure = Figure(figsize=(8, 6), dpi=100)
+        # Create matplotlib figure with dark theme
+        self.figure = Figure(figsize=(8, 6), dpi=100, facecolor='#262930')
         self.canvas = FigureCanvas(self.figure)
-        self.ax = self.figure.add_subplot(111)
+        self.ax = self.figure.add_subplot(111, facecolor='#262930')
         
-        # Style the plot
-        mplstyle.use('seaborn-v0_8-whitegrid')
-        self.ax.set_xlabel('Frequency (GHz)', fontsize=12)
-        self.ax.set_ylabel('Count Rate (Hz)', fontsize=12)
-        self.ax.set_title('ODMR Spectrum (Live)', fontsize=14, fontweight='bold')
-        self.ax.grid(True, alpha=0.3)
+        # Style the plot with napari-inspired dark theme
+        self.ax.set_xlabel('Frequency (GHz)', fontsize=12, color='white')
+        self.ax.set_ylabel('Count Rate (Hz)', fontsize=12, color='white')
+        self.ax.set_title('ODMR Spectrum (Live)', fontsize=14, fontweight='bold', color='white')
+        self.ax.grid(True, alpha=0.3, color='#555555')
+        self.ax.tick_params(colors='white')
+        self.ax.spines['bottom'].set_color('white')
+        self.ax.spines['top'].set_color('white')
+        self.ax.spines['right'].set_color('white')
+        self.ax.spines['left'].set_color('white')
         
         layout.addWidget(self.canvas)
         self.setLayout(layout)
@@ -134,12 +138,21 @@ class LivePlotWidget(QWidget):
         
         if len(frequencies) > 0:
             freq_ghz = np.array(frequencies) / 1e9
-            self.ax.plot(freq_ghz, count_rates, 'bo-', markersize=4, linewidth=1.5, color='#2E86AB')
+            # Use viridis-inspired green color like napari
+            self.ax.plot(freq_ghz, count_rates, 'o-', markersize=4, linewidth=2, 
+                        color='#00ff88', markerfacecolor='#00d4aa', markeredgecolor='#00ff88')
         
-        self.ax.set_xlabel('Frequency (GHz)', fontsize=12)
-        self.ax.set_ylabel('Count Rate (Hz)', fontsize=12)
-        self.ax.set_title('ODMR Spectrum (Live)', fontsize=14, fontweight='bold')
-        self.ax.grid(True, alpha=0.3)
+        # Re-apply dark theme styling after clear
+        self.ax.set_facecolor('#262930')
+        self.ax.set_xlabel('Frequency (GHz)', fontsize=12, color='white')
+        self.ax.set_ylabel('Count Rate (Hz)', fontsize=12, color='white')
+        self.ax.set_title('ODMR Spectrum (Live)', fontsize=14, fontweight='bold', color='white')
+        self.ax.grid(True, alpha=0.3, color='#555555')
+        self.ax.tick_params(colors='white')
+        self.ax.spines['bottom'].set_color('white')
+        self.ax.spines['top'].set_color('white')
+        self.ax.spines['right'].set_color('white')
+        self.ax.spines['left'].set_color('white')
         
         # Auto-scale with padding
         if len(frequencies) > 1:
@@ -162,20 +175,7 @@ class ParameterGroupBox(QGroupBox):
     
     def __init__(self, title):
         super().__init__(title)
-        self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #cccccc;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
+        # No need for separate styling here - handled by main stylesheet
         self.layout = QGridLayout()
         self.setLayout(self.layout)
         self.row_count = 0
@@ -185,17 +185,7 @@ class ParameterGroupBox(QGroupBox):
         label = QLabel(label_text)
         entry = QLineEdit(default_value)
         entry.setToolTip(tooltip)
-        entry.setStyleSheet("""
-            QLineEdit {
-                padding: 5px;
-                border: 1px solid #cccccc;
-                border-radius: 4px;
-                font-size: 10pt;
-            }
-            QLineEdit:focus {
-                border: 2px solid #2E86AB;
-            }
-        """)
+        # Styling handled by main stylesheet
         
         self.layout.addWidget(label, self.row_count, 0)
         self.layout.addWidget(entry, self.row_count, 1)
@@ -251,15 +241,7 @@ class DeviceStatusWidget(QGroupBox):
         layout.addLayout(power_layout)
         
         self.setLayout(layout)
-        self.setStyleSheet("""
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #cccccc;
-                border-radius: 8px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-        """)
+        # Styling handled by main stylesheet
     
     def update_ps_status(self, connected):
         """Update Pulse Streamer connection status"""
@@ -295,14 +277,19 @@ class ODMRControlCenter(QMainWindow):
         self.setWindowTitle("ODMR Control Center - NV Lab")
         self.setGeometry(100, 100, 1400, 900)
         
-        # Apply application style
+        # Apply dark theme style (napari-inspired)
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #f5f5f5;
+                background-color: #262930;
+                color: #ffffff;
+            }
+            QWidget {
+                background-color: #262930;
+                color: #ffffff;
             }
             QPushButton {
-                background-color: #2E86AB;
-                color: white;
+                background-color: #00d4aa;
+                color: #262930;
                 border: none;
                 padding: 8px 16px;
                 border-radius: 4px;
@@ -310,14 +297,68 @@ class ODMRControlCenter(QMainWindow):
                 font-size: 10pt;
             }
             QPushButton:hover {
-                background-color: #1a5f7a;
+                background-color: #00ffcc;
             }
             QPushButton:pressed {
-                background-color: #0d3c4f;
+                background-color: #009980;
             }
             QPushButton:disabled {
-                background-color: #cccccc;
-                color: #666666;
+                background-color: #555555;
+                color: #999999;
+            }
+            QGroupBox {
+                color: #ffffff;
+                border: 2px solid #555555;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                font-weight: bold;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #00d4aa;
+            }
+            QLabel {
+                color: #ffffff;
+            }
+            QLineEdit {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 10pt;
+            }
+            QLineEdit:focus {
+                border: 2px solid #00d4aa;
+            }
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #00ff00;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 9pt;
+            }
+            QProgressBar {
+                border: 1px solid #555555;
+                border-radius: 4px;
+                background-color: #3c3c3c;
+                text-align: center;
+                color: #ffffff;
+            }
+            QProgressBar::chunk {
+                background-color: #00d4aa;
+                border-radius: 3px;
+            }
+            QScrollArea {
+                background-color: #262930;
+                border: none;
+            }
+            QSplitter::handle {
+                background-color: #555555;
             }
         """)
         
@@ -455,16 +496,7 @@ class ODMRControlCenter(QMainWindow):
         self.status_log = QTextEdit()
         self.status_log.setMaximumHeight(150)
         self.status_log.setReadOnly(True)
-        self.status_log.setStyleSheet("""
-            QTextEdit {
-                background-color: #2d3748;
-                color: #e2e8f0;
-                border: 1px solid #4a5568;
-                border-radius: 4px;
-                font-family: 'Consolas', 'Monaco', monospace;
-                font-size: 9pt;
-            }
-        """)
+        # Status log styling handled by main stylesheet
         log_layout.addWidget(self.status_log)
         log_group.setLayout(log_layout)
         layout.addWidget(log_group)
