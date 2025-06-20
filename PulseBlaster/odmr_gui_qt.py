@@ -207,6 +207,10 @@ class DeviceStatusWidget(QGroupBox):
         # Pulse Streamer status
         ps_layout = QHBoxLayout()
         ps_layout.addWidget(QLabel("Pulse Streamer:"))
+        self.ps_ip = QLineEdit("192.168.0.201")
+        self.ps_ip.setPlaceholderText("IP address")
+        self.ps_ip.setToolTip("Enter IP address for Pulse Streamer network connection")
+        ps_layout.addWidget(self.ps_ip)
         self.ps_status = QLabel("Disconnected")
         self.ps_status.setStyleSheet("color: red; font-weight: bold;")
         ps_layout.addWidget(self.ps_status)
@@ -625,13 +629,18 @@ class ODMRControlCenter(QMainWindow):
     def connect_pulse_streamer(self):
         """Connect to Swabian Pulse Streamer"""
         try:
-            self.pulse_controller = SwabianPulseController()
+            ip = self.device_widget.ps_ip.text()
+            self.log_message(f"🔌 Connecting to Pulse Streamer at {ip}...")
+            
+            # Connect via IP address (Pulse Streamer is network-only)
+            self.pulse_controller = SwabianPulseController(ip_address=ip)
+                
             if self.pulse_controller.is_connected:
                 self.device_widget.update_ps_status(True)
-                self.log_message("✅ Pulse Streamer connected")
+                self.log_message(f"✅ Pulse Streamer connected at {ip}")
             else:
                 self.device_widget.update_ps_status(False)
-                self.log_message("❌ Pulse Streamer connection failed")
+                self.log_message(f"❌ Pulse Streamer connection failed at {ip}")
         except Exception as e:
             self.device_widget.update_ps_status(False)
             self.log_message(f"❌ Pulse Streamer error: {e}")
@@ -857,9 +866,12 @@ class ODMRControlCenter(QMainWindow):
             return
         
         try:
-            # Simple test sequence
-            self.log_message("🔧 Testing Pulse Streamer...")
+            ip = self.device_widget.ps_ip.text()
+            self.log_message(f"🔧 Testing Pulse Streamer at {ip}...")
+            
             # Add actual test here if pulse controller has test methods
+            # For example: self.pulse_controller.test_connection()
+            
             self.log_message("✅ Pulse Streamer test completed")
         except Exception as e:
             self.log_message(f"❌ Pulse Streamer test failed: {e}")
