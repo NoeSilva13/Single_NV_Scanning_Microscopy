@@ -232,14 +232,7 @@ class DeviceStatusWidget(QGroupBox):
         rigol_layout.addWidget(self.rigol_connect_btn)
         layout.addLayout(rigol_layout)
         
-        # MW Power setting
-        power_layout = QHBoxLayout()
-        power_layout.addWidget(QLabel("MW Power (dBm):"))
-        self.mw_power = QLineEdit("-10.0")
-        self.mw_power.setFixedWidth(80)
-        power_layout.addWidget(self.mw_power)
-        power_layout.addStretch()
-        layout.addLayout(power_layout)
+# MW Power setting moved to Advanced Settings tab
         
         self.setLayout(layout)
         # Styling handled by main stylesheet
