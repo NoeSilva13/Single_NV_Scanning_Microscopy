@@ -535,11 +535,7 @@ class ODMRControlCenter(QMainWindow):
         self.mw_power_advanced = advanced_group.add_parameter("MW Power (dBm):", "-10.0", "Microwave power level")
         scroll_layout.addWidget(advanced_group)
         
-        # Calibration Settings
-        calibration_group = ParameterGroupBox("Calibration Settings")
-        self.freq_offset = calibration_group.add_parameter("Frequency Offset (MHz):", "0.0", "Frequency calibration offset")
-        self.power_calibration = calibration_group.add_parameter("Power Calibration (dB):", "0.0", "Power calibration factor")
-        scroll_layout.addWidget(calibration_group)
+# Calibration Settings removed - not currently implemented
         
         # System Info
         system_group = QGroupBox("System Information")
