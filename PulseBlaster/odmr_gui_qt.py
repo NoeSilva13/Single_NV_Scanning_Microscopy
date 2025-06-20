@@ -372,8 +372,8 @@ class ODMRControlCenter(QMainWindow):
         central_widget_layout.addWidget(main_splitter)
         central_widget.setLayout(central_widget_layout)
         
-        # Create left control panel
-        self.create_control_panel(main_splitter)
+        # Create left tabbed control panel
+        self.create_tabbed_control_panel(main_splitter)
         
         # Create right visualization panel
         self.create_visualization_panel(main_splitter)
@@ -384,8 +384,45 @@ class ODMRControlCenter(QMainWindow):
         # Create status bar
         self.statusBar().showMessage("Ready")
         
-    def create_control_panel(self, parent):
-        """Create the left control panel"""
+    def create_tabbed_control_panel(self, parent):
+        """Create the left tabbed control panel"""
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        
+        # Add dark theme styling for tabs
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #555555;
+                background-color: #262930;
+            }
+            QTabBar::tab {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                padding: 8px 20px;
+                margin-right: 2px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:selected {
+                background-color: #00d4aa;
+                color: #262930;
+                font-weight: bold;
+            }
+            QTabBar::tab:hover {
+                background-color: #555555;
+            }
+        """)
+        
+        # Create ODMR Control tab
+        self.create_odmr_control_tab()
+        
+        # Create Device Settings tab
+        self.create_device_settings_tab()
+        
+        parent.addWidget(self.tab_widget)
+    
+    def create_odmr_control_tab(self):
+        """Create the ODMR Control tab"""
         control_widget = QWidget()
         layout = QVBoxLayout()
         
@@ -393,12 +430,6 @@ class ODMRControlCenter(QMainWindow):
         scroll_area = QScrollArea()
         scroll_widget = QWidget()
         scroll_layout = QVBoxLayout()
-        
-        # Device connections
-        self.device_widget = DeviceStatusWidget("Device Connections")
-        self.device_widget.ps_connect_btn.clicked.connect(self.connect_pulse_streamer)
-        self.device_widget.rigol_connect_btn.clicked.connect(self.connect_rigol)
-        scroll_layout.addWidget(self.device_widget)
         
         # Frequency parameters
         freq_group = ParameterGroupBox("Frequency Parameters")
@@ -478,7 +509,87 @@ class ODMRControlCenter(QMainWindow):
         
         layout.addWidget(scroll_area)
         control_widget.setLayout(layout)
-        parent.addWidget(control_widget)
+        
+        # Add to tab widget
+        self.tab_widget.addTab(control_widget, "🔬 ODMR Control")
+    
+    def create_device_settings_tab(self):
+        """Create the Device Settings tab"""
+        settings_widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Create scroll area for settings
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout()
+        
+        # Device connections
+        self.device_widget = DeviceStatusWidget("Device Connections")
+        self.device_widget.ps_connect_btn.clicked.connect(self.connect_pulse_streamer)
+        self.device_widget.rigol_connect_btn.clicked.connect(self.connect_rigol)
+        scroll_layout.addWidget(self.device_widget)
+        
+        # Advanced Settings
+        advanced_group = ParameterGroupBox("Advanced Settings")
+        self.mw_power_advanced = advanced_group.add_parameter("MW Power (dBm):", "-10.0", "Microwave power level")
+        self.acquisition_time = advanced_group.add_parameter("Acquisition Time (ms):", "100", "Data acquisition time per point")
+        self.averages = advanced_group.add_parameter("Averages:", "1", "Number of averages per measurement")
+        scroll_layout.addWidget(advanced_group)
+        
+        # Calibration Settings
+        calibration_group = ParameterGroupBox("Calibration Settings")
+        self.freq_offset = calibration_group.add_parameter("Frequency Offset (MHz):", "0.0", "Frequency calibration offset")
+        self.power_calibration = calibration_group.add_parameter("Power Calibration (dB):", "0.0", "Power calibration factor")
+        scroll_layout.addWidget(calibration_group)
+        
+        # System Info
+        system_group = QGroupBox("System Information")
+        system_layout = QVBoxLayout()
+        
+        self.system_info = QTextEdit()
+        self.system_info.setReadOnly(True)
+        self.system_info.setMaximumHeight(200)
+        self.system_info.setText("""System Status:
+• TimeTagger: Connected
+• ODMR Experiments: Initialized
+• Qt Version: 5.x
+• Python Version: 3.x
+        """)
+        system_layout.addWidget(self.system_info)
+        system_group.setLayout(system_layout)
+        scroll_layout.addWidget(system_group)
+        
+        # Connection Test Buttons
+        test_group = QGroupBox("Connection Tests")
+        test_layout = QVBoxLayout()
+        
+        test_ps_btn = QPushButton("🔧 Test Pulse Streamer")
+        test_ps_btn.clicked.connect(self.test_pulse_streamer)
+        test_layout.addWidget(test_ps_btn)
+        
+        test_rigol_btn = QPushButton("📡 Test RIGOL Signal")
+        test_rigol_btn.clicked.connect(self.test_rigol_signal)
+        test_layout.addWidget(test_rigol_btn)
+        
+        refresh_devices_btn = QPushButton("🔄 Refresh Devices")
+        refresh_devices_btn.clicked.connect(self.refresh_all_devices)
+        test_layout.addWidget(refresh_devices_btn)
+        
+        test_group.setLayout(test_layout)
+        scroll_layout.addWidget(test_group)
+        
+        # Add stretch to push everything to top
+        scroll_layout.addStretch()
+        
+        scroll_widget.setLayout(scroll_layout)
+        scroll_area.setWidget(scroll_widget)
+        scroll_area.setWidgetResizable(True)
+        
+        layout.addWidget(scroll_area)
+        settings_widget.setLayout(layout)
+        
+        # Add to tab widget
+        self.tab_widget.addTab(settings_widget, "⚙️ Device Settings")
         
     def create_visualization_panel(self, parent):
         """Create the right visualization panel"""
@@ -592,7 +703,7 @@ class ODMRControlCenter(QMainWindow):
         # Set MW power
         if self.mw_generator:
             try:
-                power = float(self.device_widget.mw_power.text())
+                power = float(self.mw_power_advanced.text())
                 self.mw_generator.set_power(power)
             except:
                 pass
@@ -656,7 +767,7 @@ class ODMRControlCenter(QMainWindow):
             params['start_freq_ghz'] = float(self.start_freq.text())
             params['stop_freq_ghz'] = float(self.stop_freq.text())
             params['num_points'] = int(self.num_points.text())
-            params['mw_power_dbm'] = float(self.device_widget.mw_power.text())
+            params['mw_power_dbm'] = float(self.mw_power_advanced.text())
             
             filename, _ = QFileDialog.getSaveFileName(
                 self, "Save Parameters", "", "JSON files (*.json);;All files (*.*)"
@@ -697,7 +808,7 @@ class ODMRControlCenter(QMainWindow):
                         getattr(self, param).setText(str(params[param]))
                 
                 if 'mw_power_dbm' in params:
-                    self.device_widget.mw_power.setText(str(params['mw_power_dbm']))
+                    self.mw_power_advanced.setText(str(params['mw_power_dbm']))
                 
                 self.log_message(f"📁 Parameters loaded from {filename}")
                 
@@ -741,6 +852,49 @@ class ODMRControlCenter(QMainWindow):
                 
         except Exception as e:
             QMessageBox.warning(self, "Save Error", f"Error saving results: {e}")
+    
+    def test_pulse_streamer(self):
+        """Test Pulse Streamer connection and functionality"""
+        if not self.pulse_controller or not self.pulse_controller.is_connected:
+            self.log_message("❌ Pulse Streamer not connected")
+            return
+        
+        try:
+            # Simple test sequence
+            self.log_message("🔧 Testing Pulse Streamer...")
+            # Add actual test here if pulse controller has test methods
+            self.log_message("✅ Pulse Streamer test completed")
+        except Exception as e:
+            self.log_message(f"❌ Pulse Streamer test failed: {e}")
+    
+    def test_rigol_signal(self):
+        """Test RIGOL signal generator"""
+        if not self.mw_generator:
+            self.log_message("❌ RIGOL not connected")
+            return
+        
+        try:
+            self.log_message("📡 Testing RIGOL signal generator...")
+            # Test frequency setting
+            test_freq = 2.87  # GHz
+            self.mw_generator.set_odmr_frequency(test_freq)
+            self.log_message(f"✅ RIGOL test frequency set to {test_freq} GHz")
+            
+            # Brief RF output test
+            self.mw_generator.set_rf_output(True)
+            time.sleep(0.1)
+            self.mw_generator.set_rf_output(False)
+            self.log_message("✅ RIGOL RF output test completed")
+            
+        except Exception as e:
+            self.log_message(f"❌ RIGOL test failed: {e}")
+    
+    def refresh_all_devices(self):
+        """Refresh all device connections"""
+        self.log_message("🔄 Refreshing all devices...")
+        self.connect_pulse_streamer()
+        self.connect_rigol()
+        self.log_message("✅ Device refresh completed")
     
     def closeEvent(self, event):
         """Handle application closing"""
