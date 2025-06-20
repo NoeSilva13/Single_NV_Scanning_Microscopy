@@ -120,10 +120,13 @@ class ODMRExperiments:
                 self.mw_generator.set_odmr_frequency(freq / 1e9)  # Convert Hz to GHz
                 
             self.counter.clear() 
-            self.pulse_controller.run_sequence(sequence)
-
-            while self.counter.ready() == False:
+            self.pulse_controller.stream(sequence, n_reps=1, start_immediately=True, output_state=self.pulse_controller.OutputState.ZERO())
+            ready = False
+            while ready is False:
                 time.sleep(0.2)
+                ready = self.counter.ready()
+                count = self.counter.getData()
+                print(f"Count: {count}")
             # Get real count rate from TimeTagger
             count_rate = np.mean(self.counter.getData())
             print(f"Count rate: {count_rate} Hz")
