@@ -111,7 +111,7 @@ class LivePlotWidget(QWidget):
         layout = QVBoxLayout()
         
         # Create matplotlib figure with dark theme
-        self.figure = Figure(figsize=(8, 6), dpi=100, facecolor='#262930')
+        self.figure = Figure(figsize=(15, 15), dpi=100, facecolor='#262930')
         self.canvas = FigureCanvas(self.figure)
         self.ax = self.figure.add_subplot(111, facecolor='#262930')
         
@@ -602,7 +602,7 @@ class ODMRControlCenter(QMainWindow):
         log_layout = QVBoxLayout()
         
         self.status_log = QTextEdit()
-        self.status_log.setMaximumHeight(150)
+        self.status_log.setMaximumHeight(200)
         self.status_log.setReadOnly(True)
         # Status log styling handled by main stylesheet
         log_layout.addWidget(self.status_log)
