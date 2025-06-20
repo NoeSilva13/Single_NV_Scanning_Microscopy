@@ -533,8 +533,6 @@ class ODMRControlCenter(QMainWindow):
         # Advanced Settings
         advanced_group = ParameterGroupBox("Advanced Settings")
         self.mw_power_advanced = advanced_group.add_parameter("MW Power (dBm):", "-10.0", "Microwave power level")
-        self.acquisition_time = advanced_group.add_parameter("Acquisition Time (ms):", "100", "Data acquisition time per point")
-        self.averages = advanced_group.add_parameter("Averages:", "1", "Number of averages per measurement")
         scroll_layout.addWidget(advanced_group)
         
         # Calibration Settings
