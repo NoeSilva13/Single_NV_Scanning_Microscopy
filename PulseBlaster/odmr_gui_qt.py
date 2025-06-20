@@ -269,7 +269,7 @@ class ODMRControlCenter(QMainWindow):
     def init_ui(self):
         """Initialize the user interface"""
         self.setWindowTitle("ODMR Control Center - NV Lab")
-        self.setGeometry(100, 100, 2000, 1250)
+        self.setGeometry(100, 100, 2000, 1350)
         
         # Apply dark theme style (napari-inspired)
         self.setStyleSheet("""
@@ -452,6 +452,11 @@ class ODMRControlCenter(QMainWindow):
         self.repetitions = seq_group.add_parameter("Repetitions:", "100", "Number of sequence repetitions")
         scroll_layout.addWidget(seq_group)
         
+        # MW power parameter
+        power_group = ParameterGroupBox("Microwave Settings")
+        self.mw_power_advanced = power_group.add_parameter("MW Power (dBm):", "-10.0", "Microwave power level")
+        scroll_layout.addWidget(power_group)
+        
         # Control buttons
         button_group = QGroupBox("Measurement Control")
         button_layout = QVBoxLayout()
@@ -523,10 +528,7 @@ class ODMRControlCenter(QMainWindow):
         self.device_widget.rigol_connect_btn.clicked.connect(self.connect_rigol)
         scroll_layout.addWidget(self.device_widget)
         
-        # Advanced Settings
-        advanced_group = ParameterGroupBox("Advanced Settings")
-        self.mw_power_advanced = advanced_group.add_parameter("MW Power (dBm):", "-10.0", "Microwave power level")
-        scroll_layout.addWidget(advanced_group)
+# Advanced Settings removed - MW Power moved to ODMR Control tab
         
 # Calibration Settings removed - not currently implemented
         
