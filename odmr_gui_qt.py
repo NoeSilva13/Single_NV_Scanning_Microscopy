@@ -615,7 +615,28 @@ class ODMRControlCenter(QMainWindow):
         # Create Device Settings tab
         self.create_device_settings_tab()
         
+        # Connect tab change signal to switch visualization
+        self.tab_widget.currentChanged.connect(self.on_tab_changed)
+        
         parent.addWidget(self.tab_widget)
+    
+    def on_tab_changed(self, index):
+        """Handle tab change to switch visualization displays"""
+        if not hasattr(self, 'odmr_viz_widget'):
+            return  # Visualization panel not yet created
+            
+        tab_text = self.tab_widget.tabText(index)
+        
+        if "Confocal" in tab_text:
+            # Show confocal visualization
+            self.odmr_viz_widget.hide()
+            self.confocal_viz_widget.show()
+            self.log_message("📊 Switched to confocal visualization")
+        else:
+            # Show ODMR visualization for all other tabs
+            self.confocal_viz_widget.hide()
+            self.odmr_viz_widget.show()
+            self.log_message("📊 Switched to ODMR visualization")
     
     def create_confocal_control_tab(self):
         """Create the comprehensive Confocal Control tab"""
@@ -742,26 +763,8 @@ class ODMRControlCenter(QMainWindow):
         left_layout.addWidget(scroll_area)
         left_panel.setLayout(left_layout)
         
-        # Right panel for image display and live plots
-        right_panel = QWidget()
-        right_layout = QVBoxLayout()
-        
-        # Confocal image display
-        self.confocal_image_widget = ConfocalImageWidget()
-        self.confocal_image_widget.point_clicked.connect(self.on_image_click)
-        self.confocal_image_widget.zoom_selected.connect(self.on_zoom_area_selected)
-        right_layout.addWidget(self.confocal_image_widget)
-        
-        # Live signal plot
-        self.live_signal_plot = LiveSignalPlot()
-        self.live_signal_plot.setFixedHeight(200)
-        right_layout.addWidget(self.live_signal_plot)
-        
-        right_panel.setLayout(right_layout)
-        
-        # Add panels to main layout
+        # Add only the left panel to main layout - visualization will be in right panel
         main_layout.addWidget(left_panel)
-        main_layout.addWidget(right_panel, 1)  # Give more space to right panel
         confocal_widget.setLayout(main_layout)
         
         # Add to tab widget (this will be the first tab)
@@ -934,15 +937,50 @@ class ODMRControlCenter(QMainWindow):
         self.tab_widget.addTab(settings_widget, "⚙️ Device Settings")
         
     def create_visualization_panel(self, parent):
-        """Create the right visualization panel"""
+        """Create the right visualization panel that switches between ODMR and Confocal displays"""
         viz_widget = QWidget()
         layout = QVBoxLayout()
         
-        # Create plot widget
-        self.plot_widget = LivePlotWidget()
-        layout.addWidget(self.plot_widget)
+        # Create stacked widget to switch between displays
+        self.viz_stack = QSplitter(Qt.Vertical)
         
-        # Status log
+        # ODMR visualization panel
+        self.odmr_viz_widget = QWidget()
+        odmr_layout = QVBoxLayout()
+        
+        # Create ODMR plot widget
+        self.plot_widget = LivePlotWidget()
+        odmr_layout.addWidget(self.plot_widget)
+        
+        self.odmr_viz_widget.setLayout(odmr_layout)
+        
+        # Confocal visualization panel
+        self.confocal_viz_widget = QWidget()
+        confocal_layout = QVBoxLayout()
+        
+        # Confocal image display
+        self.confocal_image_widget = ConfocalImageWidget()
+        self.confocal_image_widget.point_clicked.connect(self.on_image_click)
+        self.confocal_image_widget.zoom_selected.connect(self.on_zoom_area_selected)
+        confocal_layout.addWidget(self.confocal_image_widget)
+        
+        # Live signal plot for confocal
+        self.live_signal_plot = LiveSignalPlot()
+        self.live_signal_plot.setFixedHeight(200)
+        confocal_layout.addWidget(self.live_signal_plot)
+        
+        self.confocal_viz_widget.setLayout(confocal_layout)
+        
+        # Add both widgets to splitter
+        self.viz_stack.addWidget(self.odmr_viz_widget)
+        self.viz_stack.addWidget(self.confocal_viz_widget)
+        
+        # Initially hide confocal widget
+        self.confocal_viz_widget.hide()
+        
+        layout.addWidget(self.viz_stack)
+        
+        # Status log (always visible)
         log_group = QGroupBox("Status Log")
         log_layout = QVBoxLayout()
         
