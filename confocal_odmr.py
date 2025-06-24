@@ -28,6 +28,7 @@ from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QFont
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib.patches import Rectangle
 from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual
 
 # Local imports
@@ -140,144 +141,202 @@ class QtSignalBridge(QObject):
     scanner_position_signal = pyqtSignal(float, float)
     
 # --------------------- IMAGE DISPLAY WIDGET ---------------------
-class ImageDisplayWidget(QLabel):
-    """Custom widget for displaying and interacting with scan images"""
+class ImageDisplayWidget(QWidget):
+    """Custom widget for displaying and interacting with scan images using matplotlib pcolormesh"""
     
     clicked = pyqtSignal(int, int)  # x, y pixel coordinates
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(400, 400)
-        self.setStyleSheet("border: 1px solid black;")
-        self.setAlignment(Qt.AlignCenter)
-        self.setScaledContents(True)
+        self.setup_plot()
         
         # Image data
         self.image_data = None
-        self.scale_x = 1.0
-        self.scale_y = 1.0
+        self.x_points = None
+        self.y_points = None
         self.scanner_x = None
         self.scanner_y = None
+        self.scanner_point = None
         
         # Zoom selection
         self.zoom_start = None
         self.zoom_end = None
         self.drawing_zoom = False
+        self.zoom_rect = None
         
-    def set_image_data(self, image_data, scale_x=1.0, scale_y=1.0):
-        """Set the image data and update display"""
+    def setup_plot(self):
+        """Setup matplotlib figure and canvas"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Create matplotlib figure
+        self.figure = Figure(figsize=(6, 6), facecolor='#262930')
+        self.canvas = FigureCanvas(self.figure)
+        self.ax = self.figure.add_subplot(111, facecolor='#1e1e1e')
+        
+        # Setup plot appearance
+        self.ax.set_xlabel('X Position (V)', color='white')
+        self.ax.set_ylabel('Y Position (V)', color='white')
+        self.ax.tick_params(colors='white')
+        self.ax.spines['bottom'].set_color('white')
+        self.ax.spines['top'].set_color('white')
+        self.ax.spines['right'].set_color('white')
+        self.ax.spines['left'].set_color('white')
+        
+        layout.addWidget(self.canvas)
+        
+        # Connect mouse events
+        self.canvas.mpl_connect('button_press_event', self.on_mouse_press)
+        self.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+        self.canvas.mpl_connect('button_release_event', self.on_mouse_release)
+        
+        # Initialize empty plot
+        self.pcolormesh = None
+        self.colorbar = None
+        
+    def set_image_data(self, image_data, x_points=None, y_points=None):
+        """Set the image data and update display using pcolormesh"""
         self.image_data = image_data
-        self.scale_x = scale_x
-        self.scale_y = scale_y
+        self.x_points = x_points
+        self.y_points = y_points
         self.update_display()
         
     def update_display(self):
-        """Update the displayed image"""
+        """Update the displayed image using pcolormesh"""
         if self.image_data is None:
             return
             
-        # Normalize image data to 0-255
-        img_norm = self.image_data.copy()
-        if img_norm.max() > img_norm.min():
-            img_norm = (img_norm - img_norm.min()) / (img_norm.max() - img_norm.min()) * 255
+        # Clear previous plot
+        self.ax.clear()
+        
+        # Setup plot appearance again after clearing
+        self.ax.set_xlabel('X Position (V)', color='white')
+        self.ax.set_ylabel('Y Position (V)', color='white')
+        self.ax.tick_params(colors='white')
+        self.ax.spines['bottom'].set_color('white')
+        self.ax.spines['top'].set_color('white')
+        self.ax.spines['right'].set_color('white')
+        self.ax.spines['left'].set_color('white')
+        self.ax.set_facecolor('#1e1e1e')
+        
+        # Create coordinate grids for pcolormesh
+        if self.x_points is not None and self.y_points is not None:
+            X, Y = np.meshgrid(self.x_points, self.y_points)
         else:
-            img_norm = np.zeros_like(img_norm)
+            # Fallback to pixel coordinates if voltage points not available
+            height, width = self.image_data.shape
+            x_coords = np.arange(width)
+            y_coords = np.arange(height)
+            X, Y = np.meshgrid(x_coords, y_coords)
         
-        # Convert to QImage
-        height, width = img_norm.shape
-        bytes_per_line = width
-        qimage = QImage(img_norm.astype(np.uint8), width, height, bytes_per_line, QImage.Format_Grayscale8)
+        # Create pcolormesh plot
+        self.pcolormesh = self.ax.pcolormesh(X, Y, self.image_data, 
+                                           cmap='viridis', shading='auto')
         
-        # Create pixmap and draw overlay
-        pixmap = QPixmap.fromImage(qimage)
-        painter = QPainter(pixmap)
+        # Add/update colorbar
+        if self.colorbar is not None:
+            self.colorbar.remove()
+        self.colorbar = self.figure.colorbar(self.pcolormesh, ax=self.ax)
+        self.colorbar.set_label('Counts', color='white')
+        self.colorbar.ax.tick_params(colors='white')
         
         # Draw scanner position
         if self.scanner_x is not None and self.scanner_y is not None:
-            painter.setPen(QPen(QColor(255, 0, 0), 3))
-            painter.drawEllipse(int(self.scanner_x - 3), int(self.scanner_y - 3), 6, 6)
+            if self.scanner_point is not None:
+                self.scanner_point.remove()
+            self.scanner_point = self.ax.plot(self.scanner_x, self.scanner_y, 'ro', 
+                                            markersize=8, markeredgecolor='white')[0]
         
         # Draw zoom rectangle
         if self.zoom_start and self.zoom_end:
-            painter.setPen(QPen(QColor(255, 0, 0), 2))
+            if self.zoom_rect is not None:
+                self.zoom_rect.remove()
             x1, y1 = self.zoom_start
             x2, y2 = self.zoom_end
-            painter.drawRect(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
+            width = abs(x2 - x1)
+            height = abs(y2 - y1)
+            self.zoom_rect = Rectangle((min(x1, x2), min(y1, y2)), width, height,
+                                     linewidth=2, edgecolor='red', facecolor='none')
+            self.ax.add_patch(self.zoom_rect)
         
-        painter.end()
-        self.setPixmap(pixmap)
+        # Ensure aspect ratio is equal
+        self.ax.set_aspect('equal', adjustable='box')
+        
+        # Refresh canvas
+        self.canvas.draw()
     
-    def set_scanner_position(self, x_pixel, y_pixel):
-        """Set scanner position marker"""
-        self.scanner_x = x_pixel
-        self.scanner_y = y_pixel
+    def set_scanner_position(self, x_voltage, y_voltage):
+        """Set scanner position marker in voltage coordinates"""
+        self.scanner_x = x_voltage
+        self.scanner_y = y_voltage
         self.update_display()
     
-    def mousePressEvent(self, event):
+    def on_mouse_press(self, event):
         """Handle mouse press for clicking and zoom selection"""
-        if event.button() == Qt.LeftButton:
-            # Get click position relative to image
-            pos = event.pos()
-            if self.pixmap():
-                # Scale click position to image coordinates
-                pixmap_rect = self.pixmap().rect()
-                widget_rect = self.rect()
-                
-                # Calculate scale factors
-                scale_x = pixmap_rect.width() / widget_rect.width()
-                scale_y = pixmap_rect.height() / widget_rect.height()
-                
-                x = int(pos.x() * scale_x)
-                y = int(pos.y() * scale_y)
-                
+        if event.button == 1 and event.inaxes == self.ax:  # Left click in axes
+            x, y = event.xdata, event.ydata
+            if x is not None and y is not None:
                 # Check if we're starting zoom selection (Ctrl+click)
-                if event.modifiers() & Qt.ControlModifier:
+                if event.key == 'ctrl':
                     self.zoom_start = (x, y)
                     self.drawing_zoom = True
                 else:
-                    self.clicked.emit(x, y)
+                    # Convert coordinates to pixel indices for backwards compatibility
+                    if self.x_points is not None and self.y_points is not None:
+                        # Find closest pixel indices
+                        x_idx = np.argmin(np.abs(self.x_points - x))
+                        y_idx = np.argmin(np.abs(self.y_points - y))
+                        self.clicked.emit(x_idx, y_idx)
+                    else:
+                        # Direct pixel coordinates
+                        self.clicked.emit(int(x), int(y))
     
-    def mouseMoveEvent(self, event):
+    def on_mouse_move(self, event):
         """Handle mouse move for zoom rectangle"""
-        if self.drawing_zoom and event.buttons() & Qt.LeftButton:
-            pos = event.pos()
-            if self.pixmap():
-                pixmap_rect = self.pixmap().rect()
-                widget_rect = self.rect()
-                
-                scale_x = pixmap_rect.width() / widget_rect.width()
-                scale_y = pixmap_rect.height() / widget_rect.height()
-                
-                x = int(pos.x() * scale_x)
-                y = int(pos.y() * scale_y)
-                
+        if self.drawing_zoom and event.inaxes == self.ax:
+            x, y = event.xdata, event.ydata
+            if x is not None and y is not None:
                 self.zoom_end = (x, y)
                 self.update_display()
     
-    def mouseReleaseEvent(self, event):
+    def on_mouse_release(self, event):
         """Handle mouse release for zoom selection"""
-        if event.button() == Qt.LeftButton and self.drawing_zoom:
+        if event.button == 1 and self.drawing_zoom:  # Left click release
             self.drawing_zoom = False
             if self.zoom_start and self.zoom_end:
-                # Calculate zoom region and emit signal if needed
                 x1, y1 = self.zoom_start
                 x2, y2 = self.zoom_end
-                min_x, max_x = min(x1, x2), max(x1, x2)
-                min_y, max_y = min(y1, y2), max(y1, y2)
                 
-                # Only proceed if zoom area is significant (> 10x10 pixels)
-                if (max_x - min_x) > 10 and (max_y - min_y) > 10:
-                    # Reset zoom selection
-                    self.zoom_start = None
-                    self.zoom_end = None
-                    self.update_display()
-                    
-                    # TODO: Implement zoom functionality
-                    # For now, just clear the selection
+                # Calculate area size
+                area_x = abs(x2 - x1)
+                area_y = abs(y2 - y1)
+                
+                # Only proceed if zoom area is significant
+                if self.x_points is not None and self.y_points is not None:
+                    min_area = (max(self.x_points) - min(self.x_points)) * 0.05  # 5% of range
+                    if area_x > min_area and area_y > min_area:
+                        # Reset zoom selection
+                        self.zoom_start = None
+                        self.zoom_end = None
+                        self.update_display()
+                        
+                        # TODO: Implement zoom functionality
+                        # For now, just clear the selection
+                    else:
+                        self.zoom_start = None
+                        self.zoom_end = None
+                        self.update_display()
                 else:
-                    self.zoom_start = None
-                    self.zoom_end = None
-                    self.update_display()
+                    # Fallback for pixel coordinates
+                    if area_x > 10 and area_y > 10:
+                        self.zoom_start = None
+                        self.zoom_end = None
+                        self.update_display()
+                    else:
+                        self.zoom_start = None
+                        self.zoom_end = None
+                        self.update_display()
 
 # --------------------- LIVE PLOT WIDGET ---------------------
 class LivePlotWidget(QWidget):
@@ -649,7 +708,10 @@ class ConfocalMicroscopyApp(QMainWindow):
         x_res = config['resolution']['x']
         y_res = config['resolution']['y']
         self.image = np.zeros((y_res, x_res), dtype=np.float32)
-        self.image_display.set_image_data(self.image)
+        
+        # Get initial scan points for display
+        x_points, y_points = self.scan_points_manager.get_points()
+        self.image_display.set_image_data(self.image, x_points, y_points)
         
     def setup_connections(self):
         """Setup signal connections"""
@@ -702,7 +764,7 @@ class ConfocalMicroscopyApp(QMainWindow):
         try:
             self.output_task.write([x_voltage, y_voltage])
             self.add_info_message(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
-            self.image_display.set_scanner_position(x, y)
+            self.image_display.set_scanner_position(x_voltage, y_voltage)
         except Exception as e:
             self.add_info_message(f"Error moving scanner: {str(e)}")
             
@@ -737,7 +799,7 @@ class ConfocalMicroscopyApp(QMainWindow):
                     
                     # Update display every 10 points to keep UI responsive
                     if (y_idx * width + x_idx) % 10 == 0:
-                        self.image_display.set_image_data(self.image)
+                        self.image_display.set_image_data(self.image, x_points, y_points)
                         QApplication.processEvents()
             
             self.add_info_message("✅ Scan completed successfully")
@@ -750,7 +812,7 @@ class ConfocalMicroscopyApp(QMainWindow):
         scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
         scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
         
-        self.image_display.set_image_data(self.image, scale_um_per_px_x, scale_um_per_px_y)
+        self.image_display.set_image_data(self.image, x_points, y_points)
         
         # Create a dictionary with image and scan positions
         scan_data = {
