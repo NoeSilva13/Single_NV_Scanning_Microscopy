@@ -407,6 +407,9 @@ class ODMRControlCenter(QMainWindow):
             }
         """)
         
+        # Create Confocal Control tab (main tab)
+        self.create_confocal_control_tab()
+        
         # Create ODMR Control tab
         self.create_odmr_control_tab()
         
@@ -414,6 +417,115 @@ class ODMRControlCenter(QMainWindow):
         self.create_device_settings_tab()
         
         parent.addWidget(self.tab_widget)
+    
+    def create_confocal_control_tab(self):
+        """Create the Confocal Control tab"""
+        confocal_widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Create scroll area for controls
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout()
+        
+        # Scanning parameters
+        scan_group = ParameterGroupBox("Scanning Parameters")
+        self.scan_range_x = scan_group.add_parameter("X Range (μm):", "10.0", "Scan range in X direction")
+        self.scan_range_y = scan_group.add_parameter("Y Range (μm):", "10.0", "Scan range in Y direction")
+        self.scan_resolution = scan_group.add_parameter("Resolution (px):", "100", "Number of pixels per axis")
+        self.scan_speed = scan_group.add_parameter("Scan Speed (μm/s):", "1.0", "Scanning speed")
+        scroll_layout.addWidget(scan_group)
+        
+        # Stage position
+        position_group = ParameterGroupBox("Stage Position")
+        self.current_x = position_group.add_parameter("Current X (μm):", "0.0", "Current X position")
+        self.current_y = position_group.add_parameter("Current Y (μm):", "0.0", "Current Y position")
+        self.current_z = position_group.add_parameter("Current Z (μm):", "0.0", "Current Z position")
+        self.target_x = position_group.add_parameter("Target X (μm):", "0.0", "Target X position")
+        self.target_y = position_group.add_parameter("Target Y (μm):", "0.0", "Target Y position")
+        self.target_z = position_group.add_parameter("Target Z (μm):", "0.0", "Target Z position")
+        scroll_layout.addWidget(position_group)
+        
+        # Laser settings
+        laser_group = ParameterGroupBox("Laser Settings")
+        self.laser_power = laser_group.add_parameter("Laser Power (%):", "50", "Laser power percentage")
+        self.integration_time = laser_group.add_parameter("Integration Time (ms):", "10", "Integration time per pixel")
+        scroll_layout.addWidget(laser_group)
+        
+        # Control buttons
+        button_group = QGroupBox("Confocal Control")
+        button_layout = QVBoxLayout()
+        
+        # Movement buttons
+        move_layout = QHBoxLayout()
+        self.move_to_target_btn = QPushButton("🎯 Move to Target")
+        self.move_to_target_btn.setFixedHeight(40)
+        self.move_to_target_btn.clicked.connect(self.move_to_target)
+        move_layout.addWidget(self.move_to_target_btn)
+        
+        self.center_stage_btn = QPushButton("🏠 Center Stage")
+        self.center_stage_btn.setFixedHeight(40)
+        self.center_stage_btn.clicked.connect(self.center_stage)
+        move_layout.addWidget(self.center_stage_btn)
+        button_layout.addLayout(move_layout)
+        
+        # Scanning buttons
+        scan_layout = QHBoxLayout()
+        self.start_scan_btn = QPushButton("🔍 Start Scan")
+        self.start_scan_btn.setFixedHeight(40)
+        self.start_scan_btn.clicked.connect(self.start_confocal_scan)
+        scan_layout.addWidget(self.start_scan_btn)
+        
+        self.stop_scan_btn = QPushButton("⏹️ Stop Scan")
+        self.stop_scan_btn.setFixedHeight(40)
+        self.stop_scan_btn.setEnabled(False)
+        self.stop_scan_btn.clicked.connect(self.stop_confocal_scan)
+        scan_layout.addWidget(self.stop_scan_btn)
+        button_layout.addLayout(scan_layout)
+        
+        # Auto-focus button
+        self.autofocus_btn = QPushButton("🔧 Auto Focus")
+        self.autofocus_btn.setFixedHeight(40)
+        self.autofocus_btn.clicked.connect(self.start_autofocus)
+        button_layout.addWidget(self.autofocus_btn)
+        
+        # Progress bar for scanning
+        self.scan_progress_bar = QProgressBar()
+        self.scan_progress_bar.setVisible(False)
+        button_layout.addWidget(self.scan_progress_bar)
+        
+        button_group.setLayout(button_layout)
+        scroll_layout.addWidget(button_group)
+        
+        # Camera preview
+        camera_group = QGroupBox("Camera Preview")
+        camera_layout = QVBoxLayout()
+        
+        camera_btn_layout = QHBoxLayout()
+        self.camera_live_btn = QPushButton("📷 Live View")
+        self.camera_live_btn.clicked.connect(self.toggle_camera_live)
+        camera_btn_layout.addWidget(self.camera_live_btn)
+        
+        self.camera_snapshot_btn = QPushButton("📸 Snapshot")
+        self.camera_snapshot_btn.clicked.connect(self.take_camera_snapshot)
+        camera_btn_layout.addWidget(self.camera_snapshot_btn)
+        camera_layout.addLayout(camera_btn_layout)
+        
+        camera_group.setLayout(camera_layout)
+        scroll_layout.addWidget(camera_group)
+        
+        # Add stretch to push everything to top
+        scroll_layout.addStretch()
+        
+        scroll_widget.setLayout(scroll_layout)
+        scroll_area.setWidget(scroll_widget)
+        scroll_area.setWidgetResizable(True)
+        
+        layout.addWidget(scroll_area)
+        confocal_widget.setLayout(layout)
+        
+        # Add to tab widget (this will be the first tab)
+        self.tab_widget.addTab(confocal_widget, "🔬 Confocal Control")
     
     def create_odmr_control_tab(self):
         """Create the ODMR Control tab"""
@@ -893,6 +1005,107 @@ class ODMRControlCenter(QMainWindow):
         self.connect_pulse_streamer()
         self.connect_rigol()
         self.log_message("✅ Device refresh completed")
+    
+    # Confocal Control Methods
+    def move_to_target(self):
+        """Move stage to target position"""
+        try:
+            target_x = float(self.target_x.text())
+            target_y = float(self.target_y.text())
+            target_z = float(self.target_z.text())
+            
+            self.log_message(f"🎯 Moving to target position: X={target_x}, Y={target_y}, Z={target_z}")
+            
+            # TODO: Implement actual stage movement
+            # For now, simulate movement by updating current position
+            self.current_x.setText(str(target_x))
+            self.current_y.setText(str(target_y))
+            self.current_z.setText(str(target_z))
+            
+            self.log_message("✅ Movement completed")
+            
+        except ValueError:
+            QMessageBox.warning(self, "Input Error", "Please enter valid numeric values for target position")
+    
+    def center_stage(self):
+        """Center the stage at origin"""
+        self.target_x.setText("0.0")
+        self.target_y.setText("0.0")
+        self.target_z.setText("0.0")
+        self.move_to_target()
+    
+    def start_confocal_scan(self):
+        """Start confocal scanning"""
+        try:
+            x_range = float(self.scan_range_x.text())
+            y_range = float(self.scan_range_y.text())
+            resolution = int(self.scan_resolution.text())
+            speed = float(self.scan_speed.text())
+            integration_time = float(self.integration_time.text())
+            
+            self.log_message(f"🔍 Starting confocal scan: {x_range}×{y_range} μm, {resolution}×{resolution} px")
+            
+            # Update UI
+            self.start_scan_btn.setEnabled(False)
+            self.stop_scan_btn.setEnabled(True)
+            self.scan_progress_bar.setVisible(True)
+            self.scan_progress_bar.setValue(0)
+            
+            # TODO: Implement actual scanning
+            # For now, simulate a scan with a timer
+            self.scan_timer = QTimer()
+            self.scan_progress = 0
+            self.scan_timer.timeout.connect(self.update_scan_progress)
+            self.scan_timer.start(100)  # Update every 100ms
+            
+        except ValueError:
+            QMessageBox.warning(self, "Input Error", "Please enter valid numeric values for scan parameters")
+    
+    def stop_confocal_scan(self):
+        """Stop confocal scanning"""
+        self.log_message("⏹️ Stopping confocal scan...")
+        
+        if hasattr(self, 'scan_timer'):
+            self.scan_timer.stop()
+        
+        self.start_scan_btn.setEnabled(True)
+        self.stop_scan_btn.setEnabled(False)
+        self.scan_progress_bar.setVisible(False)
+        
+        self.log_message("✅ Scan stopped")
+    
+    def update_scan_progress(self):
+        """Update scan progress (simulation)"""
+        self.scan_progress += 2
+        self.scan_progress_bar.setValue(self.scan_progress)
+        
+        if self.scan_progress >= 100:
+            self.stop_confocal_scan()
+            self.log_message("✅ Confocal scan completed")
+    
+    def start_autofocus(self):
+        """Start autofocus procedure"""
+        self.log_message("🔧 Starting autofocus...")
+        
+        # TODO: Implement actual autofocus
+        # For now, simulate autofocus
+        QTimer.singleShot(2000, lambda: self.log_message("✅ Autofocus completed"))
+    
+    def toggle_camera_live(self):
+        """Toggle camera live view"""
+        if self.camera_live_btn.text() == "📷 Live View":
+            self.camera_live_btn.setText("⏸️ Stop Live")
+            self.log_message("📷 Camera live view started")
+            # TODO: Implement actual camera live view
+        else:
+            self.camera_live_btn.setText("📷 Live View")
+            self.log_message("⏸️ Camera live view stopped")
+    
+    def take_camera_snapshot(self):
+        """Take a camera snapshot"""
+        self.log_message("📸 Taking camera snapshot...")
+        # TODO: Implement actual camera snapshot
+        QTimer.singleShot(500, lambda: self.log_message("✅ Snapshot saved"))
     
     def closeEvent(self, event):
         """Handle application closing"""
