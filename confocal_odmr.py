@@ -222,12 +222,18 @@ class ImageDisplayWidget(QWidget):
         self.x_offset = 0.0
         self.y_offset = 0.0
         
-        # Connect mouse events
-        self.plot_widget.scene().sigMouseClicked.connect(self.on_mouse_click)
-        
         # Get the view box for additional mouse events
         self.view_box = self.plot_widget.getViewBox()
         self.view_box.setMouseEnabled(x=True, y=True)  # Enable mouse interaction
+        
+        # Create ROI for zoom selection (initially hidden)
+        self.zoom_roi = pg.RectROI([0, 0], [1, 1], pen='r')
+        self.zoom_roi.sigRegionChangeFinished.connect(self._handle_roi_zoom)
+        self.plot_widget.addItem(self.zoom_roi)
+        self.zoom_roi.hide()  # Start hidden
+        
+        # Connect mouse click for scanner positioning
+        self.plot_widget.scene().sigMouseClicked.connect(self._on_mouse_click)
         
         # Initialize empty image
         self._create_empty_image()
@@ -320,50 +326,87 @@ class ImageDisplayWidget(QWidget):
         )
         self.plot_widget.addItem(self.scanner_item)
     
-    def on_mouse_click(self, event):
-        """Handle mouse click events"""
+    def _on_mouse_click(self, event):
+        """Handle mouse clicks for scanner positioning"""
         if event.button() == Qt.LeftButton:
             # Get mouse position in plot coordinates
             pos = self.view_box.mapSceneToView(event.scenePos())
             self._handle_left_click(pos.x(), pos.y())
-        elif event.button() == Qt.RightButton:
-            # Start zoom selection
-            pos = self.view_box.mapSceneToView(event.scenePos())
-            self.zoom_start = (pos.x(), pos.y())
-            self.selecting_zoom = True
-            
-    def on_mouse_release(self, event):
-        """Handle mouse release events"""
-        if event.button() == Qt.RightButton and self.selecting_zoom and self.zoom_start:
-            pos = self.view_box.mapSceneToView(event.scenePos())
-            self.zoom_end = (pos.x(), pos.y())
-            self._handle_zoom_selection()
-            
-            # Clean up
-            if self.zoom_rect is not None:
-                self.plot_widget.removeItem(self.zoom_rect)
-                self.zoom_rect = None
-            self.selecting_zoom = False
-            self.zoom_start = None
-            self.zoom_end = None
     
-    def on_mouse_move(self, event):
-        """Handle mouse motion for zoom rectangle visualization"""
-        if self.selecting_zoom and self.zoom_start:
-            pos = self.view_box.mapSceneToView(event.scenePos())
+    def show_zoom_roi(self):
+        """Show the ROI for zoom selection"""
+        if self.image_data is not None and self.x_points is not None and self.y_points is not None:
+            # Position ROI in the center of the image with 1/4 size
+            x_um = np.array(self.x_points) * MICRONS_PER_VOLT
+            y_um = np.array(self.y_points) * MICRONS_PER_VOLT
             
-            # Remove old rectangle
-            if self.zoom_rect is not None:
-                self.plot_widget.removeItem(self.zoom_rect)
+            center_x = (x_um[0] + x_um[-1]) / 2
+            center_y = (y_um[0] + y_um[-1]) / 2
+            width = (x_um[-1] - x_um[0]) / 4
+            height = (y_um[-1] - y_um[0]) / 4
             
-            # Draw new rectangle
-            x1, y1 = self.zoom_start
-            x2, y2 = pos.x(), pos.y()
+            self.zoom_roi.setPos([center_x - width/2, center_y - height/2])
+            self.zoom_roi.setSize([width, height])
+            self.zoom_roi.show()
+            print("🔍 Zoom ROI shown. Drag to select region, then press Enter or double-click to zoom.")
+    
+    def hide_zoom_roi(self):
+        """Hide the zoom ROI"""
+        self.zoom_roi.hide()
+    
+    def _handle_roi_zoom(self):
+        """Handle zoom when ROI region is finalized"""
+        if not self.zoom_roi.isVisible():
+            return
             
-            rect = pg.QtCore.QRectF(x1, y1, x2-x1, y2-y1)
-            self.zoom_rect = pg.QtGui.QGraphicsRectItem(rect)
-            self.zoom_rect.setPen(mkPen('r', width=2))
-            self.plot_widget.addItem(self.zoom_rect)
+        # Get ROI bounds
+        roi_pos = self.zoom_roi.pos()
+        roi_size = self.zoom_roi.size()
+        
+        x1, y1 = roi_pos[0], roi_pos[1]
+        x2, y2 = x1 + roi_size[0], y1 + roi_size[1]
+        
+        print(f"🔍 ROI Zoom selection: ({x1:.2f}, {y1:.2f}) to ({x2:.2f}, {y2:.2f})")
+        
+        # Convert to pixel coordinates and emit zoom signal
+        self._handle_zoom_coordinates(x1, y1, x2, y2)
+        
+        # Hide ROI after zoom
+        self.hide_zoom_roi()
+    
+    def _handle_zoom_coordinates(self, x1, y1, x2, y2):
+        """Convert real coordinates to pixel coordinates and emit zoom signal"""
+        if self.image_data is None:
+            print("⚠️ Zoom failed: no image data")
+            return
+        
+        # Convert real coordinates to pixel coordinates
+        if self.x_points is not None and self.y_points is not None:
+            x_um = np.array(self.x_points) * MICRONS_PER_VOLT
+            y_um = np.array(self.y_points) * MICRONS_PER_VOLT
+            
+            width, height = self.image_data.shape  # shape is now (width, height)
+            x1_idx = int(np.interp(x1, [x_um[0], x_um[-1]], [0, width-1]))
+            y1_idx = int(np.interp(y1, [y_um[0], y_um[-1]], [0, height-1]))
+            x2_idx = int(np.interp(x2, [x_um[0], x_um[-1]], [0, width-1]))
+            y2_idx = int(np.interp(y2, [y_um[0], y_um[-1]], [0, height-1]))
+        else:
+            x1_idx, y1_idx = int(x1), int(y1)
+            x2_idx, y2_idx = int(x2), int(y2)
+        
+        # Ensure proper ordering and bounds
+        min_x = max(0, min(x1_idx, x2_idx))
+        max_x = min(self.image_data.shape[0]-1, max(x1_idx, x2_idx))  # shape[0] is width now
+        min_y = max(0, min(y1_idx, y2_idx))
+        max_y = min(self.image_data.shape[1]-1, max(y1_idx, y2_idx))  # shape[1] is height now
+        
+        print(f"📐 Converted to pixel coordinates: ({min_x}, {min_y}) to ({max_x}, {max_y})")
+        
+        if abs(max_x - min_x) > 2 and abs(max_y - min_y) > 2:  # Minimum zoom size
+            print(f"✅ Emitting zoom region: ({min_x}, {min_y}, {max_x}, {max_y})")
+            self.zoom_region_selected.emit(min_x, min_y, max_x, max_y)
+        else:
+            print("⚠️ Zoom region too small, minimum size is 3x3 pixels")
     
     def _handle_left_click(self, x_real, y_real):
         """Handle left mouse click for scanner positioning"""
@@ -392,10 +435,13 @@ class ImageDisplayWidget(QWidget):
     def _handle_zoom_selection(self):
         """Handle zoom region selection"""
         if not self.zoom_start or not self.zoom_end or self.image_data is None:
+            print("⚠️ Zoom selection failed: missing start/end points or image data")
             return
         
         x1, y1 = self.zoom_start
         x2, y2 = self.zoom_end
+        
+        print(f"🔍 Zoom selection: ({x1:.2f}, {y1:.2f}) to ({x2:.2f}, {y2:.2f})")
         
         # Convert real coordinates to pixel coordinates
         if self.x_points is not None and self.y_points is not None:
@@ -417,12 +463,13 @@ class ImageDisplayWidget(QWidget):
         min_y = max(0, min(y1_idx, y2_idx))
         max_y = min(self.image_data.shape[1]-1, max(y1_idx, y2_idx))  # shape[1] is height now
         
+        print(f"📐 Converted to pixel coordinates: ({min_x}, {min_y}) to ({max_x}, {max_y})")
+        
         if abs(max_x - min_x) > 2 and abs(max_y - min_y) > 2:  # Minimum zoom size
+            print(f"✅ Emitting zoom region: ({min_x}, {min_y}, {max_x}, {max_y})")
             self.zoom_region_selected.emit(min_x, min_y, max_x, max_y)
-    
-
-
-
+        else:
+            print("⚠️ Zoom region too small, minimum size is 3x3 pixels")
 
 # --------------------- MAIN APPLICATION WINDOW ---------------------
 class ConfocalMainWindow(QMainWindow):
@@ -437,6 +484,9 @@ class ConfocalMainWindow(QMainWindow):
         self.init_ui()
         self.init_hardware()
         self.init_widgets()
+        
+        # Add keyboard shortcuts
+        self.setup_shortcuts()
         
         # Show maximized
         self.showMaximized()
@@ -709,6 +759,9 @@ class ConfocalMainWindow(QMainWindow):
         self.load_scan_widget = create_load_scan(self)
         self.odmr_gui_widget = create_odmr_gui()
         
+        # Create zoom ROI button
+        self.zoom_roi_button = self.create_zoom_roi_button()
+        
         # Add widgets to panels
         self.add_widgets_to_panels()
     
@@ -718,6 +771,7 @@ class ConfocalMainWindow(QMainWindow):
         left_widgets = [
             ("New Scan", self.new_scan_widget),
             ("Save Image", self.save_image_widget),
+            ("Zoom ROI", self.zoom_roi_button),
             ("Reset Zoom", self.reset_zoom_widget),
             ("Close Scanner", self.close_scanner_widget),
             ("Auto Focus", self.auto_focus_widget),
@@ -743,6 +797,27 @@ class ConfocalMainWindow(QMainWindow):
             frame_layout.addWidget(qt_widget)
             
             self.left_controls_layout.addWidget(frame)
+        
+        # Add zoom instructions
+        instructions_label = QLabel("🔍 Zoom Controls:\n• Left-click: Move scanner\n• Ctrl+Z: Show zoom ROI\n• Drag ROI to select region\n• Ctrl+R: Reset zoom\n• Ctrl+T: Test zoom")
+        instructions_label.setStyleSheet("""
+            QLabel {
+                background-color: #3a3a3a;
+                color: #ffffff;
+                padding: 8px;
+                border-radius: 4px;
+                font-size: 9pt;
+                border: 1px solid #555555;
+            }
+        """)
+        
+        instruction_frame = QFrame()
+        instruction_frame.setFrameStyle(QFrame.Box)
+        instruction_layout = QVBoxLayout(instruction_frame)
+        instruction_layout.addWidget(QLabel("Controls"))
+        instruction_layout.addWidget(instructions_label)
+        
+        self.left_controls_layout.addWidget(instruction_frame)
         
         # Right panel widgets
         right_widgets = [
@@ -856,11 +931,15 @@ class ConfocalMainWindow(QMainWindow):
     
     def on_zoom_region_selected(self, min_x, min_y, max_x, max_y):
         """Handle zoom region selection"""
+        print(f"🎯 Zoom region received: ({min_x}, {min_y}) to ({max_x}, {max_y})")
+        
         if self.zoom_in_progress:
+            print("⏳ Zoom already in progress, ignoring new zoom request")
             return
         
         if not self.zoom_manager.can_zoom_in():
             self.show_status(f"⚠️ Max zoom reached ({self.zoom_manager.max_zoom} levels).")
+            print(f"📏 Current zoom level: {self.zoom_manager.get_zoom_level()}")
             return
         
         # Ensure zoom region stays within image bounds
@@ -978,12 +1057,97 @@ class ConfocalMainWindow(QMainWindow):
         
         return wrapper
     
+    def create_zoom_roi_button(self):
+        """Create a custom zoom ROI button"""
+        from PyQt5.QtWidgets import QPushButton
+        from PyQt5.QtCore import QThread, pyqtSignal
+        import os
+        
+        zoom_roi_button = QPushButton("🔍 Zoom ROI")
+        zoom_roi_button.setStyleSheet("""
+            QPushButton {
+                background-color: #00d4aa;
+                color: #262930;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #00ffcc;
+            }
+            QPushButton:pressed {
+                background-color: #009980;
+            }
+        """)
+        
+        def zoom_roi():
+            """Handle zoom ROI button click"""
+            self.show_zoom_roi()
+        
+        zoom_roi_button.clicked.connect(zoom_roi)
+        
+        # Create a simple wrapper widget to match the interface
+        wrapper = QWidget()
+        wrapper_layout = QVBoxLayout()
+        wrapper_layout.addWidget(zoom_roi_button)
+        wrapper.setLayout(wrapper_layout)
+        wrapper.native = zoom_roi_button  # Add native attribute for compatibility
+        
+        return wrapper
+    
+    def setup_shortcuts(self):
+        """Setup keyboard shortcuts"""
+        from PyQt5.QtWidgets import QShortcut
+        from PyQt5.QtGui import QKeySequence
+        
+        # Reset zoom with Ctrl+R
+        reset_zoom_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
+        reset_zoom_shortcut.activated.connect(self.reset_zoom)
+        
+        # Show zoom ROI with Ctrl+Z
+        show_zoom_shortcut = QShortcut(QKeySequence("Ctrl+Z"), self)
+        show_zoom_shortcut.activated.connect(self.show_zoom_roi)
+        
+        # Test zoom with Ctrl+T (for debugging)
+        test_zoom_shortcut = QShortcut(QKeySequence("Ctrl+T"), self)
+        test_zoom_shortcut.activated.connect(self.test_zoom_functionality)
+    
+    def reset_zoom(self):
+        """Reset zoom to full view"""
+        try:
+            if self.reset_zoom_widget and hasattr(self.reset_zoom_widget, 'native'):
+                self.reset_zoom_widget.native.click()
+                self.show_status("🔍 Zoom reset to full view")
+            else:
+                self.show_status("⚠️ Reset zoom widget not available")
+        except Exception as e:
+            self.show_status(f"❌ Error resetting zoom: {str(e)}")
+    
+    def test_zoom_functionality(self):
+        """Test zoom functionality for debugging"""
+        self.show_status("🧪 Testing zoom functionality - press Ctrl+Z to show ROI, then drag to select zoom region")
+        print("🧪 Zoom test:")
+        print(f"   - Image display available: {hasattr(self, 'image_display')}")
+        print(f"   - Zoom manager available: {hasattr(self, 'zoom_manager')}")
+        print(f"   - Current zoom level: {self.zoom_manager.get_zoom_level() if hasattr(self, 'zoom_manager') else 'N/A'}")
+        print(f"   - Can zoom in: {self.zoom_manager.can_zoom_in() if hasattr(self, 'zoom_manager') else 'N/A'}")
+        print(f"   - Image shape: {self.image.shape if hasattr(self, 'image') else 'N/A'}")
+        print(f"   - ROI available: {hasattr(self.image_display, 'zoom_roi') if hasattr(self, 'image_display') else 'N/A'}")
+
+    def show_zoom_roi(self):
+        """Show the zoom ROI for selection"""
+        if hasattr(self, 'image_display'):
+            self.image_display.show_zoom_roi()
+            self.show_status("🔍 Zoom ROI activated. Drag to select region, then double-click or press Enter to zoom.")
+        else:
+            self.show_status("❌ Image display not available")
+
     def show_status(self, message):
         """Show status message"""
         self.statusBar().showMessage(message)
         print(message)  # Also print to console
-    
-
     
     def closeEvent(self, event):
         """Handle application close event"""
