@@ -3,10 +3,14 @@ File operations widgets for the Napari Scanning SPD application.
 
 Contains widgets for:
 - Loading saved scans
+- Opening external applications (ODMR GUI)
 - Future file operations like export, import, etc.
 """
 
 import time
+import subprocess
+import sys
+import os
 import numpy as np
 from PyQt5.QtWidgets import QFileDialog
 from magicgui import magicgui
@@ -60,3 +64,27 @@ def load_scan(viewer):
                     show_info(f"❌ Error loading scan: {str(e)}")
     
     return _load_scan 
+
+
+def open_odmr_gui():
+    """Factory function to create ODMR GUI button widget"""
+    
+    @magicgui(call_button="📡 ODMR GUI")
+    def _open_odmr_gui():
+        """Open the ODMR GUI application in a separate process"""
+        try:
+            # Get the path to the ODMR GUI script
+            script_path = os.path.join(os.getcwd(), "odmr_gui_qt.py")
+            
+            if not os.path.exists(script_path):
+                show_info(f"❌ ODMR GUI script not found at: {script_path}")
+                return
+            
+            # Launch the ODMR GUI in a separate process
+            subprocess.Popen([sys.executable, script_path])
+            show_info("📡 ODMR GUI launched successfully")
+            
+        except Exception as e:
+            show_info(f"❌ Error launching ODMR GUI: {str(e)}")
+    
+    return _open_odmr_gui 
