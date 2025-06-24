@@ -28,7 +28,8 @@ def new_scan(scan_pattern_func, scan_points_manager, shapes):
             # Get current scan points from the manager
             x_points, y_points = scan_points_manager.get_points()
             scan_pattern_func(x_points, y_points)
-            shapes.data = []
+            if shapes is not None:
+                shapes.data = []
         threading.Thread(target=run_new_scan, daemon=True).start()
         show_info("🔬 New scan started")
     
