@@ -863,7 +863,7 @@ class ConfocalMainWindow(QMainWindow):
                     
                 counts = self.counter.getData()[0][0]/(self.binwidth/1e12)
                 print(f"{counts}")
-                self.image[y_idx, x_idx] = counts
+                self.image[x_idx, y_idx] = counts
                 
                 # Update display with live data and scaling info
                 self.image_display.set_image(self.image, x_points, y_points)
