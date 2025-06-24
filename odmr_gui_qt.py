@@ -37,6 +37,13 @@ from PulseBlaster.swabian_pulse_streamer import SwabianPulseController
 from PulseBlaster.rigol_dsg836 import RigolDSG836Controller
 from PulseBlaster.odmr_experiments import ODMRExperiments
 
+# Import confocal control classes
+import json
+import nidaqmx
+from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual
+from galvo_controller import GalvoScannerController
+from data_manager import DataManager
+
 
 class ODMRWorker(QThread):
     """Worker thread for running ODMR measurements"""
@@ -256,6 +263,197 @@ class DeviceStatusWidget(QGroupBox):
             self.rigol_status.setStyleSheet("color: red; font-weight: bold;")
 
 
+class ConfocalImageWidget(QWidget):
+    """Widget for displaying confocal scan images with click and zoom functionality"""
+    
+    point_clicked = pyqtSignal(float, float)  # x_voltage, y_voltage
+    zoom_selected = pyqtSignal(float, float, float, float)  # x_min, x_max, y_min, y_max
+    
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+        self.image_data = None
+        self.x_points = None
+        self.y_points = None
+        self.zoom_start = None
+        self.zoom_rect = None
+        
+    def init_ui(self):
+        layout = QVBoxLayout()
+        
+        # Create matplotlib figure with dark theme
+        self.figure = Figure(figsize=(8, 8), dpi=100, facecolor='#262930')
+        self.canvas = FigureCanvas(self.figure)
+        self.ax = self.figure.add_subplot(111, facecolor='#262930')
+        
+        # Style the plot
+        self.ax.set_xlabel('X Voltage (V)', fontsize=12, color='white')
+        self.ax.set_ylabel('Y Voltage (V)', fontsize=12, color='white')
+        self.ax.set_title('Confocal Scan Image', fontsize=14, fontweight='bold', color='white')
+        self.ax.tick_params(colors='white')
+        for spine in self.ax.spines.values():
+            spine.set_color('white')
+        
+        # Connect mouse events
+        self.canvas.mpl_connect('button_press_event', self.on_mouse_press)
+        self.canvas.mpl_connect('button_release_event', self.on_mouse_release)
+        self.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
+        
+        layout.addWidget(self.canvas)
+        self.setLayout(layout)
+        
+        # Initialize with empty image
+        self.update_image(np.zeros((50, 50)), np.linspace(-1, 1, 50), np.linspace(-1, 1, 50))
+    
+    def update_image(self, image_data, x_points, y_points):
+        """Update the displayed image"""
+        self.image_data = image_data
+        self.x_points = x_points
+        self.y_points = y_points
+        
+        self.ax.clear()
+        
+        # Create the image plot
+        extent = [x_points[0], x_points[-1], y_points[0], y_points[-1]]
+        im = self.ax.imshow(image_data, extent=extent, origin='lower', 
+                           cmap='viridis', aspect='equal', interpolation='nearest')
+        
+        # Re-apply styling
+        self.ax.set_facecolor('#262930')
+        self.ax.set_xlabel('X Voltage (V)', fontsize=12, color='white')
+        self.ax.set_ylabel('Y Voltage (V)', fontsize=12, color='white')
+        self.ax.set_title('Confocal Scan Image', fontsize=14, fontweight='bold', color='white')
+        self.ax.tick_params(colors='white')
+        for spine in self.ax.spines.values():
+            spine.set_color('white')
+        
+        # Add colorbar
+        if hasattr(self, 'colorbar'):
+            self.colorbar.remove()
+        self.colorbar = self.figure.colorbar(im, ax=self.ax)
+        self.colorbar.ax.tick_params(colors='white')
+        self.colorbar.ax.yaxis.label.set_color('white')
+        
+        self.figure.tight_layout()
+        self.canvas.draw()
+    
+    def on_mouse_press(self, event):
+        """Handle mouse press for click and zoom selection"""
+        if event.inaxes != self.ax:
+            return
+        
+        if event.button == 1:  # Left click - move galvo
+            x_pos, y_pos = event.xdata, event.ydata
+            self.point_clicked.emit(x_pos, y_pos)
+        elif event.button == 3:  # Right click - start zoom selection
+            self.zoom_start = (event.xdata, event.ydata)
+    
+    def on_mouse_move(self, event):
+        """Handle mouse move for zoom rectangle"""
+        if event.inaxes != self.ax or self.zoom_start is None:
+            return
+        
+        # Update zoom rectangle
+        if self.zoom_rect:
+            self.zoom_rect.remove()
+        
+        x_start, y_start = self.zoom_start
+        width = event.xdata - x_start
+        height = event.ydata - y_start
+        
+        self.zoom_rect = plt.Rectangle((x_start, y_start), width, height,
+                                      fill=False, edgecolor='red', linewidth=2)
+        self.ax.add_patch(self.zoom_rect)
+        self.canvas.draw()
+    
+    def on_mouse_release(self, event):
+        """Handle mouse release for zoom selection"""
+        if event.button == 3 and self.zoom_start is not None:
+            x_start, y_start = self.zoom_start
+            x_end, y_end = event.xdata, event.ydata
+            
+            if x_end is not None and y_end is not None:
+                x_min = min(x_start, x_end)
+                x_max = max(x_start, x_end)
+                y_min = min(y_start, y_end)
+                y_max = max(y_start, y_end)
+                
+                # Only emit if zoom area is significant
+                if abs(x_max - x_min) > 0.1 and abs(y_max - y_min) > 0.1:
+                    self.zoom_selected.emit(x_min, x_max, y_min, y_max)
+            
+            self.zoom_start = None
+            if self.zoom_rect:
+                self.zoom_rect.remove()
+                self.zoom_rect = None
+                self.canvas.draw()
+
+
+class LiveSignalPlot(QWidget):
+    """Widget for live signal plotting during scans"""
+    
+    def __init__(self):
+        super().__init__()
+        self.init_ui()
+        self.x_data = []
+        self.y_data = []
+        self.start_time = time.time()
+        
+    def init_ui(self):
+        layout = QVBoxLayout()
+        
+        # Create matplotlib figure
+        self.figure = Figure(figsize=(8, 3), dpi=100, facecolor='#262930')
+        self.canvas = FigureCanvas(self.figure)
+        self.ax = self.figure.add_subplot(111, facecolor='#262930')
+        
+        # Style the plot
+        self.ax.set_xlabel('Time (s)', fontsize=10, color='white')
+        self.ax.set_ylabel('Signal (Hz)', fontsize=10, color='white')
+        self.ax.set_title('Live Signal', fontsize=12, fontweight='bold', color='white')
+        self.ax.tick_params(colors='white')
+        for spine in self.ax.spines.values():
+            spine.set_color('white')
+        self.ax.grid(True, alpha=0.3, color='#555555')
+        
+        self.line, = self.ax.plot([], [], color='#00ff88', linewidth=2)
+        
+        layout.addWidget(self.canvas)
+        self.setLayout(layout)
+        
+        # Timer for updates
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_plot)
+        self.timer.start(200)  # Update every 200ms
+    
+    def add_data_point(self, value):
+        """Add a new data point"""
+        current_time = time.time() - self.start_time
+        self.x_data.append(current_time)
+        self.y_data.append(value)
+        
+        # Keep only last 100 points
+        if len(self.x_data) > 100:
+            self.x_data = self.x_data[-100:]
+            self.y_data = self.y_data[-100:]
+    
+    def update_plot(self):
+        """Update the plot display"""
+        if len(self.x_data) > 0:
+            self.line.set_data(self.x_data, self.y_data)
+            self.ax.relim()
+            self.ax.autoscale_view()
+            self.canvas.draw()
+    
+    def clear(self):
+        """Clear the plot"""
+        self.x_data.clear()
+        self.y_data.clear()
+        self.start_time = time.time()
+        self.line.set_data([], [])
+        self.canvas.draw()
+
+
 class ODMRControlCenter(QMainWindow):
     """Main ODMR Control Center application"""
     
@@ -263,6 +461,7 @@ class ODMRControlCenter(QMainWindow):
         super().__init__()
         self.init_ui()
         self.init_hardware()
+        self.init_confocal_hardware()
         self.current_results = {'frequencies': [], 'count_rates': []}
         self.worker = None
         
@@ -419,100 +618,120 @@ class ODMRControlCenter(QMainWindow):
         parent.addWidget(self.tab_widget)
     
     def create_confocal_control_tab(self):
-        """Create the Confocal Control tab"""
+        """Create the comprehensive Confocal Control tab"""
         confocal_widget = QWidget()
-        layout = QVBoxLayout()
+        main_layout = QHBoxLayout()
+        
+        # Left control panel
+        left_panel = QWidget()
+        left_panel.setMaximumWidth(400)
+        left_layout = QVBoxLayout()
         
         # Create scroll area for controls
         scroll_area = QScrollArea()
         scroll_widget = QWidget()
         scroll_layout = QVBoxLayout()
         
-        # Scanning parameters
-        scan_group = ParameterGroupBox("Scanning Parameters")
-        self.scan_range_x = scan_group.add_parameter("X Range (μm):", "10.0", "Scan range in X direction")
-        self.scan_range_y = scan_group.add_parameter("Y Range (μm):", "10.0", "Scan range in Y direction")
-        self.scan_resolution = scan_group.add_parameter("Resolution (px):", "100", "Number of pixels per axis")
-        self.scan_speed = scan_group.add_parameter("Scan Speed (μm/s):", "1.0", "Scanning speed")
-        scroll_layout.addWidget(scan_group)
+        # Scan Parameters Group
+        scan_params_group = ParameterGroupBox("Scan Parameters")
+        self.x_min = scan_params_group.add_parameter("X Min (V):", "-1.0", "Minimum X scan voltage")
+        self.x_max = scan_params_group.add_parameter("X Max (V):", "1.0", "Maximum X scan voltage")
+        self.y_min = scan_params_group.add_parameter("Y Min (V):", "-1.0", "Minimum Y scan voltage")
+        self.y_max = scan_params_group.add_parameter("Y Max (V):", "1.0", "Maximum Y scan voltage")
+        self.x_resolution = scan_params_group.add_parameter("X Resolution:", "50", "X resolution in pixels")
+        self.y_resolution = scan_params_group.add_parameter("Y Resolution:", "50", "Y resolution in pixels")
+        self.dwell_time = scan_params_group.add_parameter("Dwell Time (ms):", "10", "Time per pixel in milliseconds")
+        scroll_layout.addWidget(scan_params_group)
         
-        # Stage position
-        position_group = ParameterGroupBox("Stage Position")
-        self.current_x = position_group.add_parameter("Current X (μm):", "0.0", "Current X position")
-        self.current_y = position_group.add_parameter("Current Y (μm):", "0.0", "Current Y position")
-        self.current_z = position_group.add_parameter("Current Z (μm):", "0.0", "Current Z position")
-        self.target_x = position_group.add_parameter("Target X (μm):", "0.0", "Target X position")
-        self.target_y = position_group.add_parameter("Target Y (μm):", "0.0", "Target Y position")
-        self.target_z = position_group.add_parameter("Target Z (μm):", "0.0", "Target Z position")
+        # Current Position Group
+        position_group = ParameterGroupBox("Current Position")
+        self.current_x_v = position_group.add_parameter("X Position (V):", "0.0", "Current X galvo voltage")
+        self.current_y_v = position_group.add_parameter("Y Position (V):", "0.0", "Current Y galvo voltage")
+        self.current_x_v.setReadOnly(True)
+        self.current_y_v.setReadOnly(True)
         scroll_layout.addWidget(position_group)
         
-        # Laser settings
-        laser_group = ParameterGroupBox("Laser Settings")
-        self.laser_power = laser_group.add_parameter("Laser Power (%):", "50", "Laser power percentage")
-        self.integration_time = laser_group.add_parameter("Integration Time (ms):", "10", "Integration time per pixel")
-        scroll_layout.addWidget(laser_group)
+        # Control Buttons Group
+        control_group = QGroupBox("Control")
+        control_layout = QVBoxLayout()
         
-        # Control buttons
-        button_group = QGroupBox("Confocal Control")
-        button_layout = QVBoxLayout()
-        
-        # Movement buttons
-        move_layout = QHBoxLayout()
-        self.move_to_target_btn = QPushButton("🎯 Move to Target")
-        self.move_to_target_btn.setFixedHeight(40)
-        self.move_to_target_btn.clicked.connect(self.move_to_target)
-        move_layout.addWidget(self.move_to_target_btn)
-        
-        self.center_stage_btn = QPushButton("🏠 Center Stage")
-        self.center_stage_btn.setFixedHeight(40)
-        self.center_stage_btn.clicked.connect(self.center_stage)
-        move_layout.addWidget(self.center_stage_btn)
-        button_layout.addLayout(move_layout)
-        
-        # Scanning buttons
-        scan_layout = QHBoxLayout()
-        self.start_scan_btn = QPushButton("🔍 Start Scan")
-        self.start_scan_btn.setFixedHeight(40)
-        self.start_scan_btn.clicked.connect(self.start_confocal_scan)
-        scan_layout.addWidget(self.start_scan_btn)
+        # Scan control buttons
+        scan_btn_layout = QHBoxLayout()
+        self.new_scan_btn = QPushButton("🔬 New Scan")
+        self.new_scan_btn.setFixedHeight(40)
+        self.new_scan_btn.clicked.connect(self.start_new_scan)
+        scan_btn_layout.addWidget(self.new_scan_btn)
         
         self.stop_scan_btn = QPushButton("⏹️ Stop Scan")
         self.stop_scan_btn.setFixedHeight(40)
         self.stop_scan_btn.setEnabled(False)
-        self.stop_scan_btn.clicked.connect(self.stop_confocal_scan)
-        scan_layout.addWidget(self.stop_scan_btn)
-        button_layout.addLayout(scan_layout)
+        self.stop_scan_btn.clicked.connect(self.stop_scan)
+        scan_btn_layout.addWidget(self.stop_scan_btn)
+        control_layout.addLayout(scan_btn_layout)
         
-        # Auto-focus button
+        # Position control buttons
+        pos_btn_layout = QHBoxLayout()
+        self.set_zero_btn = QPushButton("🎯 Set to Zero")
+        self.set_zero_btn.setFixedHeight(40)
+        self.set_zero_btn.clicked.connect(self.set_to_zero)
+        pos_btn_layout.addWidget(self.set_zero_btn)
+        
+        self.reset_zoom_btn = QPushButton("🔄 Reset Zoom")
+        self.reset_zoom_btn.setFixedHeight(40)
+        self.reset_zoom_btn.clicked.connect(self.reset_zoom)
+        pos_btn_layout.addWidget(self.reset_zoom_btn)
+        control_layout.addLayout(pos_btn_layout)
+        
+        # Single axis scan buttons
+        axis_btn_layout = QHBoxLayout()
+        self.x_scan_btn = QPushButton("⬌ X-Axis Scan")
+        self.x_scan_btn.setFixedHeight(40)
+        self.x_scan_btn.clicked.connect(lambda: self.single_axis_scan('x'))
+        axis_btn_layout.addWidget(self.x_scan_btn)
+        
+        self.y_scan_btn = QPushButton("⬍ Y-Axis Scan")
+        self.y_scan_btn.setFixedHeight(40)
+        self.y_scan_btn.clicked.connect(lambda: self.single_axis_scan('y'))
+        axis_btn_layout.addWidget(self.y_scan_btn)
+        control_layout.addLayout(axis_btn_layout)
+        
+        # Auto-focus and save buttons
+        util_btn_layout = QHBoxLayout()
         self.autofocus_btn = QPushButton("🔧 Auto Focus")
         self.autofocus_btn.setFixedHeight(40)
         self.autofocus_btn.clicked.connect(self.start_autofocus)
-        button_layout.addWidget(self.autofocus_btn)
+        util_btn_layout.addWidget(self.autofocus_btn)
         
-        # Progress bar for scanning
-        self.scan_progress_bar = QProgressBar()
-        self.scan_progress_bar.setVisible(False)
-        button_layout.addWidget(self.scan_progress_bar)
+        self.save_image_btn = QPushButton("📷 Save Image")
+        self.save_image_btn.setFixedHeight(40)
+        self.save_image_btn.clicked.connect(self.save_confocal_image)
+        util_btn_layout.addWidget(self.save_image_btn)
+        control_layout.addLayout(util_btn_layout)
         
-        button_group.setLayout(button_layout)
-        scroll_layout.addWidget(button_group)
+        # Progress bar
+        self.confocal_progress_bar = QProgressBar()
+        self.confocal_progress_bar.setVisible(False)
+        control_layout.addWidget(self.confocal_progress_bar)
         
-        # Camera preview
-        camera_group = QGroupBox("Camera Preview")
-        camera_layout = QVBoxLayout()
+        control_group.setLayout(control_layout)
+        scroll_layout.addWidget(control_group)
         
-        camera_btn_layout = QHBoxLayout()
-        self.camera_live_btn = QPushButton("📷 Live View")
-        self.camera_live_btn.clicked.connect(self.toggle_camera_live)
-        camera_btn_layout.addWidget(self.camera_live_btn)
+        # Data Management Group
+        data_group = QGroupBox("Data Management")
+        data_layout = QVBoxLayout()
         
-        self.camera_snapshot_btn = QPushButton("📸 Snapshot")
-        self.camera_snapshot_btn.clicked.connect(self.take_camera_snapshot)
-        camera_btn_layout.addWidget(self.camera_snapshot_btn)
-        camera_layout.addLayout(camera_btn_layout)
+        load_save_layout = QHBoxLayout()
+        self.load_scan_btn = QPushButton("📁 Load Scan")
+        self.load_scan_btn.clicked.connect(self.load_scan_data)
+        load_save_layout.addWidget(self.load_scan_btn)
         
-        camera_group.setLayout(camera_layout)
-        scroll_layout.addWidget(camera_group)
+        self.save_scan_btn = QPushButton("💾 Save Scan")
+        self.save_scan_btn.clicked.connect(self.save_scan_data)
+        load_save_layout.addWidget(self.save_scan_btn)
+        data_layout.addLayout(load_save_layout)
+        
+        data_group.setLayout(data_layout)
+        scroll_layout.addWidget(data_group)
         
         # Add stretch to push everything to top
         scroll_layout.addStretch()
@@ -520,9 +739,30 @@ class ODMRControlCenter(QMainWindow):
         scroll_widget.setLayout(scroll_layout)
         scroll_area.setWidget(scroll_widget)
         scroll_area.setWidgetResizable(True)
+        left_layout.addWidget(scroll_area)
+        left_panel.setLayout(left_layout)
         
-        layout.addWidget(scroll_area)
-        confocal_widget.setLayout(layout)
+        # Right panel for image display and live plots
+        right_panel = QWidget()
+        right_layout = QVBoxLayout()
+        
+        # Confocal image display
+        self.confocal_image_widget = ConfocalImageWidget()
+        self.confocal_image_widget.point_clicked.connect(self.on_image_click)
+        self.confocal_image_widget.zoom_selected.connect(self.on_zoom_area_selected)
+        right_layout.addWidget(self.confocal_image_widget)
+        
+        # Live signal plot
+        self.live_signal_plot = LiveSignalPlot()
+        self.live_signal_plot.setFixedHeight(200)
+        right_layout.addWidget(self.live_signal_plot)
+        
+        right_panel.setLayout(right_layout)
+        
+        # Add panels to main layout
+        main_layout.addWidget(left_panel)
+        main_layout.addWidget(right_panel, 1)  # Give more space to right panel
+        confocal_widget.setLayout(main_layout)
         
         # Add to tab widget (this will be the first tab)
         self.tab_widget.addTab(confocal_widget, "🔬 Confocal Control")
@@ -726,6 +966,75 @@ class ODMRControlCenter(QMainWindow):
         # Try to connect on startup
         self.connect_pulse_streamer()
         self.connect_rigol()
+    
+    def init_confocal_hardware(self):
+        """Initialize confocal hardware connections"""
+        # Initialize confocal state variables
+        self.confocal_scan_running = False
+        self.confocal_image_data = None
+        self.scan_history = []
+        self.zoom_level = 0
+        self.max_zoom = 3
+        self.last_scan_data = None
+        
+        try:
+            # Initialize galvo controller
+            self.galvo_controller = GalvoScannerController()
+            self.log_message("✅ Galvo controller initialized")
+            
+            # Initialize DAQ output task for galvo control
+            self.galvo_output_task = nidaqmx.Task()
+            self.galvo_output_task.ao_channels.add_ao_voltage_chan(self.galvo_controller.xin_control)
+            self.galvo_output_task.ao_channels.add_ao_voltage_chan(self.galvo_controller.yin_control)
+            self.galvo_output_task.start()
+            self.log_message("✅ Galvo DAQ task initialized")
+            
+        except Exception as e:
+            self.log_message(f"⚠️ Galvo controller error: {e}")
+            self.galvo_controller = None
+            self.galvo_output_task = None
+        
+        try:
+            # Initialize TimeTagger for confocal
+            self.confocal_tagger = createTimeTagger()
+            self.confocal_tagger.reset()
+            self.log_message("✅ Connected to TimeTagger for confocal")
+        except Exception as e:
+            self.log_message("⚠️ Real TimeTagger not detected for confocal, using virtual device")
+            self.confocal_tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+            self.confocal_tagger.run()
+        
+        # Set bin width for counting
+        self.confocal_binwidth = int(5e9)  # 5 ns in ps
+        self.confocal_counter = Counter(self.confocal_tagger, [1], self.confocal_binwidth, 1)
+        
+        # Initialize data manager
+        self.confocal_data_manager = DataManager()
+        
+        # Load confocal configuration
+        try:
+            with open("config_template.json", 'r') as f:
+                self.confocal_config = json.load(f)
+            self.update_confocal_ui_from_config()
+        except Exception as e:
+            self.log_message(f"⚠️ Could not load confocal config: {e}")
+            # Set default config
+            self.confocal_config = {
+                "scan_range": {"x": [-1.0, 1.0], "y": [-1.0, 1.0]},
+                "resolution": {"x": 50, "y": 50},
+                "dwell_time": 0.01
+            }
+    
+    def update_confocal_ui_from_config(self):
+        """Update confocal UI parameters from config"""
+        if hasattr(self, 'x_min'):
+            self.x_min.setText(str(self.confocal_config['scan_range']['x'][0]))
+            self.x_max.setText(str(self.confocal_config['scan_range']['x'][1]))
+            self.y_min.setText(str(self.confocal_config['scan_range']['y'][0]))
+            self.y_max.setText(str(self.confocal_config['scan_range']['y'][1]))
+            self.x_resolution.setText(str(self.confocal_config['resolution']['x']))
+            self.y_resolution.setText(str(self.confocal_config['resolution']['y']))
+            self.dwell_time.setText(str(self.confocal_config['dwell_time'] * 1000))  # Convert to ms
     
     def connect_pulse_streamer(self):
         """Connect to Swabian Pulse Streamer"""
@@ -1007,105 +1316,419 @@ class ODMRControlCenter(QMainWindow):
         self.log_message("✅ Device refresh completed")
     
     # Confocal Control Methods
-    def move_to_target(self):
-        """Move stage to target position"""
+    def get_scan_parameters(self):
+        """Get current scan parameters from UI"""
         try:
-            target_x = float(self.target_x.text())
-            target_y = float(self.target_y.text())
-            target_z = float(self.target_z.text())
-            
-            self.log_message(f"🎯 Moving to target position: X={target_x}, Y={target_y}, Z={target_z}")
-            
-            # TODO: Implement actual stage movement
-            # For now, simulate movement by updating current position
-            self.current_x.setText(str(target_x))
-            self.current_y.setText(str(target_y))
-            self.current_z.setText(str(target_z))
-            
-            self.log_message("✅ Movement completed")
-            
+            return {
+                'x_min': float(self.x_min.text()),
+                'x_max': float(self.x_max.text()),
+                'y_min': float(self.y_min.text()),
+                'y_max': float(self.y_max.text()),
+                'x_res': int(self.x_resolution.text()),
+                'y_res': int(self.y_resolution.text()),
+                'dwell_time': float(self.dwell_time.text()) / 1000.0  # Convert ms to s
+            }
         except ValueError:
-            QMessageBox.warning(self, "Input Error", "Please enter valid numeric values for target position")
+            QMessageBox.warning(self, "Parameter Error", "Invalid scan parameters")
+            return None
     
-    def center_stage(self):
-        """Center the stage at origin"""
-        self.target_x.setText("0.0")
-        self.target_y.setText("0.0")
-        self.target_z.setText("0.0")
-        self.move_to_target()
-    
-    def start_confocal_scan(self):
-        """Start confocal scanning"""
+    def update_confocal_config(self, **kwargs):
+        """Update confocal configuration"""
+        if 'x_range' in kwargs:
+            self.confocal_config['scan_range']['x'] = kwargs['x_range']
+        if 'y_range' in kwargs:
+            self.confocal_config['scan_range']['y'] = kwargs['y_range']
+        if 'x_res' in kwargs:
+            self.confocal_config['resolution']['x'] = kwargs['x_res']
+        if 'y_res' in kwargs:
+            self.confocal_config['resolution']['y'] = kwargs['y_res']
+        if 'dwell_time' in kwargs:
+            self.confocal_config['dwell_time'] = kwargs['dwell_time']
+        
+        # Save to file
         try:
-            x_range = float(self.scan_range_x.text())
-            y_range = float(self.scan_range_y.text())
-            resolution = int(self.scan_resolution.text())
-            speed = float(self.scan_speed.text())
-            integration_time = float(self.integration_time.text())
-            
-            self.log_message(f"🔍 Starting confocal scan: {x_range}×{y_range} μm, {resolution}×{resolution} px")
-            
-            # Update UI
-            self.start_scan_btn.setEnabled(False)
-            self.stop_scan_btn.setEnabled(True)
-            self.scan_progress_bar.setVisible(True)
-            self.scan_progress_bar.setValue(0)
-            
-            # TODO: Implement actual scanning
-            # For now, simulate a scan with a timer
-            self.scan_timer = QTimer()
-            self.scan_progress = 0
-            self.scan_timer.timeout.connect(self.update_scan_progress)
-            self.scan_timer.start(100)  # Update every 100ms
-            
-        except ValueError:
-            QMessageBox.warning(self, "Input Error", "Please enter valid numeric values for scan parameters")
+            with open("config_template.json", 'w') as f:
+                json.dump(self.confocal_config, f, indent=4)
+        except Exception as e:
+            self.log_message(f"⚠️ Could not save config: {e}")
     
-    def stop_confocal_scan(self):
-        """Stop confocal scanning"""
-        self.log_message("⏹️ Stopping confocal scan...")
+    def start_new_scan(self):
+        """Start a new confocal scan"""
+        if self.confocal_scan_running:
+            self.log_message("⚠️ Scan already running")
+            return
         
-        if hasattr(self, 'scan_timer'):
-            self.scan_timer.stop()
+        if not self.galvo_output_task:
+            QMessageBox.warning(self, "Hardware Error", "Galvo controller not initialized!")
+            return
         
-        self.start_scan_btn.setEnabled(True)
+        params = self.get_scan_parameters()
+        if params is None:
+            return
+        
+        # Update configuration
+        self.update_confocal_config(
+            x_range=[params['x_min'], params['x_max']],
+            y_range=[params['y_min'], params['y_max']],
+            x_res=params['x_res'],
+            y_res=params['y_res'],
+            dwell_time=params['dwell_time']
+        )
+        
+        # Start scan in thread
+        self.confocal_scan_running = True
+        self.new_scan_btn.setEnabled(False)
+        self.stop_scan_btn.setEnabled(True)
+        self.confocal_progress_bar.setVisible(True)
+        self.confocal_progress_bar.setValue(0)
+        
+        # Clear live signal plot
+        self.live_signal_plot.clear()
+        
+        threading.Thread(target=self.run_confocal_scan, args=(params,), daemon=True).start()
+        self.log_message("🔬 Starting new confocal scan...")
+    
+    def run_confocal_scan(self, params):
+        """Run the actual confocal scan"""
+        try:
+            # Generate scan points
+            x_points = np.linspace(params['x_min'], params['x_max'], params['x_res'])
+            y_points = np.linspace(params['y_min'], params['y_max'], params['y_res'])
+            
+            # Initialize image data
+            image_data = np.zeros((params['y_res'], params['x_res']))
+            total_points = params['x_res'] * params['y_res']
+            
+            # Perform raster scan
+            point_count = 0
+            for y_idx, y_volt in enumerate(y_points):
+                if not self.confocal_scan_running:
+                    break
+                
+                for x_idx, x_volt in enumerate(x_points):
+                    if not self.confocal_scan_running:
+                        break
+                    
+                    # Move galvo to position
+                    self.galvo_output_task.write([x_volt, y_volt])
+                    
+                    # Update current position display
+                    QTimer.singleShot(0, lambda x=x_volt, y=y_volt: self.update_position_display(x, y))
+                    
+                    # Wait for settling
+                    if x_idx == 0:
+                        time.sleep(0.05)  # Longer settling for first point in row
+                    else:
+                        time.sleep(0.001)
+                    
+                    # Acquire data
+                    time.sleep(params['dwell_time'])
+                    counts = self.confocal_counter.getData()[0][0] / (self.confocal_binwidth / 1e12)
+                    
+                    # Store data
+                    image_data[y_idx, x_idx] = counts
+                    
+                    # Update live plot
+                    QTimer.singleShot(0, lambda c=counts: self.live_signal_plot.add_data_point(c))
+                    
+                    # Update progress
+                    point_count += 1
+                    progress = int((point_count / total_points) * 100)
+                    QTimer.singleShot(0, lambda p=progress: self.confocal_progress_bar.setValue(p))
+                    
+                    # Update image display periodically
+                    if point_count % 10 == 0:
+                        QTimer.singleShot(0, lambda img=image_data.copy(), x=x_points, y=y_points: 
+                                        self.confocal_image_widget.update_image(img, x, y))
+            
+            # Final image update
+            QTimer.singleShot(0, lambda: self.confocal_image_widget.update_image(image_data, x_points, y_points))
+            
+            # Save scan data
+            scan_data = {
+                'image': image_data,
+                'x_points': x_points,
+                'y_points': y_points,
+                'scale_x': (x_points[-1] - x_points[0]) / len(x_points),
+                'scale_y': (y_points[-1] - y_points[0]) / len(y_points)
+            }
+            
+            data_path = self.confocal_data_manager.save_scan_data(scan_data)
+            self.last_scan_data = scan_data
+            
+            # Return galvo to zero
+            self.galvo_output_task.write([0, 0])
+            QTimer.singleShot(0, lambda: self.update_position_display(0, 0))
+            
+            QTimer.singleShot(0, lambda: self.log_message(f"✅ Confocal scan completed! Data saved: {data_path}"))
+            
+        except Exception as e:
+            QTimer.singleShot(0, lambda: self.log_message(f"❌ Scan error: {str(e)}"))
+        finally:
+            # Reset UI
+            QTimer.singleShot(0, self.scan_finished_cleanup)
+    
+    def scan_finished_cleanup(self):
+        """Cleanup after scan finishes"""
+        self.confocal_scan_running = False
+        self.new_scan_btn.setEnabled(True)
         self.stop_scan_btn.setEnabled(False)
-        self.scan_progress_bar.setVisible(False)
-        
-        self.log_message("✅ Scan stopped")
+        self.confocal_progress_bar.setVisible(False)
     
-    def update_scan_progress(self):
-        """Update scan progress (simulation)"""
-        self.scan_progress += 2
-        self.scan_progress_bar.setValue(self.scan_progress)
+    def stop_scan(self):
+        """Stop ongoing confocal scan"""
+        self.confocal_scan_running = False
+        self.log_message("⏹️ Stopping confocal scan...")
+    
+    def update_position_display(self, x_volt, y_volt):
+        """Update current position display"""
+        self.current_x_v.setText(f"{x_volt:.3f}")
+        self.current_y_v.setText(f"{y_volt:.3f}")
+    
+    def set_to_zero(self):
+        """Set galvo to zero position"""
+        if self.galvo_output_task:
+            try:
+                self.galvo_output_task.write([0, 0])
+                self.update_position_display(0, 0)
+                self.log_message("🎯 Galvo set to zero position")
+            except Exception as e:
+                self.log_message(f"❌ Error setting galvo to zero: {e}")
+        else:
+            self.log_message("❌ Galvo controller not initialized")
+    
+    def on_image_click(self, x_volt, y_volt):
+        """Handle click on confocal image"""
+        if self.galvo_output_task:
+            try:
+                self.galvo_output_task.write([x_volt, y_volt])
+                self.update_position_display(x_volt, y_volt)
+                self.log_message(f"🎯 Moved galvo to: X={x_volt:.3f}V, Y={y_volt:.3f}V")
+            except Exception as e:
+                self.log_message(f"❌ Error moving galvo: {e}")
+    
+    def on_zoom_area_selected(self, x_min, x_max, y_min, y_max):
+        """Handle zoom area selection"""
+        if self.zoom_level >= self.max_zoom:
+            self.log_message(f"⚠️ Max zoom level reached ({self.max_zoom})")
+            return
         
-        if self.scan_progress >= 100:
-            self.stop_confocal_scan()
-            self.log_message("✅ Confocal scan completed")
+        # Save current state to history
+        current_params = self.get_scan_parameters()
+        if current_params:
+            self.scan_history.append(current_params)
+            self.zoom_level += 1
+            
+            # Update parameters to zoom area
+            self.x_min.setText(f"{x_min:.3f}")
+            self.x_max.setText(f"{x_max:.3f}")
+            self.y_min.setText(f"{y_min:.3f}")
+            self.y_max.setText(f"{y_max:.3f}")
+            
+            self.log_message(f"🔍 Zoom area selected: X=[{x_min:.3f}, {x_max:.3f}], Y=[{y_min:.3f}, {y_max:.3f}]")
+            
+            # Automatically start new scan
+            QTimer.singleShot(100, self.start_new_scan)
+    
+    def reset_zoom(self):
+        """Reset zoom to original view"""
+        if self.zoom_level == 0:
+            self.log_message("🔁 Already at original zoom level")
+            return
+        
+        if not self.scan_history:
+            # Use config defaults
+            self.update_confocal_ui_from_config()
+        else:
+            # Restore original parameters
+            original_params = self.scan_history[0]
+            self.x_min.setText(str(original_params['x_min']))
+            self.x_max.setText(str(original_params['x_max']))
+            self.y_min.setText(str(original_params['y_min']))
+            self.y_max.setText(str(original_params['y_max']))
+            self.x_resolution.setText(str(original_params['x_res']))
+            self.y_resolution.setText(str(original_params['y_res']))
+            self.dwell_time.setText(str(original_params['dwell_time'] * 1000))
+        
+        # Clear zoom history
+        self.scan_history.clear()
+        self.zoom_level = 0
+        
+        self.log_message("🔄 Zoom reset to original view")
+        
+        # Automatically start new scan
+        QTimer.singleShot(100, self.start_new_scan)
+    
+    def single_axis_scan(self, axis):
+        """Perform single axis scan"""
+        if not self.galvo_output_task:
+            QMessageBox.warning(self, "Hardware Error", "Galvo controller not initialized!")
+            return
+        
+        # Get current position
+        current_x = float(self.current_x_v.text()) if self.current_x_v.text() else 0.0
+        current_y = float(self.current_y_v.text()) if self.current_y_v.text() else 0.0
+        
+        params = self.get_scan_parameters()
+        if params is None:
+            return
+        
+        def run_axis_scan():
+            try:
+                if axis == 'x':
+                    scan_points = np.linspace(params['x_min'], params['x_max'], params['x_res'])
+                    fixed_pos = current_y
+                    axis_label = 'X Position (V)'
+                else:
+                    scan_points = np.linspace(params['y_min'], params['y_max'], params['y_res'])
+                    fixed_pos = current_x
+                    axis_label = 'Y Position (V)'
+                
+                counts = []
+                for point in scan_points:
+                    if axis == 'x':
+                        self.galvo_output_task.write([point, fixed_pos])
+                        QTimer.singleShot(0, lambda: self.update_position_display(point, fixed_pos))
+                    else:
+                        self.galvo_output_task.write([fixed_pos, point])
+                        QTimer.singleShot(0, lambda: self.update_position_display(fixed_pos, point))
+                    
+                    time.sleep(0.001)  # Settling time
+                    count = self.confocal_counter.getData()[0][0] / (self.confocal_binwidth / 1e12)
+                    counts.append(count)
+                
+                # Return to original position
+                self.galvo_output_task.write([current_x, current_y])
+                QTimer.singleShot(0, lambda: self.update_position_display(current_x, current_y))
+                
+                # TODO: Plot results in a separate window or widget
+                self.log_message(f"✅ {axis.upper()}-axis scan completed")
+                
+            except Exception as e:
+                QTimer.singleShot(0, lambda: self.log_message(f"❌ Axis scan error: {e}"))
+        
+        threading.Thread(target=run_axis_scan, daemon=True).start()
+        self.log_message(f"🔍 Starting {axis.upper()}-axis scan...")
     
     def start_autofocus(self):
         """Start autofocus procedure"""
-        self.log_message("🔧 Starting autofocus...")
+        if not self.galvo_output_task:
+            QMessageBox.warning(self, "Hardware Error", "Galvo controller not initialized!")
+            return
         
-        # TODO: Implement actual autofocus
-        # For now, simulate autofocus
-        QTimer.singleShot(2000, lambda: self.log_message("✅ Autofocus completed"))
+        def run_autofocus():
+            try:
+                self.log_message("🔧 Starting autofocus procedure...")
+                
+                # Get current position
+                current_x = float(self.current_x_v.text()) if self.current_x_v.text() else 0.0
+                current_y = float(self.current_y_v.text()) if self.current_y_v.text() else 0.0
+                
+                # Simple autofocus: scan small area and find maximum
+                scan_range = 0.2  # 0.2V range around current position
+                scan_points = 20
+                
+                x_points = np.linspace(current_x - scan_range/2, current_x + scan_range/2, scan_points)
+                y_points = np.linspace(current_y - scan_range/2, current_y + scan_range/2, scan_points)
+                
+                max_count = 0
+                best_x, best_y = current_x, current_y
+                
+                for y in y_points:
+                    for x in x_points:
+                        self.galvo_output_task.write([x, y])
+                        time.sleep(0.01)
+                        count = self.confocal_counter.getData()[0][0] / (self.confocal_binwidth / 1e12)
+                        
+                        if count > max_count:
+                            max_count = count
+                            best_x, best_y = x, y
+                
+                # Move to best position
+                self.galvo_output_task.write([best_x, best_y])
+                QTimer.singleShot(0, lambda: self.update_position_display(best_x, best_y))
+                
+                QTimer.singleShot(0, lambda: self.log_message(f"✅ Autofocus completed. Best position: X={best_x:.3f}V, Y={best_y:.3f}V"))
+                
+            except Exception as e:
+                QTimer.singleShot(0, lambda: self.log_message(f"❌ Autofocus error: {e}"))
+        
+        threading.Thread(target=run_autofocus, daemon=True).start()
     
-    def toggle_camera_live(self):
-        """Toggle camera live view"""
-        if self.camera_live_btn.text() == "📷 Live View":
-            self.camera_live_btn.setText("⏸️ Stop Live")
-            self.log_message("📷 Camera live view started")
-            # TODO: Implement actual camera live view
-        else:
-            self.camera_live_btn.setText("📷 Live View")
-            self.log_message("⏸️ Camera live view stopped")
+    def save_confocal_image(self):
+        """Save current confocal image"""
+        if self.last_scan_data is None:
+            QMessageBox.warning(self, "No Data", "No scan data to save!")
+            return
+        
+        try:
+            filename, _ = QFileDialog.getSaveFileName(
+                self, "Save Confocal Image", "", 
+                "PNG files (*.png);;All files (*.*)"
+            )
+            
+            if filename:
+                # Use the matplotlib figure to save
+                self.confocal_image_widget.figure.savefig(filename, dpi=300, bbox_inches='tight',
+                                                         facecolor='white', edgecolor='none')
+                self.log_message(f"📷 Image saved: {filename}")
+                
+        except Exception as e:
+            self.log_message(f"❌ Error saving image: {e}")
     
-    def take_camera_snapshot(self):
-        """Take a camera snapshot"""
-        self.log_message("📸 Taking camera snapshot...")
-        # TODO: Implement actual camera snapshot
-        QTimer.singleShot(500, lambda: self.log_message("✅ Snapshot saved"))
+    def load_scan_data(self):
+        """Load scan data from file"""
+        try:
+            filename, _ = QFileDialog.getOpenFileName(
+                self, "Load Scan Data", "", 
+                "NPZ files (*.npz);;CSV files (*.csv);;All files (*.*)"
+            )
+            
+            if filename:
+                if filename.endswith('.npz'):
+                    data = np.load(filename)
+                    image = data['image']
+                    # Generate points based on image shape and current parameters
+                    params = self.get_scan_parameters()
+                    if params:
+                        x_points = np.linspace(params['x_min'], params['x_max'], image.shape[1])
+                        y_points = np.linspace(params['y_min'], params['y_max'], image.shape[0])
+                        self.confocal_image_widget.update_image(image, x_points, y_points)
+                        self.log_message(f"📁 Scan data loaded: {filename}")
+                else:
+                    self.log_message("⚠️ Currently only NPZ files are supported for loading")
+                    
+        except Exception as e:
+            self.log_message(f"❌ Error loading scan data: {e}")
+    
+    def save_scan_data(self):
+        """Save current scan data"""
+        if self.last_scan_data is None:
+            QMessageBox.warning(self, "No Data", "No scan data to save!")
+            return
+        
+        try:
+            filename, _ = QFileDialog.getSaveFileName(
+                self, "Save Scan Data", "", 
+                "NPZ files (*.npz);;CSV files (*.csv);;All files (*.*)"
+            )
+            
+            if filename:
+                if filename.endswith('.npz') or 'NPZ' in filename:
+                    np.savez(filename, 
+                            image=self.last_scan_data['image'],
+                            x_points=self.last_scan_data['x_points'],
+                            y_points=self.last_scan_data['y_points'],
+                            scale_x=self.last_scan_data['scale_x'],
+                            scale_y=self.last_scan_data['scale_y'])
+                else:
+                    # Save using data manager (CSV format)
+                    data_path = self.confocal_data_manager.save_scan_data(self.last_scan_data)
+                
+                self.log_message(f"💾 Scan data saved: {filename}")
+                
+        except Exception as e:
+            self.log_message(f"❌ Error saving scan data: {e}")
     
     def closeEvent(self, event):
         """Handle application closing"""
