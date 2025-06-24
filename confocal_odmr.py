@@ -22,13 +22,12 @@ import nidaqmx
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                            QHBoxLayout, QLabel, QPushButton, QSpinBox, 
                            QDoubleSpinBox, QGridLayout, QGroupBox, QTextEdit,
-                           QSplitter, QFrame, QScrollArea, QSizePolicy)
+                           QSplitter, QFrame, QScrollArea, QSizePolicy, QComboBox)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor, QFont
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from matplotlib.patches import Rectangle
 from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual
 
 # Local imports
@@ -140,16 +139,16 @@ class QtSignalBridge(QObject):
     image_updated_signal = pyqtSignal(np.ndarray)
     scanner_position_signal = pyqtSignal(float, float)
     
-# --------------------- IMAGE DISPLAY WIDGET ---------------------
-class ImageDisplayWidget(QWidget):
-    """Custom widget for displaying and interacting with scan images using matplotlib pcolormesh"""
+# --------------------- PROFESSIONAL IMAGE DISPLAY WIDGET ---------------------
+class ProfessionalImageWidget(QWidget):
+    """Professional scientific image display widget with matplotlib backend"""
     
-    clicked = pyqtSignal(int, int)  # x, y pixel coordinates
+    clicked = pyqtSignal(float, float)  # x, y coordinates in real units
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setMinimumSize(400, 400)
-        self.setup_plot()
+        self.setMinimumSize(500, 500)
+        self.setup_ui()
         
         # Image data
         self.image_data = None
@@ -157,186 +156,294 @@ class ImageDisplayWidget(QWidget):
         self.y_points = None
         self.scanner_x = None
         self.scanner_y = None
-        self.scanner_point = None
         
         # Zoom selection
         self.zoom_start = None
         self.zoom_end = None
         self.drawing_zoom = False
-        self.zoom_rect = None
         
-    def setup_plot(self):
-        """Setup matplotlib figure and canvas"""
+    def setup_ui(self):
+        """Setup the matplotlib-based UI"""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
         
-        # Create matplotlib figure
-        self.figure = Figure(figsize=(6, 6), facecolor='#262930')
+        # Create matplotlib figure with dark theme
+        plt.style.use('dark_background')
+        self.figure = Figure(figsize=(8, 8), facecolor='#262930')
         self.canvas = FigureCanvas(self.figure)
-        self.ax = self.figure.add_subplot(111, facecolor='#1e1e1e')
+        self.canvas.setStyleSheet("background-color: #262930;")
         
-        # Setup plot appearance
-        self.ax.set_xlabel('X Position (V)', color='white')
-        self.ax.set_ylabel('Y Position (V)', color='white')
-        self.ax.tick_params(colors='white')
+        # Create the main axes
+        self.ax = self.figure.add_subplot(111)
+        self.ax.set_facecolor('#262930')
+        
+        # Style the axes
+        self.ax.tick_params(colors='white', labelsize=10)
         self.ax.spines['bottom'].set_color('white')
         self.ax.spines['top'].set_color('white')
         self.ax.spines['right'].set_color('white')
         self.ax.spines['left'].set_color('white')
+        
+        # Set labels
+        self.ax.set_xlabel('X (µm)', color='white', fontsize=12, fontweight='bold')
+        self.ax.set_ylabel('Y (µm)', color='white', fontsize=12, fontweight='bold')
+        
+        # Initialize empty image
+        self.im = None
+        self.colorbar = None
+        self.crosshair_v = None
+        self.crosshair_h = None
+        
+        # Connect mouse events
+        self.canvas.mpl_connect('button_press_event', self.on_click)
+        self.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
         
         layout.addWidget(self.canvas)
         
-        # Connect mouse events
-        self.canvas.mpl_connect('button_press_event', self.on_mouse_press)
-        self.canvas.mpl_connect('motion_notify_event', self.on_mouse_move)
-        self.canvas.mpl_connect('button_release_event', self.on_mouse_release)
-        
-        # Initialize empty plot
-        self.pcolormesh = None
-        self.colorbar = None
-        
     def set_image_data(self, image_data, x_points=None, y_points=None):
-        """Set the image data and update display using pcolormesh"""
+        """Set image data and coordinate arrays"""
         self.image_data = image_data
-        self.x_points = x_points
-        self.y_points = y_points
+        self.x_points = x_points if x_points is not None else np.arange(image_data.shape[1])
+        self.y_points = y_points if y_points is not None else np.arange(image_data.shape[0])
         self.update_display()
         
     def update_display(self):
-        """Update the displayed image using pcolormesh"""
+        """Update the image display with professional styling"""
         if self.image_data is None:
             return
             
-        # Clear previous plot
         self.ax.clear()
         
-        # Setup plot appearance again after clearing
-        self.ax.set_xlabel('X Position (V)', color='white')
-        self.ax.set_ylabel('Y Position (V)', color='white')
-        self.ax.tick_params(colors='white')
-        self.ax.spines['bottom'].set_color('white')
-        self.ax.spines['top'].set_color('white')
-        self.ax.spines['right'].set_color('white')
-        self.ax.spines['left'].set_color('white')
-        self.ax.set_facecolor('#1e1e1e')
+        # Create extent for proper coordinate mapping
+        extent = [self.x_points[0], self.x_points[-1], 
+                 self.y_points[0], self.y_points[-1]]
         
-        # Create coordinate grids for pcolormesh
-        if self.x_points is not None and self.y_points is not None:
-            X, Y = np.meshgrid(self.x_points, self.y_points)
+        # Display image with professional colormap
+        self.current_cmap = getattr(self, 'current_cmap', 'plasma')
+        self.im = self.ax.imshow(self.image_data, 
+                                aspect='equal',
+                                extent=extent,
+                                cmap=self.current_cmap,  # Professional scientific colormap
+                                origin='lower',
+                                interpolation='bilinear')
+        
+        # Add colorbar if not exists
+        if self.colorbar is None:
+            self.colorbar = self.figure.colorbar(self.im, ax=self.ax, 
+                                               label='APD Counts/s', 
+                                               shrink=0.8)
+            self.colorbar.ax.yaxis.label.set_color('white')
+            self.colorbar.ax.tick_params(colors='white')
         else:
-            # Fallback to pixel coordinates if voltage points not available
-            height, width = self.image_data.shape
-            x_coords = np.arange(width)
-            y_coords = np.arange(height)
-            X, Y = np.meshgrid(x_coords, y_coords)
+            self.colorbar.update_normal(self.im)
         
-        # Create pcolormesh plot
-        self.pcolormesh = self.ax.pcolormesh(X, Y, self.image_data, 
-                                           cmap='viridis', shading='auto')
+        # Style the axes
+        self.ax.set_xlabel('X (µm)', color='white', fontsize=12, fontweight='bold')
+        self.ax.set_ylabel('Y (µm)', color='white', fontsize=12, fontweight='bold')
+        self.ax.tick_params(colors='white', labelsize=10)
+        self.ax.grid(True, alpha=0.3, color='gray', linestyle='-', linewidth=0.5)
         
-        # Add/update colorbar
-        if self.colorbar is not None:
-            self.colorbar.remove()
-        self.colorbar = self.figure.colorbar(self.pcolormesh, ax=self.ax)
-        self.colorbar.set_label('Counts', color='white')
-        self.colorbar.ax.tick_params(colors='white')
+        # Set background
+        self.ax.set_facecolor('#262930')
+        
+        # Add crosshair if scanner position is set
+        self.update_crosshair()
+        
+        # Tight layout
+        self.figure.tight_layout()
+        self.canvas.draw()
+        
+    def update_crosshair(self):
+        """Update crosshair position"""
+        if self.scanner_x is not None and self.scanner_y is not None:
+            # Remove old crosshair
+            if self.crosshair_v is not None:
+                self.crosshair_v.remove()
+            if self.crosshair_h is not None:
+                self.crosshair_h.remove()
+                
+            # Add new crosshair
+            self.crosshair_v = self.ax.axvline(x=self.scanner_x, color='#00ffcc', 
+                                             linewidth=2, alpha=0.8, linestyle='--')
+            self.crosshair_h = self.ax.axhline(y=self.scanner_y, color='#00ffcc', 
+                                             linewidth=2, alpha=0.8, linestyle='--')
+            self.canvas.draw()
+    
+    def set_scanner_position(self, x_real, y_real):
+        """Set scanner position in real coordinates"""
+        self.scanner_x = x_real
+        self.scanner_y = y_real
+        self.update_crosshair()
+    
+    def on_click(self, event):
+        """Handle mouse click events"""
+        if event.inaxes != self.ax:
+            return
+            
+        if event.button == 1:  # Left click
+            x_real = event.xdata
+            y_real = event.ydata
+            
+            if x_real is not None and y_real is not None:
+                # Update scanner position
+                self.set_scanner_position(x_real, y_real)
+                # Emit signal with real coordinates
+                self.clicked.emit(x_real, y_real)
+    
+    def on_mouse_move(self, event):
+        """Handle mouse move for coordinate display"""
+        if event.inaxes != self.ax:
+            return
+            
+        if event.xdata is not None and event.ydata is not None:
+            # Update cursor position in statusbar or tooltip
+            self.setToolTip(f"Position: ({event.xdata:.3f}, {event.ydata:.3f}) µm")
+    
+    def set_colormap(self, cmap_name):
+        """Change the colormap of the image"""
+        self.current_cmap = cmap_name
+        if self.im is not None:
+            self.im.set_cmap(cmap_name)
+            self.canvas.draw()
+
+# Keep the old class for backward compatibility but rename it
+class ImageDisplayWidget(QLabel):
+    """Legacy image display widget - kept for compatibility"""
+    
+    clicked = pyqtSignal(int, int)  # x, y pixel coordinates
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumSize(400, 400)
+        self.setStyleSheet("border: 1px solid #555555; background-color: #262930;")
+        self.setAlignment(Qt.AlignCenter)
+        self.setScaledContents(True)
+        
+        # Image data
+        self.image_data = None
+        self.scale_x = 1.0
+        self.scale_y = 1.0
+        self.scanner_x = None
+        self.scanner_y = None
+        
+        # Zoom selection
+        self.zoom_start = None
+        self.zoom_end = None
+        self.drawing_zoom = False
+        
+    def set_image_data(self, image_data, scale_x=1.0, scale_y=1.0):
+        """Set the image data and update display"""
+        self.image_data = image_data
+        self.scale_x = scale_x
+        self.scale_y = scale_y
+        self.update_display()
+        
+    def update_display(self):
+        """Update the displayed image"""
+        if self.image_data is None:
+            return
+            
+        # Normalize image data to 0-255
+        img_norm = self.image_data.copy()
+        if img_norm.max() > img_norm.min():
+            img_norm = (img_norm - img_norm.min()) / (img_norm.max() - img_norm.min()) * 255
+        else:
+            img_norm = np.zeros_like(img_norm)
+        
+        # Convert to QImage
+        height, width = img_norm.shape
+        bytes_per_line = width
+        qimage = QImage(img_norm.astype(np.uint8), width, height, bytes_per_line, QImage.Format_Grayscale8)
+        
+        # Create pixmap and draw overlay
+        pixmap = QPixmap.fromImage(qimage)
+        painter = QPainter(pixmap)
         
         # Draw scanner position
         if self.scanner_x is not None and self.scanner_y is not None:
-            if self.scanner_point is not None:
-                self.scanner_point.remove()
-            self.scanner_point = self.ax.plot(self.scanner_x, self.scanner_y, 'ro', 
-                                            markersize=8, markeredgecolor='white')[0]
+            painter.setPen(QPen(QColor(255, 0, 0), 3))
+            painter.drawEllipse(int(self.scanner_x - 3), int(self.scanner_y - 3), 6, 6)
         
         # Draw zoom rectangle
         if self.zoom_start and self.zoom_end:
-            if self.zoom_rect is not None:
-                self.zoom_rect.remove()
+            painter.setPen(QPen(QColor(255, 0, 0), 2))
             x1, y1 = self.zoom_start
             x2, y2 = self.zoom_end
-            width = abs(x2 - x1)
-            height = abs(y2 - y1)
-            self.zoom_rect = Rectangle((min(x1, x2), min(y1, y2)), width, height,
-                                     linewidth=2, edgecolor='red', facecolor='none')
-            self.ax.add_patch(self.zoom_rect)
+            painter.drawRect(min(x1, x2), min(y1, y2), abs(x2 - x1), abs(y2 - y1))
         
-        # Ensure aspect ratio is equal
-        self.ax.set_aspect('equal', adjustable='box')
-        
-        # Refresh canvas
-        self.canvas.draw()
+        painter.end()
+        self.setPixmap(pixmap)
     
-    def set_scanner_position(self, x_voltage, y_voltage):
-        """Set scanner position marker in voltage coordinates"""
-        self.scanner_x = x_voltage
-        self.scanner_y = y_voltage
+    def set_scanner_position(self, x_pixel, y_pixel):
+        """Set scanner position marker"""
+        self.scanner_x = x_pixel
+        self.scanner_y = y_pixel
         self.update_display()
     
-    def on_mouse_press(self, event):
+    def mousePressEvent(self, event):
         """Handle mouse press for clicking and zoom selection"""
-        if event.button == 1 and event.inaxes == self.ax:  # Left click in axes
-            x, y = event.xdata, event.ydata
-            if x is not None and y is not None:
+        if event.button() == Qt.LeftButton:
+            # Get click position relative to image
+            pos = event.pos()
+            if self.pixmap():
+                # Scale click position to image coordinates
+                pixmap_rect = self.pixmap().rect()
+                widget_rect = self.rect()
+                
+                # Calculate scale factors
+                scale_x = pixmap_rect.width() / widget_rect.width()
+                scale_y = pixmap_rect.height() / widget_rect.height()
+                
+                x = int(pos.x() * scale_x)
+                y = int(pos.y() * scale_y)
+                
                 # Check if we're starting zoom selection (Ctrl+click)
-                if event.key == 'ctrl':
+                if event.modifiers() & Qt.ControlModifier:
                     self.zoom_start = (x, y)
                     self.drawing_zoom = True
                 else:
-                    # Convert coordinates to pixel indices for backwards compatibility
-                    if self.x_points is not None and self.y_points is not None:
-                        # Find closest pixel indices
-                        x_idx = np.argmin(np.abs(self.x_points - x))
-                        y_idx = np.argmin(np.abs(self.y_points - y))
-                        self.clicked.emit(x_idx, y_idx)
-                    else:
-                        # Direct pixel coordinates
-                        self.clicked.emit(int(x), int(y))
+                    self.clicked.emit(x, y)
     
-    def on_mouse_move(self, event):
+    def mouseMoveEvent(self, event):
         """Handle mouse move for zoom rectangle"""
-        if self.drawing_zoom and event.inaxes == self.ax:
-            x, y = event.xdata, event.ydata
-            if x is not None and y is not None:
+        if self.drawing_zoom and event.buttons() & Qt.LeftButton:
+            pos = event.pos()
+            if self.pixmap():
+                pixmap_rect = self.pixmap().rect()
+                widget_rect = self.rect()
+                
+                scale_x = pixmap_rect.width() / widget_rect.width()
+                scale_y = pixmap_rect.height() / widget_rect.height()
+                
+                x = int(pos.x() * scale_x)
+                y = int(pos.y() * scale_y)
+                
                 self.zoom_end = (x, y)
                 self.update_display()
     
-    def on_mouse_release(self, event):
+    def mouseReleaseEvent(self, event):
         """Handle mouse release for zoom selection"""
-        if event.button == 1 and self.drawing_zoom:  # Left click release
+        if event.button() == Qt.LeftButton and self.drawing_zoom:
             self.drawing_zoom = False
             if self.zoom_start and self.zoom_end:
+                # Calculate zoom region and emit signal if needed
                 x1, y1 = self.zoom_start
                 x2, y2 = self.zoom_end
+                min_x, max_x = min(x1, x2), max(x1, x2)
+                min_y, max_y = min(y1, y2), max(y1, y2)
                 
-                # Calculate area size
-                area_x = abs(x2 - x1)
-                area_y = abs(y2 - y1)
-                
-                # Only proceed if zoom area is significant
-                if self.x_points is not None and self.y_points is not None:
-                    min_area = (max(self.x_points) - min(self.x_points)) * 0.05  # 5% of range
-                    if area_x > min_area and area_y > min_area:
-                        # Reset zoom selection
-                        self.zoom_start = None
-                        self.zoom_end = None
-                        self.update_display()
-                        
-                        # TODO: Implement zoom functionality
-                        # For now, just clear the selection
-                    else:
-                        self.zoom_start = None
-                        self.zoom_end = None
-                        self.update_display()
+                # Only proceed if zoom area is significant (> 10x10 pixels)
+                if (max_x - min_x) > 10 and (max_y - min_y) > 10:
+                    # Reset zoom selection
+                    self.zoom_start = None
+                    self.zoom_end = None
+                    self.update_display()
+                    
+                    # TODO: Implement zoom functionality
+                    # For now, just clear the selection
                 else:
-                    # Fallback for pixel coordinates
-                    if area_x > 10 and area_y > 10:
-                        self.zoom_start = None
-                        self.zoom_end = None
-                        self.update_display()
-                    else:
-                        self.zoom_start = None
-                        self.zoom_end = None
-                        self.update_display()
+                    self.zoom_start = None
+                    self.zoom_end = None
+                    self.update_display()
 
 # --------------------- LIVE PLOT WIDGET ---------------------
 class LivePlotWidget(QWidget):
@@ -390,6 +497,7 @@ class ControlPanelWidget(QWidget):
     auto_focus_requested = pyqtSignal()
     load_scan_requested = pyqtSignal()
     parameters_updated = pyqtSignal(dict)
+    colormap_changed = pyqtSignal(str)
     
     def __init__(self, config_manager, parent=None):
         super().__init__(parent)
@@ -480,6 +588,22 @@ class ControlPanelWidget(QWidget):
         
         layout.addWidget(controls_group)
         
+        # Display Options Group
+        display_group = QGroupBox("Display Options")
+        display_layout = QVBoxLayout(display_group)
+        
+        # Colormap selection
+        colormap_layout = QHBoxLayout()
+        colormap_layout.addWidget(QLabel("Colormap:"))
+        self.colormap_combo = QComboBox()
+        self.colormap_combo.addItems(['plasma', 'viridis', 'inferno', 'magma', 'cividis', 'hot', 'cool', 'gray'])
+        self.colormap_combo.setCurrentText('plasma')
+        self.colormap_combo.currentTextChanged.connect(self.on_colormap_changed)
+        colormap_layout.addWidget(self.colormap_combo)
+        display_layout.addLayout(colormap_layout)
+        
+        layout.addWidget(display_group)
+        
         # Status/Info Display
         info_group = QGroupBox("Status")
         info_layout = QVBoxLayout(info_group)
@@ -518,6 +642,10 @@ class ControlPanelWidget(QWidget):
         cursor = self.info_text.textCursor()
         cursor.movePosition(cursor.End)
         self.info_text.setTextCursor(cursor)
+    
+    def on_colormap_changed(self, colormap_name):
+        """Handle colormap change"""
+        self.colormap_changed.emit(colormap_name)
 
 # --------------------- MAIN APPLICATION CLASS ---------------------
 class ConfocalMicroscopyApp(QMainWindow):
@@ -663,9 +791,32 @@ class ConfocalMicroscopyApp(QMainWindow):
                 background-color: #262930;
                 border: none;
             }
-            QSplitter::handle {
-                background-color: #555555;
-            }
+                         QSplitter::handle {
+                 background-color: #555555;
+             }
+             QComboBox {
+                 background-color: #3c3c3c;
+                 color: #ffffff;
+                 border: 1px solid #555555;
+                 border-radius: 4px;
+                 padding: 5px;
+                 font-size: 10pt;
+                 min-width: 100px;
+             }
+             QComboBox:focus {
+                 border: 2px solid #00d4aa;
+             }
+             QComboBox::drop-down {
+                 border: none;
+                 width: 20px;
+             }
+             QComboBox::down-arrow {
+                 image: none;
+                 border: 2px solid #555555;
+                 width: 3px;
+                 height: 3px;
+                 background: #00d4aa;
+             }
         """)
         
         # Central widget with splitter
@@ -679,12 +830,25 @@ class ConfocalMicroscopyApp(QMainWindow):
         self.control_panel = ControlPanelWidget(self.config_manager)
         main_splitter.addWidget(self.control_panel)
         
-        # Center panel - Image display
+        # Center panel - Professional Image display
         image_container = QWidget()
         image_layout = QVBoxLayout(image_container)
-        image_layout.addWidget(QLabel("Scan Image"))
         
-        self.image_display = ImageDisplayWidget()
+        # Title with styling
+        title_label = QLabel("Scan Image")
+        title_label.setStyleSheet("""
+            QLabel {
+                font-size: 14pt;
+                font-weight: bold;
+                color: #00d4aa;
+                padding: 5px;
+                border-bottom: 2px solid #555555;
+                margin-bottom: 10px;
+            }
+        """)
+        image_layout.addWidget(title_label)
+        
+        self.image_display = ProfessionalImageWidget()
         image_layout.addWidget(self.image_display)
         
         main_splitter.addWidget(image_container)
@@ -703,15 +867,22 @@ class ConfocalMicroscopyApp(QMainWindow):
         main_splitter.setSizes([300, 500, 400])
         main_layout.addWidget(main_splitter)
         
-        # Initialize image with zeros
+        # Initialize image with zeros and proper coordinates
         config = self.config_manager.get_config()
         x_res = config['resolution']['x']
         y_res = config['resolution']['y']
+        x_range = config['scan_range']['x']
+        y_range = config['scan_range']['y']
+        
         self.image = np.zeros((y_res, x_res), dtype=np.float32)
         
-        # Get initial scan points for display
-        x_points, y_points = self.scan_points_manager.get_points()
-        self.image_display.set_image_data(self.image, x_points, y_points)
+        # Create initial coordinate arrays
+        x_points = np.linspace(x_range[0], x_range[1], x_res)
+        y_points = np.linspace(y_range[0], y_range[1], y_res)
+        x_points_um = x_points * MICRONS_PER_VOLT
+        y_points_um = y_points * MICRONS_PER_VOLT
+        
+        self.image_display.set_image_data(self.image, x_points_um, y_points_um)
         
     def setup_connections(self):
         """Setup signal connections"""
@@ -723,6 +894,7 @@ class ConfocalMicroscopyApp(QMainWindow):
         self.control_panel.auto_focus_requested.connect(self.auto_focus)
         self.control_panel.load_scan_requested.connect(self.load_scan)
         self.control_panel.parameters_updated.connect(self.update_scan_parameters)
+        self.control_panel.colormap_changed.connect(self.on_colormap_changed)
         
         # Image display connections
         self.image_display.clicked.connect(self.on_image_click)
@@ -745,28 +917,24 @@ class ConfocalMicroscopyApp(QMainWindow):
         """Add info message to control panel"""
         self.control_panel.add_info_message(message)
         
-    def on_image_click(self, x, y):
-        """Handle image click to move scanner"""
+    def on_image_click(self, x_real, y_real):
+        """Handle image click to move scanner (receives micron coordinates from widget)"""
         if self.image is None:
             return
-            
-        height, width = self.image.shape
-        
-        # Get current ranges from config manager
-        config = self.config_manager.get_config()
-        x_range = config['scan_range']['x']
-        y_range = config['scan_range']['y']
-        
-        # Convert from pixel coordinates to voltage values
-        x_voltage = np.interp(x, [0, width-1], [x_range[0], x_range[1]])
-        y_voltage = np.interp(y, [0, height-1], [y_range[0], y_range[1]])
         
         try:
+            # Convert from micron coordinates back to voltage
+            x_voltage = x_real / MICRONS_PER_VOLT
+            y_voltage = y_real / MICRONS_PER_VOLT
+            
             self.output_task.write([x_voltage, y_voltage])
-            self.add_info_message(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
-            self.image_display.set_scanner_position(x_voltage, y_voltage)
+            self.add_info_message(f"🎯 Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V ({x_real:.1f}, {y_real:.1f} µm)")
+            
+            # Update the crosshair position (in micron coordinates for display)
+            self.image_display.set_scanner_position(x_real, y_real)
+            
         except Exception as e:
-            self.add_info_message(f"Error moving scanner: {str(e)}")
+            self.add_info_message(f"❌ Error moving scanner: {str(e)}")
             
     def start_scan(self):
         """Start a new scan"""
@@ -799,7 +967,10 @@ class ConfocalMicroscopyApp(QMainWindow):
                     
                     # Update display every 10 points to keep UI responsive
                     if (y_idx * width + x_idx) % 10 == 0:
-                        self.image_display.set_image_data(self.image, x_points, y_points)
+                        # Convert coordinates for display update
+                        x_points_um = np.array(x_points) * MICRONS_PER_VOLT
+                        y_points_um = np.array(y_points) * MICRONS_PER_VOLT
+                        self.image_display.set_image_data(self.image, x_points_um, y_points_um)
                         QApplication.processEvents()
             
             self.add_info_message("✅ Scan completed successfully")
@@ -808,11 +979,15 @@ class ConfocalMicroscopyApp(QMainWindow):
             self.add_info_message(f"❌ Error during scan: {str(e)}")
             return
         
-        # Update image display
+        # Update professional image display with real coordinates
         scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
         scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
         
-        self.image_display.set_image_data(self.image, x_points, y_points)
+        # Convert voltage points to micron coordinates for display
+        x_points_um = np.array(x_points) * MICRONS_PER_VOLT
+        y_points_um = np.array(y_points) * MICRONS_PER_VOLT
+        
+        self.image_display.set_image_data(self.image, x_points_um, y_points_um)
         
         # Create a dictionary with image and scan positions
         scan_data = {
@@ -877,6 +1052,11 @@ class ConfocalMicroscopyApp(QMainWindow):
         self.config_manager.update_scan_parameters(**params)
         self.scan_points_manager._update_points_from_config()
         self.add_info_message("📐 Scan parameters updated")
+    
+    def on_colormap_changed(self, colormap_name):
+        """Handle colormap change"""
+        self.image_display.set_colormap(colormap_name)
+        self.add_info_message(f"🎨 Colormap changed to: {colormap_name}")
         
     def closeEvent(self, event):
         """Handle application close"""
