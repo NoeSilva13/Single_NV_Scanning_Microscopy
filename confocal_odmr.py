@@ -33,6 +33,7 @@ from galvo_controller import GalvoScannerController
 from data_manager import DataManager
 from plot_scan_results import plot_scan_results
 from utils import calculate_scale, MICRONS_PER_VOLT
+from plot_widgets.live_plot_napari_widget import live_plot
 
 # Import extracted widgets
 from widgets.scan_controls import (
@@ -422,76 +423,7 @@ class ImageDisplayWidget(QWidget):
     
 
 
-# --------------------- LIVE SIGNAL PLOT WIDGET ---------------------
-class LiveSignalPlotWidget(QWidget):
-    """PyQtGraph widget for displaying live signal data"""
-    
-    def __init__(self, measure_function, histogram_range=100, dt=0.2):
-        super().__init__()
-        self.measure_function = measure_function
-        self.histogram_range = histogram_range
-        self.dt = dt
-        
-        # Create layout
-        layout = QVBoxLayout()
-        self.setLayout(layout)
-        
-        # Add title label
-        title_label = QLabel("Live Signal")
-        title_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold; padding: 5px;")
-        title_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title_label)
-        
-        # Create PlotWidget
-        self.plot_widget = PlotWidget()
-        self.plot_widget.setBackground('#262930')
-        self.plot_widget.setLabel('left', 'Counts/s', color='white')
-        self.plot_widget.setLabel('bottom', 'Time', 's', color='white')
-        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
-        
-        # Style the plot
-        self.plot_widget.getAxis('left').setPen('w')
-        self.plot_widget.getAxis('bottom').setPen('w')
-        self.plot_widget.getAxis('left').setTextPen('w')
-        self.plot_widget.getAxis('bottom').setTextPen('w')
-        
-        layout.addWidget(self.plot_widget)
-        
-        # Create plot line
-        self.curve = self.plot_widget.plot(pen=mkPen(color='#00d4aa', width=2))
-        
-        # Data storage
-        self.times = []
-        self.values = []
-        
-        # Timer for updates
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_plot)
-        self.timer.start(int(dt * 1000))  # Convert to milliseconds
-        
-    def update_plot(self):
-        """Update the live plot with new data"""
-        try:
-            current_time = time.time()
-            if not hasattr(self, 'start_time'):
-                self.start_time = current_time
-            
-            relative_time = current_time - self.start_time
-            new_value = self.measure_function()
-            
-            self.times.append(relative_time)
-            self.values.append(new_value)
-            
-            # Keep only recent data
-            if len(self.times) > self.histogram_range:
-                self.times = self.times[-self.histogram_range:]
-                self.values = self.values[-self.histogram_range:]
-            
-            # Update plot
-            self.curve.setData(self.times, self.values)
-            
-        except Exception as e:
-            print(f"Error updating live plot: {e}")
+
 
 # --------------------- MAIN APPLICATION WINDOW ---------------------
 class ConfocalMainWindow(QMainWindow):
@@ -727,7 +659,7 @@ class ConfocalMainWindow(QMainWindow):
         signal_title.setStyleSheet("font-size: 14px; font-weight: bold; padding: 5px;")
         layout.addWidget(signal_title)
         
-        self.live_plot = LiveSignalPlotWidget(
+        self.live_plot = live_plot(
             measure_function=lambda: self.counter.getData()[0][0]/(self.binwidth/1e12),
             histogram_range=100,
             dt=0.2
