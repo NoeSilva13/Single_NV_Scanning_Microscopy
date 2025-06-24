@@ -338,12 +338,20 @@ class ConfocalMainWindow(QMainWindow):
         
         # Initialize managers and state
         self.init_managers()
-        self.init_hardware()
         self.init_ui()
+        self.init_hardware()
         self.init_widgets()
         
         # Show maximized
         self.showMaximized()
+        
+        # Show hardware status after UI is ready
+        try:
+            # Test if TimeTagger is working
+            test_data = self.counter.getData()
+            self.show_status("✅ Connected to real TimeTagger device")
+        except:
+            self.show_status("⚠️ Real TimeTagger not detected, using virtual device")
         
     def init_managers(self):
         """Initialize configuration and state managers"""
@@ -379,7 +387,7 @@ class ConfocalMainWindow(QMainWindow):
         self.galvo_controller = GalvoScannerController()
         
         # DAQ setup
-        self.output_task = nidaqmx.Task()
+        self.output_task = nidaqmx.Task("Scanner_Control_Task")
         self.output_task.ao_channels.add_ao_voltage_chan(self.galvo_controller.xin_control)
         self.output_task.ao_channels.add_ao_voltage_chan(self.galvo_controller.yin_control)
         self.output_task.start()
@@ -388,9 +396,9 @@ class ConfocalMainWindow(QMainWindow):
         try:
             self.tagger = createTimeTagger()
             self.tagger.reset()
-            self.show_status("✅ Connected to real TimeTagger device")
+            print("✅ Connected to real TimeTagger device")
         except Exception as e:
-            self.show_status("⚠️ Real TimeTagger not detected, using virtual device")
+            print("⚠️ Real TimeTagger not detected, using virtual device")
             self.tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
             self.tagger.run()
         
@@ -427,9 +435,7 @@ class ConfocalMainWindow(QMainWindow):
         main_splitter.setSizes([300, 600, 400])
         
         # Status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.show_status("Ready")
+        self.statusBar().showMessage("Ready")
     
     def create_left_panel(self):
         """Create the left control panel"""
@@ -726,7 +732,7 @@ class ConfocalMainWindow(QMainWindow):
     
     def show_status(self, message):
         """Show status message"""
-        self.status_bar.showMessage(message)
+        self.statusBar().showMessage(message)
         print(message)  # Also print to console
     
     def update_image(self, image_data):
@@ -748,6 +754,9 @@ class ConfocalMainWindow(QMainWindow):
             # Set scanner to zero position before closing
             self.output_task.write([0, 0])
             self.show_status("🎯 Scanner set to zero position")
+            
+            # Close DAQ task properly
+            self.output_task.close()
             
             # Reset config file to default values
             default_config = {
