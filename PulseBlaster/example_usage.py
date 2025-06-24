@@ -9,7 +9,7 @@ Run this script to test basic functionality of the pulse controller.
 
 import time
 import numpy as np
-from swabian_pulse_streamer import SwabianPulseController
+from .swabian_pulse_streamer import SwabianPulseController
 
 def basic_pulse_test():
     """Test basic pulse generation functionality"""

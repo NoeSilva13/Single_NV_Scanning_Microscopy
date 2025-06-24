@@ -10,9 +10,9 @@ Date: 2024
 
 import numpy as np
 import time
-from swabian_pulse_streamer import SwabianPulseController
-from rigol_dsg836 import RigolDSG836Controller
-from odmr_experiments import ODMRExperiments
+from .swabian_pulse_streamer import SwabianPulseController
+from .rigol_dsg836 import RigolDSG836Controller
+from .odmr_experiments import ODMRExperiments
 
 
 def test_rigol_connection():

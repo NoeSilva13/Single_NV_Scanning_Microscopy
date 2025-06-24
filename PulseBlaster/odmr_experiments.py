@@ -12,8 +12,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 from typing import List, Tuple, Dict, Optional
-from swabian_pulse_streamer import SwabianPulseController
-from rigol_dsg836 import RigolDSG836Controller
+from .swabian_pulse_streamer import SwabianPulseController
+from .rigol_dsg836 import RigolDSG836Controller
 
 # TimeTagger imports for real data acquisition
 from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual, CountBetweenMarkers, Countrate
