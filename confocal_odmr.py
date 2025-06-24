@@ -294,7 +294,7 @@ class ImageDisplayWidget(QWidget):
         
         # Convert pixel coordinates to real coordinates
         if self.x_points is not None and self.y_points is not None:
-            height, width = self.image_data.shape
+            width, height = self.image_data.shape  # shape is now (width, height)
             x_idx = max(0, min(x_idx, width - 1))
             y_idx = max(0, min(y_idx, height - 1))
             
@@ -375,7 +375,7 @@ class ImageDisplayWidget(QWidget):
             x_um = np.array(self.x_points) * MICRONS_PER_VOLT
             y_um = np.array(self.y_points) * MICRONS_PER_VOLT
             
-            height, width = self.image_data.shape
+            width, height = self.image_data.shape  # shape is now (width, height)
             x_idx = int(np.interp(x_real, [x_um[0], x_um[-1]], [0, width-1]))
             y_idx = int(np.interp(y_real, [y_um[0], y_um[-1]], [0, height-1]))
         else:
@@ -402,7 +402,7 @@ class ImageDisplayWidget(QWidget):
             x_um = np.array(self.x_points) * MICRONS_PER_VOLT
             y_um = np.array(self.y_points) * MICRONS_PER_VOLT
             
-            height, width = self.image_data.shape
+            width, height = self.image_data.shape  # shape is now (width, height)
             x1_idx = int(np.interp(x1, [x_um[0], x_um[-1]], [0, width-1]))
             y1_idx = int(np.interp(y1, [y_um[0], y_um[-1]], [0, height-1]))
             x2_idx = int(np.interp(x2, [x_um[0], x_um[-1]], [0, width-1]))
@@ -413,9 +413,9 @@ class ImageDisplayWidget(QWidget):
         
         # Ensure proper ordering and bounds
         min_x = max(0, min(x1_idx, x2_idx))
-        max_x = min(self.image_data.shape[1]-1, max(x1_idx, x2_idx))
+        max_x = min(self.image_data.shape[0]-1, max(x1_idx, x2_idx))  # shape[0] is width now
         min_y = max(0, min(y1_idx, y2_idx))
-        max_y = min(self.image_data.shape[0]-1, max(y1_idx, y2_idx))
+        max_y = min(self.image_data.shape[1]-1, max(y1_idx, y2_idx))  # shape[1] is height now
         
         if abs(max_x - min_x) > 2 and abs(max_y - min_y) > 2:  # Minimum zoom size
             self.zoom_region_selected.emit(min_x, min_y, max_x, max_y)
@@ -836,7 +836,7 @@ class ConfocalMainWindow(QMainWindow):
     def scan_pattern(self, x_points, y_points):
         """Perform a raster scan pattern using the galvo mirrors and collect APD counts."""
         height, width = len(y_points), len(x_points)
-        self.image = np.zeros((height, width), dtype=np.float32)
+        self.image = np.zeros((width, height), dtype=np.float32)  # Swapped to match [x_idx, y_idx] indexing
         
         # Store current scan points for image display
         self.current_x_points = x_points
@@ -933,7 +933,7 @@ class ConfocalMainWindow(QMainWindow):
             return
         
         # Ensure zoom region stays within image bounds
-        height, width = self.image.shape
+        width, height = self.image.shape  # Note: shape is now (width, height) due to [x_idx, y_idx] indexing
         min_x = max(0, min_x)
         max_x = min(width, max_x)
         min_y = max(0, min_y)
