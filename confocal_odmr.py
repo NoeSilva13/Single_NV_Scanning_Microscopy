@@ -458,18 +458,32 @@ class LivePlotWidget(QWidget):
     def setup_ui(self):
         layout = QVBoxLayout(self)
         
-        # Create matplotlib figure
-        self.figure = Figure(figsize=(6, 4))
+        # Create matplotlib figure with dark theme and compact size
+        plt.style.use('dark_background')
+        self.figure = Figure(figsize=(8, 3), facecolor='#262930')
         self.canvas = FigureCanvas(self.figure)
+        self.canvas.setStyleSheet("background-color: #262930;")
         self.ax = self.figure.add_subplot(111)
         
         layout.addWidget(self.canvas)
         
-        # Setup plot
-        self.ax.set_title('Live Signal')
-        self.ax.set_xlabel('Time')
-        self.ax.set_ylabel('Counts')
-        self.line, = self.ax.plot([], [], 'b-')
+        # Setup plot with dark theme styling
+        self.ax.set_facecolor('#262930')
+        self.ax.tick_params(colors='white', labelsize=9)
+        self.ax.spines['bottom'].set_color('white')
+        self.ax.spines['top'].set_color('white')
+        self.ax.spines['right'].set_color('white')
+        self.ax.spines['left'].set_color('white')
+        
+        self.ax.set_xlabel('Time Points', color='white', fontsize=10)
+        self.ax.set_ylabel('APD Counts/s', color='white', fontsize=10)
+        self.ax.grid(True, alpha=0.3, color='gray', linestyle='-', linewidth=0.5)
+        
+        # Use cyan color for the signal line
+        self.line, = self.ax.plot([], [], '#00ffcc', linewidth=2)
+        
+        # Tight layout
+        self.figure.tight_layout()
         
     def update_plot(self, value):
         """Update the live plot with new data point"""
@@ -830,7 +844,15 @@ class ConfocalMicroscopyApp(QMainWindow):
         self.control_panel = ControlPanelWidget(self.config_manager)
         main_splitter.addWidget(self.control_panel)
         
-        # Center panel - Professional Image display
+        # Center-Right panel - Image and Live plot in vertical arrangement
+        center_right_container = QWidget()
+        center_right_layout = QVBoxLayout(center_right_container)
+        center_right_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Create vertical splitter for image and live plot
+        vertical_splitter = QSplitter(Qt.Vertical)
+        
+        # Image panel (top)
         image_container = QWidget()
         image_layout = QVBoxLayout(image_container)
         
@@ -851,20 +873,39 @@ class ConfocalMicroscopyApp(QMainWindow):
         self.image_display = ProfessionalImageWidget()
         image_layout.addWidget(self.image_display)
         
-        main_splitter.addWidget(image_container)
+        vertical_splitter.addWidget(image_container)
         
-        # Right panel - Live plot
+        # Live plot panel (bottom)
         plot_container = QWidget()
         plot_layout = QVBoxLayout(plot_container)
-        plot_layout.addWidget(QLabel("Live Signal"))
+        
+        # Live plot title with styling
+        plot_title_label = QLabel("Live Signal")
+        plot_title_label.setStyleSheet("""
+            QLabel {
+                font-size: 12pt;
+                font-weight: bold;
+                color: #00d4aa;
+                padding: 5px;
+                border-bottom: 2px solid #555555;
+                margin-bottom: 5px;
+            }
+        """)
+        plot_layout.addWidget(plot_title_label)
         
         self.live_plot = LivePlotWidget()
         plot_layout.addWidget(self.live_plot)
         
-        main_splitter.addWidget(plot_container)
+        vertical_splitter.addWidget(plot_container)
         
-        # Set splitter proportions
-        main_splitter.setSizes([300, 500, 400])
+        # Set vertical splitter proportions (image takes more space)
+        vertical_splitter.setSizes([400, 200])
+        
+        center_right_layout.addWidget(vertical_splitter)
+        main_splitter.addWidget(center_right_container)
+        
+        # Set horizontal splitter proportions
+        main_splitter.setSizes([300, 700])
         main_layout.addWidget(main_splitter)
         
         # Initialize image with zeros and proper coordinates
