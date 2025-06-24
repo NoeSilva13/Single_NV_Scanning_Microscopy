@@ -39,7 +39,6 @@ from plot_widgets.live_plot_napari_widget import live_plot
 from widgets.scan_controls import (
     new_scan as create_new_scan,
     close_scanner as create_close_scanner,
-    save_image as create_save_image,
     reset_zoom as create_reset_zoom,
     update_scan_parameters as create_update_scan_parameters,
     update_scan_parameters_widget as create_update_scan_parameters_widget
@@ -684,7 +683,7 @@ class ConfocalMainWindow(QMainWindow):
         # Create scan control widgets
         self.new_scan_widget = create_new_scan(self.scan_pattern, self.scan_points_manager, None)
         self.close_scanner_widget = create_close_scanner(self.output_task, None)
-        self.save_image_widget = create_save_image(self, self.get_data_path)
+        self.save_image_widget = self.create_save_image_widget()
         self.update_scan_parameters_widget = create_update_scan_parameters(self.config_manager, self.scan_points_manager)
         self.update_widget_func = create_update_scan_parameters_widget(self.update_scan_parameters_widget, self.config_manager)
         
@@ -908,6 +907,76 @@ class ConfocalMainWindow(QMainWindow):
     def get_data_path(self):
         """Helper function to get current data path"""
         return self.data_path
+    
+    def create_save_image_widget(self):
+        """Create a custom save image widget that uses PyQtGraph's export functionality"""
+        from PyQt5.QtWidgets import QPushButton
+        from PyQt5.QtCore import QThread, pyqtSignal
+        import pyqtgraph.exporters
+        import os
+        from datetime import datetime
+        
+        save_button = QPushButton("📷 Save Image")
+        save_button.setStyleSheet("""
+            QPushButton {
+                background-color: #00d4aa;
+                color: #262930;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #00ffcc;
+            }
+            QPushButton:pressed {
+                background-color: #009980;
+            }
+        """)
+        
+        def save_image():
+            """Save the current PyQtGraph image display"""
+            try:
+                if not hasattr(self, 'image') or self.image is None:
+                    self.show_status("❌ No image data to save")
+                    return
+                
+                # Generate filename based on current data path or timestamp
+                if self.data_path:
+                    base_filename = self.data_path.replace('.csv', '')
+                else:
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    base_filename = f"scan_image_{timestamp}"
+                
+                filename = f"{base_filename}_display.png"
+                
+                # Use PyQtGraph's PNG exporter
+                exporter = pyqtgraph.exporters.ImageExporter(self.image_display.plot_widget.plotItem)
+                
+                # Configure exporter settings
+                exporter.parameters()['width'] = 800  # Set desired width
+                exporter.parameters()['height'] = 600  # Set desired height
+                
+                # Export the image
+                exporter.export(filename)
+                
+                self.show_status(f"📷 Image saved as {filename}")
+                
+            except Exception as e:
+                self.show_status(f"❌ Error saving image: {str(e)}")
+                print(f"Save image error: {e}")
+        
+        save_button.clicked.connect(save_image)
+        
+        # Create a simple wrapper widget to match the interface
+        wrapper = QWidget()
+        wrapper_layout = QVBoxLayout()
+        wrapper_layout.addWidget(save_button)
+        wrapper.setLayout(wrapper_layout)
+        wrapper.native = save_button  # Add native attribute for compatibility
+        
+        return wrapper
     
     def show_status(self, message):
         """Show status message"""
