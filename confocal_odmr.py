@@ -499,7 +499,7 @@ class ConfocalMainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("NV Scanning Microscopy - Qt Interface")
+        self.setWindowTitle("NV Scanning Microscopy")
         
         # Initialize managers and state
         self.init_managers()
@@ -509,14 +509,6 @@ class ConfocalMainWindow(QMainWindow):
         
         # Show maximized
         self.showMaximized()
-        
-        # Show hardware status after UI is ready
-        try:
-            # Test if TimeTagger is working
-            test_data = self.counter.getData()
-            self.show_status("✅ Connected to real TimeTagger device")
-        except:
-            self.show_status("⚠️ Real TimeTagger not detected, using virtual device")
         
     def init_managers(self):
         """Initialize configuration and state managers"""
