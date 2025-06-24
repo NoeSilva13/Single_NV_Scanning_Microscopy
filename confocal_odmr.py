@@ -24,10 +24,8 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                             QScrollArea, QFrame, QSizePolicy)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QObject, QThread
 from PyQt5.QtGui import QPixmap, QImage, QPainter, QPen, QColor
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-import matplotlib.patches as patches
+import pyqtgraph as pg
+from pyqtgraph import ImageView, PlotWidget, mkPen, mkBrush
 from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual
 
 # Local imports
@@ -137,9 +135,9 @@ class QtSignalBridge(QObject):
     """Qt signal bridge for thread-safe GUI updates"""
     status_update = pyqtSignal(str)
 
-# --------------------- MATPLOTLIB IMAGE DISPLAY WIDGET ---------------------
+# --------------------- PYQTGRAPH IMAGE DISPLAY WIDGET ---------------------
 class ImageDisplayWidget(QWidget):
-    """Matplotlib-based widget for displaying the scan image with mouse interaction and colorbar"""
+    """PyQtGraph-based widget for displaying the scan image with mouse interaction and colorbar"""
     
     mouse_clicked = pyqtSignal(int, int)
     zoom_region_selected = pyqtSignal(int, int, int, int)
@@ -148,28 +146,63 @@ class ImageDisplayWidget(QWidget):
         super().__init__()
         self.setMinimumSize(600, 600)
         
-        # Create matplotlib figure
-        self.figure = Figure(figsize=(8, 6), facecolor='#262930')
-        self.canvas = FigureCanvas(self.figure)
-        self.canvas.setParent(self)
+        # Set PyQtGraph global options for dark theme
+        pg.setConfigOption('background', '#262930')
+        pg.setConfigOption('foreground', 'w')
         
         # Create layout
         layout = QVBoxLayout()
-        layout.addWidget(self.canvas)
         self.setLayout(layout)
         
-        # Initialize plot
-        self.ax = self.figure.add_subplot(111, facecolor='#262930')
-        self.ax.set_title('Live Scan Image', color='white', fontsize=12, fontweight='bold')
-        self.ax.set_xlabel('X Position (µm)', color='white')
-        self.ax.set_ylabel('Y Position (µm)', color='white')
-        self.ax.tick_params(colors='white')
+        # Add title label
+        title_label = QLabel("Live Scan Image")
+        title_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold; padding: 5px;")
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        # Create a horizontal layout for plot and colorbar
+        plot_layout = QHBoxLayout()
+        plot_widget_container = QWidget()
+        plot_widget_container.setLayout(plot_layout)
+        layout.addWidget(plot_widget_container)
+        
+        # Create PlotWidget for the image
+        self.plot_widget = PlotWidget()
+        self.plot_widget.setBackground('#262930')
+        self.plot_widget.setLabel('left', 'Y Position', 'µm')
+        self.plot_widget.setLabel('bottom', 'X Position', 'µm')
+        self.plot_widget.showGrid(x=False, y=False)
+        self.plot_widget.setAspectLocked(True)
+        
+        # Style the plot
+        self.plot_widget.getAxis('left').setPen('w')
+        self.plot_widget.getAxis('bottom').setPen('w')
+        self.plot_widget.getAxis('left').setTextPen('w')
+        self.plot_widget.getAxis('bottom').setTextPen('w')
+        
+        plot_layout.addWidget(self.plot_widget)
+        
+        # Create ImageItem for displaying the image
+        self.image_item = pg.ImageItem()
+        self.plot_widget.addItem(self.image_item)
+        
+        # Create colorbar (histogram widget)
+        self.histogram = pg.HistogramLUTWidget()
+        self.histogram.setImageItem(self.image_item)
+        
+        # Set viridis colormap
+        self.histogram.gradient.restoreState({
+            'mode': 'rgb',
+            'ticks': [(0.0, (68, 1, 84, 255)), (0.25, (59, 82, 139, 255)), 
+                     (0.5, (33, 145, 140, 255)), (0.75, (94, 201, 98, 255)), 
+                     (1.0, (253, 231, 37, 255))]  # Viridis colormap
+        })
+        
+        plot_layout.addWidget(self.histogram)
         
         # Image data and display objects
         self.image_data = None
-        self.im = None
-        self.colorbar = None
-        self.scanner_point = None
+        self.scanner_item = None
         self.zoom_rect = None
         
         # Scanner position
@@ -182,32 +215,27 @@ class ImageDisplayWidget(QWidget):
         self.selecting_zoom = False
         
         # Scale information
-        self.x_extent = None
-        self.y_extent = None
+        self.x_points = None
+        self.y_points = None
+        self.x_scale = 1.0
+        self.y_scale = 1.0
+        self.x_offset = 0.0
+        self.y_offset = 0.0
         
         # Connect mouse events
-        self.canvas.mpl_connect('button_press_event', self.on_mouse_press)
-        self.canvas.mpl_connect('button_release_event', self.on_mouse_release)
-        self.canvas.mpl_connect('motion_notify_event', self.on_mouse_motion)
+        self.plot_widget.scene().sigMouseClicked.connect(self.on_mouse_click)
         
-        # Initial empty plot
-        self._create_empty_plot()
+        # Get the view box for additional mouse events
+        self.view_box = self.plot_widget.getViewBox()
+        self.view_box.setMouseEnabled(x=True, y=True)  # Enable mouse interaction
         
-    def _create_empty_plot(self):
-        """Create an empty plot with proper styling"""
-        # Create a small empty image
+        # Initialize empty image
+        self._create_empty_image()
+    
+    def _create_empty_image(self):
+        """Create an empty image for initialization"""
         empty_data = np.zeros((10, 10))
-        self.im = self.ax.imshow(empty_data, cmap='viridis', aspect='equal', 
-                                extent=[0, 1, 0, 1], vmin=0, vmax=1)
-        
-        # Add colorbar
-        if self.colorbar is None:
-            self.colorbar = self.figure.colorbar(self.im, ax=self.ax, fraction=0.046, pad=0.04)
-            self.colorbar.set_label('Counts/s', color='white', fontsize=10)
-            self.colorbar.ax.tick_params(colors='white')
-        
-        self.figure.tight_layout()
-        self.canvas.draw()
+        self.image_item.setImage(empty_data)
     
     def set_image(self, image_data, x_points=None, y_points=None, scale_x=1.0, scale_y=1.0):
         """Update the displayed image"""
@@ -216,47 +244,45 @@ class ImageDisplayWidget(QWidget):
         if image_data is None or image_data.size == 0:
             return
         
-        # Calculate extent for proper scaling
+        # Store scale information
         if x_points is not None and y_points is not None:
+            self.x_points = x_points
+            self.y_points = y_points
+            
             # Convert voltage to micrometers
             x_um = np.array(x_points) * MICRONS_PER_VOLT
             y_um = np.array(y_points) * MICRONS_PER_VOLT
-            self.x_extent = [x_um[0], x_um[-1]]
-            self.y_extent = [y_um[0], y_um[-1]]
-            extent = [x_um[0], x_um[-1], y_um[-1], y_um[0]]  # Note: y is flipped for image display
+            
+            # Calculate scale and offset for proper positioning
+            self.x_scale = (x_um[-1] - x_um[0]) / (len(x_um) - 1) if len(x_um) > 1 else 1.0
+            self.y_scale = (y_um[-1] - y_um[0]) / (len(y_um) - 1) if len(y_um) > 1 else 1.0
+            self.x_offset = x_um[0]
+            self.y_offset = y_um[0]
+            
+            # Set image with proper scaling
+            self.image_item.setImage(image_data)
+            
+            # Set proper positioning and scaling
+            self.image_item.setRect(pg.QtCore.QRectF(x_um[0], y_um[0], x_um[-1] - x_um[0], y_um[-1] - y_um[0]))
+            
+            # Set axis ranges
+            self.view_box.setRange(
+                xRange=[x_um[0], x_um[-1]], 
+                yRange=[y_um[0], y_um[-1]], 
+                padding=0
+            )
         else:
             # Fallback to pixel coordinates
-            height, width = image_data.shape
-            extent = [0, width, height, 0]
-            self.x_extent = [0, width]
-            self.y_extent = [0, height]
-        
-        # Update image
-        if self.im is None:
-            self.im = self.ax.imshow(image_data, cmap='viridis', aspect='equal', 
-                                   extent=extent, interpolation='nearest')
-        else:
-            self.im.set_data(image_data)
-            self.im.set_extent(extent)
-        
-        # Update colorbar and limits
-        vmin, vmax = np.nanmin(image_data), np.nanmax(image_data)
-        if vmin != vmax:
-            self.im.set_clim(vmin, vmax)
-        
-        # Update colorbar if it exists
-        if self.colorbar is not None:
-            self.colorbar.update_normal(self.im)
-        
-        self.canvas.draw_idle()
+            self.x_scale = 1.0
+            self.y_scale = 1.0
+            self.x_offset = 0.0
+            self.y_offset = 0.0
+            self.image_item.setImage(image_data)
     
     def set_contrast(self, min_val, max_val):
         """Update contrast limits"""
-        if self.im is not None:
-            self.im.set_clim(min_val, max_val)
-            if self.colorbar is not None:
-                self.colorbar.update_normal(self.im)
-            self.canvas.draw_idle()
+        if self.image_data is not None:
+            self.histogram.setLevels(min_val, max_val)
     
     def set_scanner_position(self, x_idx, y_idx):
         """Update scanner position indicator"""
@@ -266,36 +292,94 @@ class ImageDisplayWidget(QWidget):
         if self.image_data is None:
             return
         
-        # Convert pixel coordinates to plot coordinates
-        if self.x_extent is not None and self.y_extent is not None:
+        # Convert pixel coordinates to real coordinates
+        if self.x_points is not None and self.y_points is not None:
             height, width = self.image_data.shape
-            x_pos = np.interp(x_idx, [0, width-1], self.x_extent)
-            y_pos = np.interp(y_idx, [0, height-1], self.y_extent)
+            x_idx = max(0, min(x_idx, width - 1))
+            y_idx = max(0, min(y_idx, height - 1))
+            
+            x_um = np.array(self.x_points) * MICRONS_PER_VOLT
+            y_um = np.array(self.y_points) * MICRONS_PER_VOLT
+            
+            x_pos = np.interp(x_idx, [0, width-1], [x_um[0], x_um[-1]])
+            y_pos = np.interp(y_idx, [0, height-1], [y_um[0], y_um[-1]])
         else:
             x_pos, y_pos = x_idx, y_idx
         
         # Remove old scanner position marker
-        if self.scanner_point is not None:
-            self.scanner_point.remove()
+        if self.scanner_item is not None:
+            self.plot_widget.removeItem(self.scanner_item)
         
-        # Add new scanner position marker
-        self.scanner_point = self.ax.plot(x_pos, y_pos, 'r+', markersize=15, 
-                                        markeredgewidth=3, label='Scanner Position')[0]
-        
-        self.canvas.draw_idle()
+        # Add new scanner position marker (crosshair)
+        self.scanner_item = pg.ScatterPlotItem(
+            pos=[[x_pos, y_pos]], 
+            symbol='+', 
+            size=20, 
+            pen=mkPen('r', width=3),
+            brush=mkBrush(None)
+        )
+        self.plot_widget.addItem(self.scanner_item)
     
-    def on_mouse_press(self, event):
-        """Handle mouse press events"""
-        if event.inaxes != self.ax or self.image_data is None:
+    def on_mouse_click(self, event):
+        """Handle mouse click events"""
+        if event.button() == Qt.LeftButton:
+            # Get mouse position in plot coordinates
+            pos = self.view_box.mapSceneToView(event.scenePos())
+            self._handle_left_click(pos.x(), pos.y())
+        elif event.button() == Qt.RightButton:
+            # Start zoom selection
+            pos = self.view_box.mapSceneToView(event.scenePos())
+            self.zoom_start = (pos.x(), pos.y())
+            self.selecting_zoom = True
+            
+    def on_mouse_release(self, event):
+        """Handle mouse release events"""
+        if event.button() == Qt.RightButton and self.selecting_zoom and self.zoom_start:
+            pos = self.view_box.mapSceneToView(event.scenePos())
+            self.zoom_end = (pos.x(), pos.y())
+            self._handle_zoom_selection()
+            
+            # Clean up
+            if self.zoom_rect is not None:
+                self.plot_widget.removeItem(self.zoom_rect)
+                self.zoom_rect = None
+            self.selecting_zoom = False
+            self.zoom_start = None
+            self.zoom_end = None
+    
+    def on_mouse_move(self, event):
+        """Handle mouse motion for zoom rectangle visualization"""
+        if self.selecting_zoom and self.zoom_start:
+            pos = self.view_box.mapSceneToView(event.scenePos())
+            
+            # Remove old rectangle
+            if self.zoom_rect is not None:
+                self.plot_widget.removeItem(self.zoom_rect)
+            
+            # Draw new rectangle
+            x1, y1 = self.zoom_start
+            x2, y2 = pos.x(), pos.y()
+            
+            rect = pg.QtCore.QRectF(x1, y1, x2-x1, y2-y1)
+            self.zoom_rect = pg.QtGui.QGraphicsRectItem(rect)
+            self.zoom_rect.setPen(mkPen('r', width=2))
+            self.plot_widget.addItem(self.zoom_rect)
+    
+    def _handle_left_click(self, x_real, y_real):
+        """Handle left mouse click for scanner positioning"""
+        if self.image_data is None:
             return
         
-        # Convert plot coordinates to pixel coordinates
-        if self.x_extent is not None and self.y_extent is not None:
+        # Convert real coordinates to pixel coordinates
+        if self.x_points is not None and self.y_points is not None:
+            x_um = np.array(self.x_points) * MICRONS_PER_VOLT
+            y_um = np.array(self.y_points) * MICRONS_PER_VOLT
+            
             height, width = self.image_data.shape
-            x_idx = int(np.interp(event.xdata, self.x_extent, [0, width-1]))
-            y_idx = int(np.interp(event.ydata, self.y_extent, [0, height-1]))
+            x_idx = int(np.interp(x_real, [x_um[0], x_um[-1]], [0, width-1]))
+            y_idx = int(np.interp(y_real, [y_um[0], y_um[-1]], [0, height-1]))
         else:
-            x_idx, y_idx = int(event.xdata), int(event.ydata)
+            x_idx, y_idx = int(x_real), int(y_real)
         
         # Ensure coordinates are within bounds
         if self.image_data is not None:
@@ -303,79 +387,44 @@ class ImageDisplayWidget(QWidget):
             x_idx = max(0, min(x_idx, width-1))
             y_idx = max(0, min(y_idx, height-1))
         
-        if event.button == 1:  # Left click
-            self.mouse_clicked.emit(x_idx, y_idx)
-        elif event.button == 3:  # Right click
-            self.zoom_start = (event.xdata, event.ydata)
-            self.zoom_start_idx = (x_idx, y_idx)
-            self.selecting_zoom = True
+        self.mouse_clicked.emit(x_idx, y_idx)
     
-    def on_mouse_release(self, event):
-        """Handle mouse release events"""
-        if (event.button == 3 and self.selecting_zoom and 
-            self.zoom_start is not None and event.inaxes == self.ax):
+    def _handle_zoom_selection(self):
+        """Handle zoom region selection"""
+        if not self.zoom_start or not self.zoom_end or self.image_data is None:
+            return
+        
+        x1, y1 = self.zoom_start
+        x2, y2 = self.zoom_end
+        
+        # Convert real coordinates to pixel coordinates
+        if self.x_points is not None and self.y_points is not None:
+            x_um = np.array(self.x_points) * MICRONS_PER_VOLT
+            y_um = np.array(self.y_points) * MICRONS_PER_VOLT
             
-            # Convert plot coordinates to pixel coordinates
-            if self.x_extent is not None and self.y_extent is not None:
-                height, width = self.image_data.shape
-                x_idx = int(np.interp(event.xdata, self.x_extent, [0, width-1]))
-                y_idx = int(np.interp(event.ydata, self.y_extent, [0, height-1]))
-            else:
-                x_idx, y_idx = int(event.xdata), int(event.ydata)
-            
-            # Ensure coordinates are within bounds
-            if self.image_data is not None:
-                height, width = self.image_data.shape
-                x_idx = max(0, min(x_idx, width-1))
-                y_idx = max(0, min(y_idx, height-1))
-            
-            # Get start coordinates
-            x1, y1 = self.zoom_start_idx
-            x2, y2 = x_idx, y_idx
-            
-            # Emit zoom region (ensure proper ordering)
-            min_x, max_x = min(x1, x2), max(x1, x2)
-            min_y, max_y = min(y1, y2), max(y1, y2)
-            
-            if abs(max_x - min_x) > 2 and abs(max_y - min_y) > 2:  # Minimum zoom size
-                self.zoom_region_selected.emit(min_x, min_y, max_x, max_y)
-            
-            # Clean up zoom selection
-            if self.zoom_rect is not None:
-                self.zoom_rect.remove()
-                self.zoom_rect = None
-                self.canvas.draw_idle()
-            
-            self.selecting_zoom = False
-            self.zoom_start = None
-            self.zoom_start_idx = None
+            height, width = self.image_data.shape
+            x1_idx = int(np.interp(x1, [x_um[0], x_um[-1]], [0, width-1]))
+            y1_idx = int(np.interp(y1, [y_um[0], y_um[-1]], [0, height-1]))
+            x2_idx = int(np.interp(x2, [x_um[0], x_um[-1]], [0, width-1]))
+            y2_idx = int(np.interp(y2, [y_um[0], y_um[-1]], [0, height-1]))
+        else:
+            x1_idx, y1_idx = int(x1), int(y1)
+            x2_idx, y2_idx = int(x2), int(y2)
+        
+        # Ensure proper ordering and bounds
+        min_x = max(0, min(x1_idx, x2_idx))
+        max_x = min(self.image_data.shape[1]-1, max(x1_idx, x2_idx))
+        min_y = max(0, min(y1_idx, y2_idx))
+        max_y = min(self.image_data.shape[0]-1, max(y1_idx, y2_idx))
+        
+        if abs(max_x - min_x) > 2 and abs(max_y - min_y) > 2:  # Minimum zoom size
+            self.zoom_region_selected.emit(min_x, min_y, max_x, max_y)
     
-    def on_mouse_motion(self, event):
-        """Handle mouse motion for zoom rectangle visualization"""
-        if (self.selecting_zoom and self.zoom_start is not None and 
-            event.inaxes == self.ax):
-            
-            # Remove old rectangle
-            if self.zoom_rect is not None:
-                self.zoom_rect.remove()
-            
-            # Draw new rectangle
-            x1, y1 = self.zoom_start
-            x2, y2 = event.xdata, event.ydata
-            
-            width = x2 - x1
-            height = y2 - y1
-            
-            self.zoom_rect = self.ax.add_patch(
-                patches.Rectangle((x1, y1), width, height, 
-                            fill=False, edgecolor='red', linewidth=2, alpha=0.7)
-            )
-            
-            self.canvas.draw_idle()
+
 
 # --------------------- LIVE SIGNAL PLOT WIDGET ---------------------
 class LiveSignalPlotWidget(QWidget):
-    """Widget for displaying live signal data"""
+    """PyQtGraph widget for displaying live signal data"""
     
     def __init__(self, measure_function, histogram_range=100, dt=0.2):
         super().__init__()
@@ -383,24 +432,37 @@ class LiveSignalPlotWidget(QWidget):
         self.histogram_range = histogram_range
         self.dt = dt
         
-        # Create matplotlib figure
-        self.figure = Figure(figsize=(6, 4))
-        self.canvas = FigureCanvas(self.figure)
-        
+        # Create layout
         layout = QVBoxLayout()
-        layout.addWidget(self.canvas)
         self.setLayout(layout)
         
-        # Initialize plot
-        self.ax = self.figure.add_subplot(111)
-        self.ax.set_title('Live Signal')
-        self.ax.set_xlabel('Time (s)')
-        self.ax.set_ylabel('Counts/s')
+        # Add title label
+        title_label = QLabel("Live Signal")
+        title_label.setStyleSheet("color: white; font-size: 14px; font-weight: bold; padding: 5px;")
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        # Create PlotWidget
+        self.plot_widget = PlotWidget()
+        self.plot_widget.setBackground('#262930')
+        self.plot_widget.setLabel('left', 'Counts/s', color='white')
+        self.plot_widget.setLabel('bottom', 'Time', 's', color='white')
+        self.plot_widget.showGrid(x=True, y=True, alpha=0.3)
+        
+        # Style the plot
+        self.plot_widget.getAxis('left').setPen('w')
+        self.plot_widget.getAxis('bottom').setPen('w')
+        self.plot_widget.getAxis('left').setTextPen('w')
+        self.plot_widget.getAxis('bottom').setTextPen('w')
+        
+        layout.addWidget(self.plot_widget)
+        
+        # Create plot line
+        self.curve = self.plot_widget.plot(pen=mkPen(color='#00d4aa', width=2))
         
         # Data storage
         self.times = []
         self.values = []
-        self.line, = self.ax.plot([], [], 'b-')
         
         # Timer for updates
         self.timer = QTimer()
@@ -426,10 +488,7 @@ class LiveSignalPlotWidget(QWidget):
                 self.values = self.values[-self.histogram_range:]
             
             # Update plot
-            self.line.set_data(self.times, self.values)
-            self.ax.relim()
-            self.ax.autoscale_view()
-            self.canvas.draw_idle()
+            self.curve.setData(self.times, self.values)
             
         except Exception as e:
             print(f"Error updating live plot: {e}")
