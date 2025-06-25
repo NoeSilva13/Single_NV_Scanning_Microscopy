@@ -23,6 +23,7 @@ import nidaqmx
 from napari.utils.notifications import show_info
 from PyQt5.QtWidgets import QDesktopWidget
 from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual
+from magicgui import magicgui
 
 # Local imports
 from galvo_controller import GalvoScannerController
@@ -336,6 +337,17 @@ load_scan_widget = create_load_scan(viewer)
 # Create ODMR control widgets
 launch_odmr_widget = create_launch_odmr_gui(tagger=tagger, counter=counter, binwidth=binwidth)
 
+# Create Plot Profile widget (napari-plot-profile plugin)
+@magicgui(call_button="Plot Profile")
+def _add_plot_profile():
+    try:
+        plot_profile_dock, _ = viewer.window.add_plugin_dock_widget('napari-plot-profile')
+        plot_profile_dock.setFloating(True)
+    except Exception as e:
+        show_info(f'❌ Could not add plot profile widget: {str(e)}')
+
+plot_profile_widget = _add_plot_profile
+
 # --------------------- ZOOM BY REGION HANDLER ---------------------
 zoom_in_progress = False
 
@@ -413,6 +425,7 @@ close_scanner_widget.native.setFixedSize(150, 50)
 auto_focus_widget.native.setFixedSize(150, 50)
 load_scan_widget.native.setFixedSize(150, 50)
 launch_odmr_widget.native.setFixedSize(150, 50)
+plot_profile_widget.native.setFixedSize(150, 50)
 
 # Add widgets to viewer
 viewer.window.add_dock_widget(new_scan_widget, area="bottom")
@@ -422,6 +435,7 @@ viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
 viewer.window.add_dock_widget(launch_odmr_widget, area="bottom")
+viewer.window.add_dock_widget(plot_profile_widget, area="bottom")
 update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
 camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
 viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
