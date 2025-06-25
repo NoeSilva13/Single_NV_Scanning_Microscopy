@@ -12,6 +12,8 @@ from PyQt5.QtWidgets import QApplication
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 
+# Global reference to keep the ODMR window alive
+_odmr_window = None
 
 def launch_odmr_gui(tagger=None, counter=None, binwidth=None):
     """Factory function to create launch_odmr_gui widget with TimeTagger sharing"""
@@ -21,6 +23,8 @@ def launch_odmr_gui(tagger=None, counter=None, binwidth=None):
         """Launches the ODMR GUI Qt application in a separate window.
         Uses the ODMRControlCenter from odmr_gui_qt.py with shared TimeTagger instance.
         """
+        global _odmr_window
+        
         try:
             # Import the ODMR GUI classes
             from odmr_gui_qt import ODMRControlCenter
@@ -31,9 +35,18 @@ def launch_odmr_gui(tagger=None, counter=None, binwidth=None):
             if app is None:
                 app = QApplication(sys.argv)
             
+            # Close existing window if it exists
+            if _odmr_window is not None:
+                try:
+                    _odmr_window.close()
+                except:
+                    pass
+            
             # Create and show the ODMR GUI with shared TimeTagger
-            odmr_window = ODMRControlCenter(shared_tagger=tagger)
-            odmr_window.show()
+            _odmr_window = ODMRControlCenter(shared_tagger=tagger)
+            _odmr_window.show()
+            _odmr_window.raise_()  # Bring window to front
+            _odmr_window.activateWindow()  # Make it the active window
             
             show_info("📡 ODMR GUI launched successfully with shared TimeTagger!")
             

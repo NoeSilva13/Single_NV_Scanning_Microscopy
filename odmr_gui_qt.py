@@ -614,13 +614,24 @@ class ODMRControlCenter(QMainWindow):
         """Initialize hardware connections"""
         # Note: pulse_controller, mw_generator, and experiments are already initialized in __init__
         
-        # Try to connect on startup
-        self.connect_pulse_streamer()
-        self.connect_rigol()
+        # Try to connect on startup with error handling
+        try:
+            self.log_message("🔧 Initializing hardware connections...")
+            self.connect_pulse_streamer()
+            self.connect_rigol()
+            self.log_message("✅ Hardware initialization completed")
+        except Exception as e:
+            self.log_message(f"⚠️ Hardware initialization error: {e}")
+            # Don't let hardware errors crash the GUI
     
     def connect_pulse_streamer(self):
         """Connect to Swabian Pulse Streamer"""
         try:
+            # Check if device_widget exists before accessing it
+            if not hasattr(self, 'device_widget') or self.device_widget is None:
+                self.log_message("⚠️ Device widget not initialized yet, skipping Pulse Streamer connection")
+                return
+                
             ip = self.device_widget.ps_ip.text()
             self.log_message(f"🔌 Connecting to Pulse Streamer at {ip}...")
             
@@ -634,12 +645,18 @@ class ODMRControlCenter(QMainWindow):
                 self.device_widget.update_ps_status(False)
                 self.log_message(f"❌ Pulse Streamer connection failed at {ip}")
         except Exception as e:
-            self.device_widget.update_ps_status(False)
+            if hasattr(self, 'device_widget') and self.device_widget is not None:
+                self.device_widget.update_ps_status(False)
             self.log_message(f"❌ Pulse Streamer error: {e}")
     
     def connect_rigol(self):
         """Connect to RIGOL DSG836"""
         try:
+            # Check if device_widget exists before accessing it
+            if not hasattr(self, 'device_widget') or self.device_widget is None:
+                self.log_message("⚠️ Device widget not initialized yet, skipping RIGOL connection")
+                return
+                
             ip = self.device_widget.rigol_ip.text()
             self.mw_generator = RigolDSG836Controller(ip)
             if self.mw_generator.connect():
@@ -650,7 +667,8 @@ class ODMRControlCenter(QMainWindow):
                 self.log_message(f"❌ RIGOL connection failed at {ip}")
                 self.mw_generator = None
         except Exception as e:
-            self.device_widget.update_rigol_status(False)
+            if hasattr(self, 'device_widget') and self.device_widget is not None:
+                self.device_widget.update_rigol_status(False)
             self.log_message(f"❌ RIGOL error: {e}")
             self.mw_generator = None
     
