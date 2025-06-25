@@ -98,6 +98,68 @@ class ODMRWorker(QThread):
             self.measurement_finished.emit()
 
 
+class RabiWorker(QThread):
+    """Worker thread for running Rabi oscillation measurements"""
+    
+    progress_updated = pyqtSignal(int)
+    status_updated = pyqtSignal(str)
+    data_updated = pyqtSignal(list, list)  # durations, count_rates
+    measurement_finished = pyqtSignal()
+    error_occurred = pyqtSignal(str)
+    
+    def __init__(self, experiments, parameters):
+        super().__init__()
+        self.experiments = experiments
+        self.parameters = parameters
+        self.is_running = True
+    
+    def stop(self):
+        """Stop the measurement"""
+        self.is_running = False
+    
+    def run(self):
+        """Run the Rabi oscillation measurement"""
+        try:
+            mw_durations = self.parameters['mw_durations']
+            total_points = len(mw_durations)
+            
+            all_durations = []
+            all_count_rates = []
+            
+            for i, duration in enumerate(mw_durations):
+                if not self.is_running:
+                    break
+                
+                # Update progress and status
+                progress = int((i / total_points) * 100)
+                self.progress_updated.emit(progress)
+                self.status_updated.emit(f"Measuring {duration} ns duration ({i+1}/{total_points})")
+                
+                # Run single duration measurement
+                result = self.experiments.rabi_oscillation(
+                    mw_durations=[duration],
+                    mw_frequency=self.parameters['mw_frequency'],
+                    laser_duration=self.parameters['laser_duration'],
+                    detection_duration=self.parameters['detection_duration']
+                )
+                
+                if result and 'count_rates' in result and len(result['count_rates']) > 0:
+                    all_durations.append(duration)
+                    all_count_rates.append(result['count_rates'][0])
+                    
+                    # Emit data update for real-time plotting
+                    self.data_updated.emit(all_durations.copy(), all_count_rates.copy())
+            
+            if self.is_running:
+                self.progress_updated.emit(100)
+                self.status_updated.emit("Rabi oscillation measurement completed!")
+            
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+        finally:
+            self.measurement_finished.emit()
+
+
 class LivePlotWidget(QWidget):
     """Real-time plotting widget for ODMR spectrum"""
     
@@ -415,6 +477,9 @@ class ODMRControlCenter(QMainWindow):
         # Create ODMR Control tab
         self.create_odmr_control_tab()
         
+        # Create Rabi Control tab
+        self.create_rabi_control_tab()
+        
         # Create Device Settings tab
         self.create_device_settings_tab()
         
@@ -516,6 +581,91 @@ class ODMRControlCenter(QMainWindow):
         
         # Add to tab widget
         self.tab_widget.addTab(control_widget, "🔬 ODMR Control")
+    
+    def create_rabi_control_tab(self):
+        """Create the Rabi Oscillations Control tab"""
+        control_widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Create scroll area for controls
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout()
+        
+        # MW Duration parameters
+        duration_group = ParameterGroupBox("MW Duration Parameters")
+        self.start_duration = duration_group.add_parameter("Start Duration (ns):", "0", "Starting MW pulse duration")
+        self.stop_duration = duration_group.add_parameter("Stop Duration (ns):", "200", "Ending MW pulse duration")
+        self.duration_step = duration_group.add_parameter("Step Size (ns):", "5", "Step size for MW pulse duration")
+        scroll_layout.addWidget(duration_group)
+        
+        # MW Frequency parameters
+        freq_group = ParameterGroupBox("MW Frequency Parameters")
+        self.rabi_mw_freq = freq_group.add_parameter("MW Frequency (GHz):", "2.87", "Fixed MW frequency for Rabi")
+        self.rabi_mw_power = freq_group.add_parameter("MW Power (dBm):", "-10.0", "MW power level")
+        scroll_layout.addWidget(freq_group)
+        
+        # Timing parameters
+        timing_group = ParameterGroupBox("Timing Parameters")
+        self.rabi_laser_duration = timing_group.add_parameter("Laser Duration (ns):", "1000", "Duration of laser pulse")
+        self.rabi_detection_duration = timing_group.add_parameter("Detection Duration (ns):", "500", "Duration of detection window")
+        self.rabi_repetitions = timing_group.add_parameter("Repetitions:", "1000", "Number of sequence repetitions")
+        scroll_layout.addWidget(timing_group)
+        
+        # Control buttons
+        button_group = QGroupBox("Measurement Control")
+        button_layout = QVBoxLayout()
+        
+        self.start_rabi_btn = QPushButton("🚀 Start Rabi")
+        self.start_rabi_btn.setFixedHeight(40)
+        self.start_rabi_btn.clicked.connect(self.start_rabi_measurement)
+        button_layout.addWidget(self.start_rabi_btn)
+        
+        self.stop_rabi_btn = QPushButton("⏹️ Stop")
+        self.stop_rabi_btn.setFixedHeight(40)
+        self.stop_rabi_btn.setEnabled(False)
+        self.stop_rabi_btn.clicked.connect(self.stop_rabi_measurement)
+        button_layout.addWidget(self.stop_rabi_btn)
+        
+        # Progress bar
+        self.rabi_progress_bar = QProgressBar()
+        self.rabi_progress_bar.setVisible(False)
+        button_layout.addWidget(self.rabi_progress_bar)
+        
+        button_group.setLayout(button_layout)
+        scroll_layout.addWidget(button_group)
+        
+        # File operations
+        file_group = QGroupBox("File Operations")
+        file_layout = QVBoxLayout()
+        
+        save_rabi_params_btn = QPushButton("💾 Save Parameters")
+        save_rabi_params_btn.clicked.connect(self.save_rabi_parameters)
+        file_layout.addWidget(save_rabi_params_btn)
+        
+        load_rabi_params_btn = QPushButton("📁 Load Parameters")
+        load_rabi_params_btn.clicked.connect(self.load_rabi_parameters)
+        file_layout.addWidget(load_rabi_params_btn)
+        
+        save_rabi_results_btn = QPushButton("📊 Save Results")
+        save_rabi_results_btn.clicked.connect(self.save_rabi_results)
+        file_layout.addWidget(save_rabi_results_btn)
+        
+        file_group.setLayout(file_layout)
+        scroll_layout.addWidget(file_group)
+        
+        # Add stretch to push everything to top
+        scroll_layout.addStretch()
+        
+        scroll_widget.setLayout(scroll_layout)
+        scroll_area.setWidget(scroll_widget)
+        scroll_area.setWidgetResizable(True)
+        
+        layout.addWidget(scroll_area)
+        control_widget.setLayout(layout)
+        
+        # Add to tab widget
+        self.tab_widget.addTab(control_widget, "📈 Rabi Control")
     
     def create_device_settings_tab(self):
         """Create the Device Settings tab"""
@@ -914,6 +1064,223 @@ class ODMRControlCenter(QMainWindow):
         self.connect_pulse_streamer()
         self.connect_rigol()
         self.log_message("✅ Device refresh completed")
+    
+    def get_rabi_parameters(self):
+        """Get all parameters for Rabi oscillation measurement"""
+        try:
+            start_duration = int(self.start_duration.text())
+            stop_duration = int(self.stop_duration.text())
+            step_size = int(self.duration_step.text())
+            mw_durations = list(range(start_duration, stop_duration + step_size, step_size))
+            
+            mw_frequency = float(self.rabi_mw_freq.text()) * 1e9  # Convert GHz to Hz
+            
+            return {
+                'mw_durations': mw_durations,
+                'mw_frequency': mw_frequency,
+                'laser_duration': int(self.rabi_laser_duration.text()),
+                'detection_duration': int(self.rabi_detection_duration.text()),
+                'repetitions': int(self.rabi_repetitions.text())
+            }
+        except ValueError as e:
+            QMessageBox.warning(self, "Parameter Error", f"Invalid parameter value: {e}")
+            return None
+    
+    def start_rabi_measurement(self):
+        """Start Rabi oscillation measurement"""
+        if not self.pulse_controller or not self.pulse_controller.is_connected:
+            QMessageBox.warning(self, "Connection Error", "Pulse Streamer not connected!")
+            return
+        
+        parameters = self.get_rabi_parameters()
+        if parameters is None:
+            return
+        
+        # Initialize experiments if needed
+        if not self.experiments:
+            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator, self.shared_tagger)
+        
+        # Set MW power
+        if self.mw_generator:
+            try:
+                power = float(self.rabi_mw_power.text())
+                self.mw_generator.set_power(power)
+            except:
+                pass
+        
+        # Update UI
+        self.start_rabi_btn.setEnabled(False)
+        self.stop_rabi_btn.setEnabled(True)
+        self.rabi_progress_bar.setVisible(True)
+        self.rabi_progress_bar.setValue(0)
+        self.current_results = {'durations': [], 'count_rates': []}
+        
+        # Start worker thread
+        self.worker = RabiWorker(self.experiments, parameters)
+        self.worker.progress_updated.connect(self.rabi_progress_bar.setValue)
+        self.worker.status_updated.connect(self.log_message)
+        self.worker.data_updated.connect(self.update_rabi_plot)
+        self.worker.measurement_finished.connect(self.rabi_measurement_finished)
+        self.worker.error_occurred.connect(self.handle_error)
+        self.worker.start()
+        
+        self.log_message("🚀 Rabi oscillation measurement started")
+    
+    def stop_rabi_measurement(self):
+        """Stop Rabi oscillation measurement"""
+        if self.worker:
+            self.worker.stop()
+            self.log_message("⏹️ Stopping Rabi measurement...")
+    
+    def update_rabi_plot(self, durations, count_rates):
+        """Update the real-time plot with Rabi data"""
+        self.current_results['durations'] = durations
+        self.current_results['count_rates'] = count_rates
+        self.plot_widget.ax.clear()
+        
+        # Plot data
+        self.plot_widget.ax.plot(durations, count_rates, 'o-', markersize=4, linewidth=2,
+                               color='#00ff88', markerfacecolor='#00d4aa', markeredgecolor='#00ff88')
+        
+        # Update labels and title
+        self.plot_widget.ax.set_xlabel('MW Duration (ns)', fontsize=12, color='white')
+        self.plot_widget.ax.set_ylabel('Count Rate (Hz)', fontsize=12, color='white')
+        self.plot_widget.ax.set_title('Rabi Oscillations (Live)', fontsize=14, fontweight='bold', color='white')
+        
+        # Re-apply dark theme styling
+        self.plot_widget.ax.set_facecolor('#262930')
+        self.plot_widget.ax.grid(True, alpha=0.3, color='#555555')
+        self.plot_widget.ax.tick_params(colors='white')
+        for spine in self.plot_widget.ax.spines.values():
+            spine.set_color('white')
+        
+        # Auto-scale with padding
+        if len(durations) > 1:
+            duration_range = max(durations) - min(durations)
+            self.plot_widget.ax.set_xlim(min(durations) - 0.05*duration_range,
+                                       max(durations) + 0.05*duration_range)
+        
+        if len(count_rates) > 1:
+            count_range = max(count_rates) - min(count_rates)
+            if count_range > 0:
+                self.plot_widget.ax.set_ylim(min(count_rates) - 0.1*count_range,
+                                           max(count_rates) + 0.1*count_range)
+        
+        self.plot_widget.figure.tight_layout()
+        self.plot_widget.canvas.draw()
+    
+    def rabi_measurement_finished(self):
+        """Handle Rabi measurement completion"""
+        self.start_rabi_btn.setEnabled(True)
+        self.stop_rabi_btn.setEnabled(False)
+        self.rabi_progress_bar.setVisible(False)
+        
+        # Turn off MW output
+        if self.mw_generator:
+            try:
+                self.mw_generator.set_rf_output(False)
+            except:
+                pass
+    
+    def save_rabi_parameters(self):
+        """Save current Rabi parameters to JSON file"""
+        try:
+            params = self.get_rabi_parameters()
+            if params is None:
+                return
+            
+            # Add UI-specific parameters
+            params['start_duration'] = int(self.start_duration.text())
+            params['stop_duration'] = int(self.stop_duration.text())
+            params['duration_step'] = int(self.duration_step.text())
+            params['mw_frequency_ghz'] = float(self.rabi_mw_freq.text())
+            params['mw_power_dbm'] = float(self.rabi_mw_power.text())
+            
+            filename, _ = QFileDialog.getSaveFileName(
+                self, "Save Rabi Parameters", "", "JSON files (*.json);;All files (*.*)"
+            )
+            
+            if filename:
+                with open(filename, 'w') as f:
+                    json.dump(params, f, indent=2)
+                self.log_message(f"💾 Rabi parameters saved to {filename}")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Save Error", f"Error saving Rabi parameters: {e}")
+    
+    def load_rabi_parameters(self):
+        """Load Rabi parameters from JSON file"""
+        try:
+            filename, _ = QFileDialog.getOpenFileName(
+                self, "Load Rabi Parameters", "", "JSON files (*.json);;All files (*.*)"
+            )
+            
+            if filename:
+                with open(filename, 'r') as f:
+                    params = json.load(f)
+                
+                # Set UI parameters
+                if 'start_duration' in params:
+                    self.start_duration.setText(str(params['start_duration']))
+                if 'stop_duration' in params:
+                    self.stop_duration.setText(str(params['stop_duration']))
+                if 'duration_step' in params:
+                    self.duration_step.setText(str(params['duration_step']))
+                if 'mw_frequency_ghz' in params:
+                    self.rabi_mw_freq.setText(str(params['mw_frequency_ghz']))
+                if 'mw_power_dbm' in params:
+                    self.rabi_mw_power.setText(str(params['mw_power_dbm']))
+                
+                # Set timing parameters
+                if 'laser_duration' in params:
+                    self.rabi_laser_duration.setText(str(params['laser_duration']))
+                if 'detection_duration' in params:
+                    self.rabi_detection_duration.setText(str(params['detection_duration']))
+                if 'repetitions' in params:
+                    self.rabi_repetitions.setText(str(params['repetitions']))
+                
+                self.log_message(f"📁 Rabi parameters loaded from {filename}")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Load Error", f"Error loading Rabi parameters: {e}")
+    
+    def save_rabi_results(self):
+        """Save Rabi measurement results"""
+        if not self.current_results.get('durations'):
+            QMessageBox.warning(self, "No Data", "No Rabi results to save!")
+            return
+        
+        try:
+            filename, file_type = QFileDialog.getSaveFileName(
+                self, "Save Rabi Results", "", 
+                "JSON files (*.json);;CSV files (*.csv);;All files (*.*)"
+            )
+            
+            if filename:
+                if filename.endswith('.csv') or 'CSV' in file_type:
+                    # Save as CSV
+                    import csv
+                    with open(filename, 'w', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(['MW_Duration_ns', 'Count_Rate_Hz'])
+                        for duration, count in zip(self.current_results['durations'],
+                                                 self.current_results['count_rates']):
+                            writer.writerow([duration, count])
+                else:
+                    # Save as JSON
+                    data = {
+                        'mw_durations_ns': self.current_results['durations'],
+                        'count_rates_hz': self.current_results['count_rates'],
+                        'parameters': self.get_rabi_parameters(),
+                        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    with open(filename, 'w') as f:
+                        json.dump(data, f, indent=2)
+                
+                self.log_message(f"📊 Rabi results saved to {filename}")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Save Error", f"Error saving Rabi results: {e}")
     
     def closeEvent(self, event):
         """Handle application closing"""
