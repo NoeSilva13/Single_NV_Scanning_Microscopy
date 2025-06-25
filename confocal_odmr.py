@@ -35,23 +35,23 @@ from plot_scan_results import plot_scan_results
 from utils import calculate_scale, MICRONS_PER_VOLT
 from plot_widgets.live_plot_napari_widget import live_plot
 
-# Import extracted widgets
-from widgets.scan_controls import (
+# Import extracted Qt-based widgets
+from widgets.scan_controls_qt import (
     new_scan as create_new_scan,
     close_scanner as create_close_scanner,
     reset_zoom as create_reset_zoom,
     update_scan_parameters as create_update_scan_parameters,
     update_scan_parameters_widget as create_update_scan_parameters_widget
 )
-from widgets.camera_controls import (
+from widgets.camera_controls_qt import (
     create_camera_control_widget
 )
-from widgets.auto_focus import (
+from widgets.auto_focus_qt import (
     auto_focus as create_auto_focus,
     SignalBridge
 )
-from widgets.single_axis_scan import SingleAxisScanWidget
-from widgets.file_operations import load_scan as create_load_scan, open_odmr_gui as create_odmr_gui
+from widgets.single_axis_scan_qt import SingleAxisScanWidget
+from widgets.file_operations_qt import load_scan as create_load_scan, open_odmr_gui as create_odmr_gui
 
 # --------------------- CONFIGURATION MANAGER CLASS ---------------------
 class ConfigManager:
@@ -730,18 +730,20 @@ class ConfocalMainWindow(QMainWindow):
     
     def init_widgets(self):
         """Initialize and add all control widgets"""
-        # Create scan control widgets
-        self.new_scan_widget = create_new_scan(self.scan_pattern, self.scan_points_manager, None)
-        self.close_scanner_widget = create_close_scanner(self.output_task, None)
+        # Create scan control widgets with status callback
+        status_callback = self.show_status
+        
+        self.new_scan_widget = create_new_scan(self.scan_pattern, self.scan_points_manager, status_callback)
+        self.close_scanner_widget = create_close_scanner(self.output_task, status_callback)
         self.save_image_widget = self.create_save_image_widget()
-        self.update_scan_parameters_widget = create_update_scan_parameters(self.config_manager, self.scan_points_manager)
+        self.update_scan_parameters_widget = create_update_scan_parameters(self.config_manager, self.scan_points_manager, status_callback)
         self.update_widget_func = create_update_scan_parameters_widget(self.update_scan_parameters_widget, self.config_manager)
         
         self.reset_zoom_widget = create_reset_zoom(
             self.scan_pattern, self.scan_history, self.config_manager, self.scan_points_manager,
-            None, lambda **kwargs: self.config_manager.update_scan_parameters(**kwargs), 
+            lambda **kwargs: self.config_manager.update_scan_parameters(**kwargs), 
             self.update_widget_func,
-            self.zoom_manager
+            self.zoom_manager, status_callback
         )
         
         # Create other widgets
@@ -749,15 +751,15 @@ class ConfocalMainWindow(QMainWindow):
         
         # Auto-focus with Qt signal bridge
         qt_signal_bridge = SignalBridge(self)
-        self.auto_focus_widget = create_auto_focus(self.counter, self.binwidth, qt_signal_bridge)
+        self.auto_focus_widget = create_auto_focus(self.counter, self.binwidth, qt_signal_bridge, status_callback)
         
         self.single_axis_scan_widget = SingleAxisScanWidget(
-            self.config_manager, None, None, self.output_task, self.counter, self.binwidth
+            self.config_manager, self.output_task, self.counter, self.binwidth, status_callback
         )
         
         # File operation widgets
-        self.load_scan_widget = create_load_scan(self)
-        self.odmr_gui_widget = create_odmr_gui()
+        self.load_scan_widget = create_load_scan(self.image_display, status_callback)
+        self.odmr_gui_widget = create_odmr_gui(status_callback)
         
         # Create zoom ROI button
         self.zoom_roi_button = self.create_zoom_roi_button()
@@ -781,13 +783,11 @@ class ConfocalMainWindow(QMainWindow):
         ]
         
         for name, widget in left_widgets:
-            if hasattr(widget, 'native'):
-                qt_widget = widget.native
-            else:
-                qt_widget = widget
+            # For Qt widgets, use them directly
+            qt_widget = widget
             
-            # Set fixed size for buttons
-            if name != "Scan Parameters":
+            # Set fixed size for buttons (not for parameter widget)
+            if name != "Scan Parameters" and hasattr(qt_widget, 'setFixedSize'):
                 qt_widget.setFixedSize(150, 50)
             
             frame = QFrame()
@@ -826,10 +826,8 @@ class ConfocalMainWindow(QMainWindow):
         ]
         
         for name, widget in right_widgets:
-            if hasattr(widget, 'native'):
-                qt_widget = widget.native
-            else:
-                qt_widget = widget
+            # For Qt widgets, use them directly
+            qt_widget = widget
             
             frame = QFrame()
             frame.setFrameStyle(QFrame.Box)
@@ -925,6 +923,9 @@ class ConfocalMainWindow(QMainWindow):
             
             # Update scanner position indicator
             self.image_display.set_scanner_position(x_idx, y_idx)
+            
+            # Update single axis scan widget with current position
+            self.single_axis_scan_widget.set_current_position(x_voltage, y_voltage)
             
         except Exception as e:
             self.show_status(f"Error moving scanner: {str(e)}")
@@ -1048,14 +1049,7 @@ class ConfocalMainWindow(QMainWindow):
         
         save_button.clicked.connect(save_image)
         
-        # Create a simple wrapper widget to match the interface
-        wrapper = QWidget()
-        wrapper_layout = QVBoxLayout()
-        wrapper_layout.addWidget(save_button)
-        wrapper.setLayout(wrapper_layout)
-        wrapper.native = save_button  # Add native attribute for compatibility
-        
-        return wrapper
+        return save_button
     
     def create_zoom_roi_button(self):
         """Create a custom zoom ROI button"""
@@ -1088,14 +1082,7 @@ class ConfocalMainWindow(QMainWindow):
         
         zoom_roi_button.clicked.connect(zoom_roi)
         
-        # Create a simple wrapper widget to match the interface
-        wrapper = QWidget()
-        wrapper_layout = QVBoxLayout()
-        wrapper_layout.addWidget(zoom_roi_button)
-        wrapper.setLayout(wrapper_layout)
-        wrapper.native = zoom_roi_button  # Add native attribute for compatibility
-        
-        return wrapper
+        return zoom_roi_button
     
     def setup_shortcuts(self):
         """Setup keyboard shortcuts"""
@@ -1117,8 +1104,8 @@ class ConfocalMainWindow(QMainWindow):
     def reset_zoom(self):
         """Reset zoom to full view"""
         try:
-            if self.reset_zoom_widget and hasattr(self.reset_zoom_widget, 'native'):
-                self.reset_zoom_widget.native.click()
+            if self.reset_zoom_widget and hasattr(self.reset_zoom_widget, 'click'):
+                self.reset_zoom_widget.click()
                 self.show_status("🔍 Zoom reset to full view")
             else:
                 self.show_status("⚠️ Reset zoom widget not available")
