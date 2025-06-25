@@ -31,6 +31,7 @@ from data_manager import DataManager
 from plot_widgets.live_plot_napari_widget import live_plot
 from plot_scan_results import plot_scan_results
 from utils import calculate_scale, MICRONS_PER_VOLT
+from qtpy.QtWidgets import QWidget
 
 # Import extracted widgets
 from widgets.scan_controls import (
@@ -337,12 +338,23 @@ load_scan_widget = create_load_scan(viewer)
 # Create ODMR control widgets
 launch_odmr_widget = create_launch_odmr_gui(tagger=tagger, counter=counter, binwidth=binwidth)
 
-# Create Plot Profile widget (napari-plot-profile plugin)
+# Store reference globally or in a persistent place
+_plot_profile_dock = None
+
 @magicgui(call_button="Plot Profile")
 def _add_plot_profile():
+    global _plot_profile_dock
+
     try:
-        plot_profile_dock, _ = viewer.window.add_plugin_dock_widget('napari-plot-profile')
-        plot_profile_dock.setFloating(True)
+        if _plot_profile_dock is None or not isinstance(_plot_profile_dock, QWidget):
+            _plot_profile_dock, _ = viewer.window.add_plugin_dock_widget(
+                plugin_name='napari-plot-profile',
+            )
+            _plot_profile_dock.setFloating(True)
+        else:
+            # If already added once, just re-show it
+            _plot_profile_dock.show()
+            _plot_profile_dock.raise_()
     except Exception as e:
         show_info(f'❌ Could not add plot profile widget: {str(e)}')
 
