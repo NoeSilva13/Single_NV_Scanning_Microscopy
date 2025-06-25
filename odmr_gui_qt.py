@@ -259,12 +259,17 @@ class DeviceStatusWidget(QGroupBox):
 class ODMRControlCenter(QMainWindow):
     """Main ODMR Control Center application"""
     
-    def __init__(self):
+    def __init__(self, shared_tagger=None):
         super().__init__()
+        self.shared_tagger = shared_tagger
+        self.pulse_controller = None
+        self.mw_generator = None
+        self.experiments = None
+        self.worker = None
+        self.current_results = {'frequencies': [], 'count_rates': []}
+        
         self.init_ui()
         self.init_hardware()
-        self.current_results = {'frequencies': [], 'count_rates': []}
-        self.worker = None
         
     def init_ui(self):
         """Initialize the user interface"""
@@ -607,9 +612,7 @@ class ODMRControlCenter(QMainWindow):
     
     def init_hardware(self):
         """Initialize hardware connections"""
-        self.pulse_controller = None
-        self.mw_generator = None
-        self.experiments = None
+        # Note: pulse_controller, mw_generator, and experiments are already initialized in __init__
         
         # Try to connect on startup
         self.connect_pulse_streamer()
@@ -693,7 +696,7 @@ class ODMRControlCenter(QMainWindow):
         
         # Initialize experiments
         if not self.experiments:
-            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator)
+            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator, self.shared_tagger)
         
         # Set MW power
         if self.mw_generator:

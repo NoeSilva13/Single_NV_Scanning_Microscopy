@@ -334,7 +334,7 @@ single_axis_scan_widget = SingleAxisScanWidget(
 load_scan_widget = create_load_scan(viewer)
 
 # Create ODMR control widgets
-launch_odmr_widget = create_launch_odmr_gui()
+launch_odmr_widget = create_launch_odmr_gui(tagger=tagger, counter=counter, binwidth=binwidth)
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
 zoom_in_progress = False

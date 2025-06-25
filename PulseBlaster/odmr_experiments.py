@@ -24,27 +24,34 @@ class ODMRExperiments:
     """
     
     def __init__(self, pulse_controller: SwabianPulseController, 
-                 mw_generator: Optional[RigolDSG836Controller] = None):
+                 mw_generator: Optional[RigolDSG836Controller] = None,
+                 tagger=None):
         """
         Initialize ODMR experiments with a pulse controller and optional MW generator.
         
         Args:
             pulse_controller: Instance of SwabianPulseController
             mw_generator: Optional instance of RigolDSG836Controller for MW control
+            tagger: Optional existing TimeTagger instance. If None, will create new one.
         """
         self.pulse_controller = pulse_controller
         self.mw_generator = mw_generator
         self.results = {}
         
-        # Initialize TimeTagger for real data acquisition
-        try:
-            self.tagger = createTimeTagger()
-            self.tagger.reset()
-            print("✅ Connected to real TimeTagger device")
-        except Exception as e:
-            print("⚠️ Real TimeTagger not detected, using virtual device")
-            self.tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
-            self.tagger.run()
+        # Use provided TimeTagger instance or create new one
+        if tagger is not None:
+            self.tagger = tagger
+            print("✅ Using existing TimeTagger instance")
+        else:
+            # Initialize TimeTagger for real data acquisition
+            try:
+                self.tagger = createTimeTagger()
+                self.tagger.reset()
+                print("✅ Connected to real TimeTagger device")
+            except Exception as e:
+                print("⚠️ Real TimeTagger not detected, using virtual device")
+                self.tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+                self.tagger.run()
         
         # Set bin width to 5 ns and initialize counter
         #self.binwidth = int(5e9)  # 5 ns in ps
