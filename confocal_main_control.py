@@ -422,9 +422,11 @@ viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
 viewer.window.add_dock_widget(launch_odmr_widget, area="bottom")
-viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
-viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
+update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
+camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
 viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
+viewer.window._qt_window.tabifyDockWidget(update_scan_parameters_dock, camera_control_dock)
+
 
 # Initialize empty auto-focus plot
 empty_positions = [0, 1]
