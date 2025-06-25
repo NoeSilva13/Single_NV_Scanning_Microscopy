@@ -341,7 +341,7 @@ launch_odmr_widget = create_launch_odmr_gui(tagger=tagger, counter=counter, binw
 # Store reference globally or in a persistent place
 _plot_profile_dock = None
 
-@magicgui(call_button="Plot Profile")
+@magicgui(call_button="📈 Plot Profile")
 def _add_plot_profile():
     global _plot_profile_dock
 
