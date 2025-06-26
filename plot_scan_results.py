@@ -37,16 +37,11 @@ def plot_scan_results(scan_data, save_path):
     # Calculate the scale (microns per pixel)
     microns_per_pixel_x = calculate_scale(x_grid[0], x_grid[-1], 1)
     microns_per_pixel_y = calculate_scale(y_grid[0], y_grid[-1], 1)
-    # Draw the scale bar
-    ax.plot([x_grid[0], x_grid[-1]], [y_grid[0], y_grid[0]], color='white', linewidth=2)
-    ax.text(x_grid[0] + (x_grid[-1] - x_grid[0])/2, y_grid[0] + 0.02, f'{microns_per_pixel_x:.1f} µm', color='white', horizontalalignment='center', verticalalignment='bottom')
-    ax.plot([x_grid[0], x_grid[0]], [y_grid[0], y_grid[-1]], color='white', linewidth=2)
-    ax.text(x_grid[0]*0.78, y_grid[0] + (y_grid[-1] - y_grid[0])/2, f'{microns_per_pixel_y:.1f} µm', color='white', horizontalalignment='right', verticalalignment='center')
-    
+  
     cbar = fig.colorbar(im, ax=ax)
     cbar.set_label('SPD Counts', rotation=270, labelpad=15)
-    ax.set_xlabel("X Position (V)")
-    ax.set_ylabel("Y Position (V)")
+    ax.set_xlabel(f"X Position (V) ({microns_per_pixel_x:.1f} µm)")
+    ax.set_ylabel(f"Y Position (V) ({microns_per_pixel_y:.1f} µm)")
     ax.set_title("SPD Counts Heatmap")
     fig.tight_layout()
     
