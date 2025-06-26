@@ -151,7 +151,12 @@ class ODMRExperiments:
                         mw_durations: List[int],
                         mw_frequency: float = 2.87e9,
                         laser_duration: int = 1000,
-                        detection_duration: int = 500) -> Dict:
+                        detection_duration: int = 500,
+                        laser_delay: int = 0,
+                        mw_delay: Optional[int] = None,
+                        detection_delay: Optional[int] = None,
+                        sequence_interval: int = 10000,
+                        repetitions: int = 1000) -> Dict:
         """
         Perform Rabi oscillation measurement.
         
@@ -160,6 +165,11 @@ class ODMRExperiments:
             mw_frequency: MW frequency in Hz
             laser_duration: Laser pulse duration in ns
             detection_duration: Detection window duration in ns
+            laser_delay: Delay before laser pulse in ns
+            mw_delay: Delay before MW pulse in ns
+            detection_delay: Delay after MW pulse in ns
+            sequence_interval: Interval between sequences in ns
+            repetitions: Number of repetitions
             
         Returns:
             Dictionary containing MW durations and count rates
@@ -177,16 +187,20 @@ class ODMRExperiments:
         for mw_duration in mw_durations:
             print(f"⏱️ MW duration: {mw_duration} ns")
             
+            # Calculate default delays for this duration if not provided
+            local_mw_delay = mw_delay if mw_delay is not None else laser_duration + 1000
+            local_detection_delay = detection_delay if detection_delay is not None else local_mw_delay + mw_duration + 100
+
             # Create Rabi sequence
             sequence, total_duration = self.pulse_controller.create_odmr_sequence(
                 laser_duration=laser_duration,
                 mw_duration=mw_duration,
                 detection_duration=detection_duration,
-                laser_delay=0,
-                mw_delay=laser_duration + 1000,  # 1 µs after laser
-                detection_delay=laser_duration + 1000 + mw_duration + 100,
-                sequence_interval=10000,
-                repetitions=1000  # More repetitions for better statistics
+                laser_delay=laser_delay,
+                mw_delay=local_mw_delay,
+                detection_delay=local_detection_delay,
+                sequence_interval=sequence_interval,
+                repetitions=repetitions
             )
             
             if sequence:

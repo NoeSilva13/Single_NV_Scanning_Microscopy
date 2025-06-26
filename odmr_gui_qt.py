@@ -140,7 +140,12 @@ class RabiWorker(QThread):
                     mw_durations=[duration],
                     mw_frequency=self.parameters['mw_frequency'],
                     laser_duration=self.parameters['laser_duration'],
-                    detection_duration=self.parameters['detection_duration']
+                    detection_duration=self.parameters['detection_duration'],
+                    laser_delay=self.parameters['laser_delay'],
+                    mw_delay=self.parameters['mw_delay'],
+                    detection_delay=self.parameters['detection_delay'],
+                    sequence_interval=self.parameters['sequence_interval'],
+                    repetitions=self.parameters['repetitions']
                 )
                 
                 if result and 'count_rates' in result and len(result['count_rates']) > 0:
@@ -609,8 +614,20 @@ class ODMRControlCenter(QMainWindow):
         timing_group = ParameterGroupBox("Timing Parameters")
         self.rabi_laser_duration = timing_group.add_parameter("Laser Duration (ns):", "1000", "Duration of laser pulse")
         self.rabi_detection_duration = timing_group.add_parameter("Detection Duration (ns):", "500", "Duration of detection window")
-        self.rabi_repetitions = timing_group.add_parameter("Repetitions:", "1000", "Number of sequence repetitions")
         scroll_layout.addWidget(timing_group)
+        
+        # Delay parameters
+        delay_group = ParameterGroupBox("Delay Parameters (ns)")
+        self.rabi_laser_delay = delay_group.add_parameter("Laser Delay:", "0", "Delay before laser pulse")
+        self.rabi_mw_delay = delay_group.add_parameter("MW Delay:", "0", "Delay before MW pulse")
+        self.rabi_detection_delay = delay_group.add_parameter("Detection Delay:", "0", "Delay before detection window")
+        scroll_layout.addWidget(delay_group)
+        
+        # Sequence parameters
+        seq_group = ParameterGroupBox("Sequence Parameters")
+        self.rabi_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "10000", "Time between sequence repetitions")
+        self.rabi_repetitions = seq_group.add_parameter("Repetitions:", "1000", "Number of sequence repetitions")
+        scroll_layout.addWidget(seq_group)
         
         # Control buttons
         button_group = QGroupBox("Measurement Control")
@@ -1080,6 +1097,10 @@ class ODMRControlCenter(QMainWindow):
                 'mw_frequency': mw_frequency,
                 'laser_duration': int(self.rabi_laser_duration.text()),
                 'detection_duration': int(self.rabi_detection_duration.text()),
+                'laser_delay': int(self.rabi_laser_delay.text()),
+                'mw_delay': int(self.rabi_mw_delay.text()),
+                'detection_delay': int(self.rabi_detection_delay.text()),
+                'sequence_interval': int(self.rabi_sequence_interval.text()),
                 'repetitions': int(self.rabi_repetitions.text())
             }
         except ValueError as e:
@@ -1195,6 +1216,10 @@ class ODMRControlCenter(QMainWindow):
             params['duration_step'] = int(self.duration_step.text())
             params['mw_frequency_ghz'] = float(self.rabi_mw_freq.text())
             params['mw_power_dbm'] = float(self.rabi_mw_power.text())
+            params['laser_delay'] = int(self.rabi_laser_delay.text())
+            params['mw_delay'] = int(self.rabi_mw_delay.text())
+            params['detection_delay'] = int(self.rabi_detection_delay.text())
+            params['sequence_interval'] = int(self.rabi_sequence_interval.text())
             
             filename, _ = QFileDialog.getSaveFileName(
                 self, "Save Rabi Parameters", "", "JSON files (*.json);;All files (*.*)"
@@ -1236,6 +1261,14 @@ class ODMRControlCenter(QMainWindow):
                     self.rabi_laser_duration.setText(str(params['laser_duration']))
                 if 'detection_duration' in params:
                     self.rabi_detection_duration.setText(str(params['detection_duration']))
+                if 'laser_delay' in params:
+                    self.rabi_laser_delay.setText(str(params['laser_delay']))
+                if 'mw_delay' in params:
+                    self.rabi_mw_delay.setText(str(params['mw_delay']))
+                if 'detection_delay' in params:
+                    self.rabi_detection_delay.setText(str(params['detection_delay']))
+                if 'sequence_interval' in params:
+                    self.rabi_sequence_interval.setText(str(params['sequence_interval']))
                 if 'repetitions' in params:
                     self.rabi_repetitions.setText(str(params['repetitions']))
                 
