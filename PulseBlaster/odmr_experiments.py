@@ -178,13 +178,14 @@ class ODMRExperiments:
             print(f"⏱️ MW duration: {mw_duration} ns")
             
             # Create Rabi sequence
-            sequence = self.pulse_controller.create_odmr_sequence(
+            sequence, total_duration = self.pulse_controller.create_odmr_sequence(
                 laser_duration=laser_duration,
                 mw_duration=mw_duration,
                 detection_duration=detection_duration,
                 laser_delay=0,
                 mw_delay=laser_duration + 1000,  # 1 µs after laser
                 detection_delay=laser_duration + 1000 + mw_duration + 100,
+                sequence_interval=10000,
                 repetitions=1000  # More repetitions for better statistics
             )
             
