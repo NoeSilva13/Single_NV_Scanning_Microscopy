@@ -178,7 +178,7 @@ class ODMRExperiments:
         
         durations = []
         count_rates = []
-        
+        self.counter = Countrate(tagger=self.tagger, channels=[1])
         # Set MW frequency and power for Rabi oscillation
         if self.mw_generator:
             self.mw_generator.set_odmr_frequency(mw_frequency / 1e9)  # Convert Hz to GHz
