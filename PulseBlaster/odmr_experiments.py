@@ -208,16 +208,18 @@ class ODMRExperiments:
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(True)
                 
+                self.counter.clear()
                 self.pulse_controller.run_sequence(sequence)
-                time.sleep(0.1)
-                
+                time.sleep(total_duration/1e9)
+                self.pulse_controller.stop_sequence()
                 # Get real count rate from TimeTagger
-                count_rate = self._get_count_rate()
+                count_rate = np.mean(self.counter.getData())
+                print(f"Count rate: {count_rate} Hz")
                 
                 durations.append(mw_duration)
                 count_rates.append(count_rate)
                 
-                self.pulse_controller.stop_sequence()
+                
                 
                 # Turn off RF output after measurement
                 if self.mw_generator:
