@@ -133,6 +133,7 @@ Pull requests are welcome!  Open an issue to discuss new features, hardware supp
 This project is licensed under the MIT License – see `LICENSE` for details.
 
 ---
-### Author & contact
-Contact: **Javier Noé Ramos Silva** ‑ *jramossi@uci.edu*  
-[Burke Lab](https://www.burkelab.com/) – Department of Electrical Engineering and Computer Science, University of California, Irvine
+### Contact
+For questions and support:
+- Contact: **Javier Noé Ramos Silva** ‑ *jramossi@uci.edu*  
+- Lab [Burke Lab](https://www.burkelab.com/) – Department of Electrical Engineering and Computer Science, University of California, Irvine
