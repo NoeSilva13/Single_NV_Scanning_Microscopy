@@ -4,8 +4,10 @@ Example Usage: RIGOL DSG836 Integration with ODMR Experiments
 This example demonstrates how to use the RIGOL DSG836 signal generator
 with the Swabian Pulse Streamer for ODMR experiments.
 
-Author: AI Assistant
-Date: 2024
+Author: Javier Noé Ramos Silva
+Contact: jramossi@uci.edu
+Lab: Burke Lab, Department of Electrical Engineering and Computer Science, University of California, Irvine
+Date: 2025
 """
 
 import numpy as np

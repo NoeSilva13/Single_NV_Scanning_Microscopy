@@ -4,8 +4,10 @@ ODMR Control Center - Qt GUI Application
 Professional GUI for controlling continuous wave ODMR experiments.
 Designed with the same visual style and organization as the NV scanning microscopy software.
 
-Author: NV Lab
+Author: Javier Noé Ramos Silva
 Date: 2025
+Contact: jramossi@uci.edu
+Lab: Burke Lab, Department of Electrical Engineering and Computer Science, University of California, Irvine
 """
 
 import sys

@@ -4,7 +4,9 @@ ODMR Experiment Examples using Swabian Pulse Streamer 8/2
 This file contains example experiments for ODMR measurements with NV centers.
 Demonstrates various pulse sequences for different types of measurements.
 
-Author: NV Lab
+Author: Javier Noé Ramos Silva
+Contact: jramossi@uci.edu
+Lab: Burke Lab, Department of Electrical Engineering and Computer Science, University of California, Irvine
 Date: 2025
 """
 
