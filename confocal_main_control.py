@@ -117,7 +117,7 @@ class ScanPointsManager:
 class ZoomLevelManager:
     """Manages zoom level state"""
     
-    def __init__(self, max_zoom=3):
+    def __init__(self, max_zoom=6):
         self.zoom_level = 0
         self.max_zoom = max_zoom
     

@@ -108,7 +108,7 @@ class PiezoController:
 
     def perform_auto_focus(self, 
                          counter_function: Callable[[], int],
-                         step_size: float = 10.0,
+                         step_size: float = 5.0,
                          settling_time: float = 0.1
                          ) -> Tuple[List[float], List[int], float]:
         """Perform auto-focus by scanning the Z axis and measuring counts.
