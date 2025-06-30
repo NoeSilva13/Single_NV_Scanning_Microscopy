@@ -474,7 +474,6 @@ default_config = {
     "dwell_time": 0.1
 }
 
-@viewer.window.qt_viewer.parent().destroyed.connect
 def _on_close():
     """Reset config file to default values and set scanner to zero when closing the app"""
     try:
@@ -488,6 +487,9 @@ def _on_close():
         show_info("✨ Config reset to default values")
     except Exception as e:
         show_info(f"❌ Error during app closure: {str(e)}")
+
+# Register cleanup using Qt's destroyed signal
+viewer.window._qt_window.destroyed.connect(_on_close)
 
 def main():
     """Main application entry point"""
