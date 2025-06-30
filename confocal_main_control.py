@@ -293,7 +293,7 @@ def scan_pattern(x_points, y_points):
              image=image,
              scale_x=scale_um_per_px_x,
              scale_y=scale_um_per_px_y)
-    
+    layer.save(data_path.replace('.csv', '.tiff'))
     # Return scanner to zero position after scan
     output_task.write([0, 0])
     show_info("🎯 Scanner returned to zero position")
