@@ -23,6 +23,7 @@ import nidaqmx
 from napari.utils.notifications import show_info
 from PyQt5.QtWidgets import QDesktopWidget
 from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual
+from magicgui import magicgui
 
 # Local imports
 from galvo_controller import GalvoScannerController
@@ -30,6 +31,7 @@ from data_manager import DataManager
 from plot_widgets.live_plot_napari_widget import live_plot
 from plot_scan_results import plot_scan_results
 from utils import calculate_scale, MICRONS_PER_VOLT
+from qtpy.QtWidgets import QWidget
 
 # Import extracted widgets
 from widgets.scan_controls import (
@@ -49,6 +51,7 @@ from widgets.auto_focus import (
 )
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan as create_load_scan
+from widgets.odmr_controls import launch_odmr_gui as create_launch_odmr_gui
 
 # --------------------- CONFIGURATION MANAGER CLASS ---------------------
 class ConfigManager:
@@ -332,6 +335,31 @@ single_axis_scan_widget = SingleAxisScanWidget(
 # Create file operation widgets
 load_scan_widget = create_load_scan(viewer)
 
+# Create ODMR control widgets
+launch_odmr_widget = create_launch_odmr_gui(tagger=tagger, counter=counter, binwidth=binwidth)
+
+# Store reference globally or in a persistent place
+_plot_profile_dock = None
+
+@magicgui(call_button="📈 Plot Profile")
+def _add_plot_profile():
+    global _plot_profile_dock
+
+    try:
+        if _plot_profile_dock is None or not isinstance(_plot_profile_dock, QWidget):
+            _plot_profile_dock, _ = viewer.window.add_plugin_dock_widget(
+                plugin_name='napari-plot-profile',
+            )
+            _plot_profile_dock.setFloating(True)
+        else:
+            # If already added once, just re-show it
+            _plot_profile_dock.show()
+            _plot_profile_dock.raise_()
+    except Exception as e:
+        show_info(f'❌ Could not add plot profile widget: {str(e)}')
+
+plot_profile_widget = _add_plot_profile
+
 # --------------------- ZOOM BY REGION HANDLER ---------------------
 zoom_in_progress = False
 
@@ -408,6 +436,8 @@ reset_zoom_widget.native.setFixedSize(150, 50)
 close_scanner_widget.native.setFixedSize(150, 50)
 auto_focus_widget.native.setFixedSize(150, 50)
 load_scan_widget.native.setFixedSize(150, 50)
+launch_odmr_widget.native.setFixedSize(150, 50)
+plot_profile_widget.native.setFixedSize(150, 50)
 
 # Add widgets to viewer
 viewer.window.add_dock_widget(new_scan_widget, area="bottom")
@@ -416,9 +446,13 @@ viewer.window.add_dock_widget(reset_zoom_widget, area="bottom")
 viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
-viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
-viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
+viewer.window.add_dock_widget(launch_odmr_widget, area="bottom")
+viewer.window.add_dock_widget(plot_profile_widget, area="bottom")
+update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
+camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
 viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
+viewer.window._qt_window.tabifyDockWidget(update_scan_parameters_dock, camera_control_dock)
+
 
 # Initialize empty auto-focus plot
 empty_positions = [0, 1]

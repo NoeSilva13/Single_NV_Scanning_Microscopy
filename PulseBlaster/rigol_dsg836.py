@@ -4,8 +4,10 @@ RIGOL DSG836 Signal Generator Controller
 This module provides a Python interface to control the RIGOL DSG836 RF signal generator
 via Ethernet for ODMR experiments with NV centers.
 
-Author: AI Assistant
-Date: 2024
+Author: Javier Noé Ramos Silva
+Contact: jramossi@uci.edu
+Lab: Burke Lab, Department of Electrical Engineering and Computer Science, University of California, Irvine
+Date: 2025
 """
 
 import time

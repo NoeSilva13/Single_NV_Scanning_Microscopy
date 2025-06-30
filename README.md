@@ -1,191 +1,139 @@
-# Single NV Scanning Microscopy
+# Single NV Scanning & ODMR Control Suite
 
 ![NV Scanning Microscopy](https://img.shields.io/badge/Microscopy-NV%20Centers-brightgreen)
-![Python](https://img.shields.io/badge/python-3.7+-blue.svg)
+![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-A Python-based control system for Single Nitrogen-Vacancy (NV) Scanning Microscopy, featuring integration with Thorlabs LSKGG4 Galvo-Galvo Scanner, NI USB-6453 DAQ, and Swabian TimeTagger for high-precision photon counting.
+A cross-platform (Windows 10/11) Python toolkit developed at the **[Burke Lab](https://www.burkelab.com/)** for high-precision optical, microwave and timing control of single Nitrogen–Vacancy (NV) centers in diamond.  
+It bundles two flagship graphical applications:
 
-## 🔍 Key Features
+1. **Confocal Scan GUI** (`confocal_main_control.py`) – real-time raster scanning, live photon counting and auto-focus based on a Napari viewer.
+2. **ODMR Control Center** (`odmr_gui_qt.py`) – a professional Qt interface for continuous-wave ODMR, Rabi and related pulse-sequence measurements.
 
-- **High-Precision Scanning**:
-  - Two-dimensional sample imaging with nanoscale precision
-  - Real-time and buffered scanning modes
-  - Configurable scan parameters and hardware settings
-  
-- **Advanced Detection**:
-  - Dual detector support (APD and SPCM)
-  - Swabian TimeTagger integration for precise photon counting
-  - High temporal resolution measurements
-  
-- **Interactive Visualization**:
-  - Real-time image display with Napari viewer
-  - Live scan preview and zooming capabilities
-  - Interactive region selection and scanning
-  - Multiple visualization modes (2D plot, histogram)
-
-## 💻 System Requirements
-
-### Hardware
-- Thorlabs LSKGG4 Galvo-Galvo Scanner
-- National Instruments USB-6453 DAQ device
-- One of the supported detectors:
-  - Avalanche Photodiode (APD)
-  - Excelitas SPCM-AQRH-10-FC Single Photon Counting Module (SPD)
-- Swabian TimeTagger device (if using SPD)
-- Computer with USB 3.0+ ports
-
-### Software
-- Python 3.7 or higher
-- Operating System: Windows 10/11
-- Dependencies:
-  ```
-  numpy>=1.20.0
-  matplotlib>=3.4.0
-  nidaqmx>=0.6.0
-  pyvisa>=1.11.0
-  napari>=0.4.17
-  magicgui>=0.3.0
-  TimeTagger>=0.9.0 (if using SPD)
-  ```
-
-## 📦 Installation
-
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/NoeSilva13/Single_NV_Scannig_Microscopy.git
-   cd Single_NV_Scannig_Microscopy
-   ```
-
-2. **Create and Activate Virtual Environment**
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Install Hardware Drivers**
-   - [NI-DAQmx](https://www.ni.com/en/support/downloads/drivers/download.ni-daqmx.html)
-   - [Swabian TimeTagger Software](https://www.swabianinstruments.com/time-tagger/downloads/)
-
-## 🚀 Usage
-
-### Napari-based Interface
-
-1. **Launch the Napari Interface**
-   ```bash
-   python napari_scanning.py  # For APD-based scanning
-   # or
-   python napari_scanning_SPD_TT.py  # For TimeTagger-based scanning
-   ```
-
-2. **Interface Features**:
-   - 🔄 Reset Zoom: Return to original view
-   - 📷 New Scan: Start a new scanning sequence
-   - 💾 Save Image: Save the current scan
-   - 🎯 Set to Zero: Reset scanner position
-
-### Command-Line Interface
-
-1. **Real-time Scanning Mode**
-   ```bash
-   python main.py --mode realtime
-   ```
-
-2. **Buffered Scanning Mode**
-   ```bash
-   python main.py --mode buffered
-   ```
-
-### Jupyter Notebook Interface
-Use `microscope_control.ipynb` for interactive control and visualization:
-- Real-time photon counting
-- Live scan visualization
-- Parameter adjustment
-- Data analysis
-
-## ⚙️ Configuration
-
-### Configuration File (config_template.json)
-```json
-{
-    "scan_range": {
-        "x": [-5.0, 5.0],
-        "y": [-5.0, 5.0]
-    },
-    "resolution": {
-        "x": 100,
-        "y": 100
-    },
-    "dwell_time": 0.01,
-    "scan_mode": "realtime",
-    "hardware": {
-        "sample_rate": 1000,
-        "samples_per_point": 10,
-        "settling_time": 0.001
-    }
-}
-```
-
-### Advanced Settings
-- **Scan Resolution**: 16x16 to 512x512 pixels
-- **Dwell Time**: 0.1ms to 1000ms per point
-- **Voltage Range**: ±10V maximum
-- **TimeTagger Settings**: 
-  - Channel 1: SPD input
-  - Adjustable sampling time
-  - Configurable binning
-
-## 📊 Data Management
-
-### Data Structure
-- Processed images: `.png`
-- Metadata: `.json`
-- Daily folders: `MMDDYY/scan_data_HHMMSS.csv`
-
-### Data Analysis Features
-- Real-time count rate monitoring
-- 2D scan visualization
-- Region-of-interest selection
-- Time trace analysis
-
-## 🔧 Troubleshooting
-
-1. **No Signal Detection**
-   - Check detector power and connections
-   - Verify DAQ/TimeTagger channel configuration
-   - Ensure proper voltage ranges
-
-2. **Scanner Issues**
-   - Check USB connections
-   - Verify DAQ device in NI MAX
-   - Check voltage limits (±10V)
-
-3. **TimeTagger Problems**
-   - Verify USB connection
-   - Check channel assignments
-   - Update TimeTagger software
-
-## 📚 References
-
-- [Thorlabs LSKGG4 Manual](https://www.thorlabs.com)
-- [NI USB-6453 Specifications](https://www.ni.com)
-- [Swabian TimeTagger Documentation](https://www.swabianinstruments.com/time-tagger/)
-- [Napari Documentation](https://napari.org/stable/)
-
-## 📧 Contact
-
-For questions and support:
-- **Email**: jramossi@uci.edu
-- **Lab Website**: [[Burkelab](https://www.burkelab.com/)]
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Both programs share a common codebase and are designed to run out-of-the-box with our standard NV microscope (Thorlabs galvos, NI-DAQ, Swabian Time-Tagger, PulseStreamer, Rigol MW source and single-photon detectors).
 
 ---
-*Last updated: May 2025*
+## ✨ Key capabilities
+
+### Confocal Scan GUI
+- Live **XY raster scanning** with down-to-nanosecond dwell-time control.
+- **Napari** based viewer (zoom, pan, 2-D colormaps, profile plots).
+- **Click-to-move** galvo positioning and ROI (**rectangle zoom**) with history.
+- Integrated **auto-focus** routine and **single-axis line scans**.
+- Real-time photon-count **histogram panel** driven by a Swabian TimeTagger.
+- Automatic data saving (`.csv` + `.npz`) and figure export after every scan.
+
+### ODMR Control Center
+- **Continuous-wave ODMR sweeps** with live spectral plot.
+- **Rabi oscillations**, and customizable pulse sequences (via Swabian PulseStreamer 8/2).
+- Ethernet control of **Rigol DSG836** microwave generator (frequency / power / sweeps).
+- Progress bars, rich logging console and device-status widgets.
+- Save/Load parameter presets (pulse sequence) and measurement results (`.json`, `.csv`).
+
+### Common infrastructure
+- Modular **hardware controller** classes (`galvo_controller.py`, `swabian_pulse_streamer.py`, etc.).
+- `config_template.json` for centralised scan parameters.
+- **DataManager** for automatic date-stamped folder hierarchies.
+- Tested on Python 3.8–3.12, Windows 10/11.
+
+---
+## 🖥️ Hardware requirements
+
+Mandatory for confocal scans
+- Thorlabs **LSKGG4** galvo-galvo scanner
+- NI **USB-6453** (static AO for galvos)
+- **Single-photon detector** (Excelitas SPCM-AQRH-10-FC)
+
+Additional for ODMR / advanced timing
+- **Swabian TimeTagger** 
+- **Swabian Pulse Streamer 8/2**
+- **Rigol DSG836** microwave source
+- **Acousto-Optic Modulator** (laser gating)
+
+All instruments communicate via USB/Ethernet and require vendor drivers (see below).
+
+---
+## ⚙️ Installation
+```bash
+# 1. Clone the repository
+$ git clone https://github.com/NoeSilva13/Single_NV_Scannig_Microscopy.git
+$ cd Single_NV_Scannig_Microscopy
+
+# 2. Create a fresh environment (conda or venv)
+$ python -m venv venv
+$ source venv/Scripts/activate   # Windows
+
+# 3. Install Python dependencies
+$ pip install -r requirements.txt
+
+# 4. Install vendor drivers
+- NI-DAQmx  (USB-6453)          https://www.ni.com/en/support/downloads/drivers/download.ni-daqmx.html
+- Swabian **TimeTagger** SDK    https://www.swabianinstruments.com/time-tagger/downloads/
+- Swabian **Pulse Streamer**    https://www.swabianinstruments.com/pulse-streamer/downloads/
+- Rigol **DSG836** Ethernet SCPI interface (no driver)  
+```
+
+---
+## 🚀 Quick start
+
+### 1. Confocal scanning
+```bash
+python confocal_main_control.py
+```
+Actions inside the Napari window:
+- "🔄 New Scan" ⇒ run full raster scan.
+- **Drag rectangle** ⇒ zoom into ROI (up to 3 levels).
+- "🎯 Set to Zero" ⇒ return galvos to (0,0) V.
+- "⚙️ Scan Parameters" dock ⇒ adjust range / resolution on-the-fly.
+
+### 2. ODMR (continuous wave or Rabi)
+```bash
+python odmr_gui_qt.py
+```
+Select the **ODMR** or **Rabi** tab, fill in microwave / laser timing, hit **Start**.  Real-time plots update during acquisition, and raw data can be exported afterwards.
+
+---
+## 📂 Data layout
+```
+YYYYMMDD/
+ ├─ scans/
+ │   ├─ scan_120530.csv            # photon counts
+ │   ├─ scan_120530.npz            # image + metadata
+ │   └─ scan_120530.png            # auto-saved figure
+ └─ odmr/
+     ├─ odmr_134501.csv
+     └─ odmr_134501.json           # parameter snapshot
+```
+Each measurement is automatically placed in a date folder using `DataManager`.
+
+---
+## 🏗️ Repository overview
+```
+Single_NV_Scannig_Microscopy/
+ ├─ confocal_main_control.py   # Napari GUI (confocal scans)
+ ├─ odmr_gui_qt.py             # Qt GUI (ODMR & Rabi)
+ ├─ widgets/                   # Re-usable MagicGUI widgets
+ ├─ PulseBlaster/              # PulseStreamer & Rigol drivers + experiments
+ ├─ Camera/                    # ZWO & PlayerOne camera wrappers (optional)
+ ├─ TimeTagger/                # Example ttbin files & helpers
+ ├─ plot_widgets/              # Matplotlib helpers for Napari
+ └─ utils.py                   # calibration & shared helper functions
+```
+
+---
+## 📑 Citation
+If you use this software in academic work, please cite our forthcoming instrumentation paper or acknowledge the **Burke Lab, University of California, Irvine**.
+
+---
+## 🧑‍💻 Contributing
+Pull requests are welcome!  Open an issue to discuss new features, hardware support or bug-fixes.
+
+---
+## 📄 License
+This project is licensed under the MIT License – see `LICENSE` for details.
+
+---
+### Contact
+For questions and support:
+- Contact: **Javier Noé Ramos Silva** ‑ *jramossi@uci.edu*  
+- Lab [Burke Lab](https://www.burkelab.com/) – Department of Electrical Engineering and Computer Science, University of California, Irvine

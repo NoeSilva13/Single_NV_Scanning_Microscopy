@@ -4,7 +4,9 @@ ODMR Experiment Examples using Swabian Pulse Streamer 8/2
 This file contains example experiments for ODMR measurements with NV centers.
 Demonstrates various pulse sequences for different types of measurements.
 
-Author: NV Lab
+Author: Javier Noé Ramos Silva
+Contact: jramossi@uci.edu
+Lab: Burke Lab, Department of Electrical Engineering and Computer Science, University of California, Irvine
 Date: 2025
 """
 
@@ -12,8 +14,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 from typing import List, Tuple, Dict, Optional
-from swabian_pulse_streamer import SwabianPulseController
-from rigol_dsg836 import RigolDSG836Controller
+from .swabian_pulse_streamer import SwabianPulseController
+from .rigol_dsg836 import RigolDSG836Controller
 
 # TimeTagger imports for real data acquisition
 from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual, CountBetweenMarkers, Countrate
@@ -24,27 +26,34 @@ class ODMRExperiments:
     """
     
     def __init__(self, pulse_controller: SwabianPulseController, 
-                 mw_generator: Optional[RigolDSG836Controller] = None):
+                 mw_generator: Optional[RigolDSG836Controller] = None,
+                 tagger=None):
         """
         Initialize ODMR experiments with a pulse controller and optional MW generator.
         
         Args:
             pulse_controller: Instance of SwabianPulseController
             mw_generator: Optional instance of RigolDSG836Controller for MW control
+            tagger: Optional existing TimeTagger instance. If None, will create new one.
         """
         self.pulse_controller = pulse_controller
         self.mw_generator = mw_generator
         self.results = {}
         
-        # Initialize TimeTagger for real data acquisition
-        try:
-            self.tagger = createTimeTagger()
-            self.tagger.reset()
-            print("✅ Connected to real TimeTagger device")
-        except Exception as e:
-            print("⚠️ Real TimeTagger not detected, using virtual device")
-            self.tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
-            self.tagger.run()
+        # Use provided TimeTagger instance or create new one
+        if tagger is not None:
+            self.tagger = tagger
+            print("✅ Using existing TimeTagger instance")
+        else:
+            # Initialize TimeTagger for real data acquisition
+            try:
+                self.tagger = createTimeTagger()
+                self.tagger.reset()
+                print("✅ Connected to real TimeTagger device")
+            except Exception as e:
+                print("⚠️ Real TimeTagger not detected, using virtual device")
+                self.tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+                self.tagger.run()
         
         # Set bin width to 5 ns and initialize counter
         #self.binwidth = int(5e9)  # 5 ns in ps
@@ -144,7 +153,12 @@ class ODMRExperiments:
                         mw_durations: List[int],
                         mw_frequency: float = 2.87e9,
                         laser_duration: int = 1000,
-                        detection_duration: int = 500) -> Dict:
+                        detection_duration: int = 500,
+                        laser_delay: int = 0,
+                        mw_delay: Optional[int] = None,
+                        detection_delay: Optional[int] = None,
+                        sequence_interval: int = 10000,
+                        repetitions: int = 1000) -> Dict:
         """
         Perform Rabi oscillation measurement.
         
@@ -153,6 +167,11 @@ class ODMRExperiments:
             mw_frequency: MW frequency in Hz
             laser_duration: Laser pulse duration in ns
             detection_duration: Detection window duration in ns
+            laser_delay: Delay before laser pulse in ns
+            mw_delay: Delay before MW pulse in ns
+            detection_delay: Delay after MW pulse in ns
+            sequence_interval: Interval between sequences in ns
+            repetitions: Number of repetitions
             
         Returns:
             Dictionary containing MW durations and count rates
@@ -161,7 +180,7 @@ class ODMRExperiments:
         
         durations = []
         count_rates = []
-        
+        self.counter = Countrate(tagger=self.tagger, channels=[1])
         # Set MW frequency and power for Rabi oscillation
         if self.mw_generator:
             self.mw_generator.set_odmr_frequency(mw_frequency / 1e9)  # Convert Hz to GHz
@@ -170,15 +189,20 @@ class ODMRExperiments:
         for mw_duration in mw_durations:
             print(f"⏱️ MW duration: {mw_duration} ns")
             
+            # Calculate default delays for this duration if not provided
+            local_mw_delay = mw_delay if mw_delay is not None else laser_duration + 1000
+            local_detection_delay = detection_delay if detection_delay is not None else local_mw_delay + mw_duration + 100
+
             # Create Rabi sequence
-            sequence = self.pulse_controller.create_odmr_sequence(
+            sequence, total_duration = self.pulse_controller.create_odmr_sequence(
                 laser_duration=laser_duration,
                 mw_duration=mw_duration,
                 detection_duration=detection_duration,
-                laser_delay=0,
-                mw_delay=laser_duration + 1000,  # 1 µs after laser
-                detection_delay=laser_duration + 1000 + mw_duration + 100,
-                repetitions=1000  # More repetitions for better statistics
+                laser_delay=laser_delay,
+                mw_delay=local_mw_delay,
+                detection_delay=local_detection_delay,
+                sequence_interval=sequence_interval,
+                repetitions=repetitions
             )
             
             if sequence:
@@ -186,16 +210,18 @@ class ODMRExperiments:
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(True)
                 
+                self.counter.clear()
                 self.pulse_controller.run_sequence(sequence)
-                time.sleep(0.1)
-                
+                time.sleep(total_duration/1e9)
+                self.pulse_controller.stop_sequence()
                 # Get real count rate from TimeTagger
-                count_rate = self._get_count_rate()
+                count_rate = np.mean(self.counter.getData())
+                print(f"Count rate: {count_rate} Hz")
                 
                 durations.append(mw_duration)
                 count_rates.append(count_rate)
                 
-                self.pulse_controller.stop_sequence()
+                
                 
                 # Turn off RF output after measurement
                 if self.mw_generator:

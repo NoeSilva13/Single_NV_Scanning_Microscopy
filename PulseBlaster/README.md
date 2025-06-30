@@ -132,3 +132,9 @@ controller.run_sequence(odmr_seq)
 - The device IP address can be configured during initialization
 - Error handling is built-in for device connection issues
 - Sequences support overlapping pulses with automatic timing management 
+
+---
+### Contact
+For questions and support:
+- Contact: **Javier Noé Ramos Silva** ‑ *jramossi@uci.edu*  
+- Lab [Burke Lab](https://www.burkelab.com/) – Department of Electrical Engineering and Computer Science, University of California, Irvine

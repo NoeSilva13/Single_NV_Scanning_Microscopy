@@ -350,6 +350,7 @@ This software is part of the NV Lab single NV scanning microscopy suite.
 Developed for research use in quantum sensing applications.
 
 ---
-
-**NV Lab - Burke Research Group**  
-*Professional tools for quantum sensing and NV center research* 
+### Contact
+For questions and support:
+- Contact: **Javier Noé Ramos Silva** ‑ *jramossi@uci.edu*  
+- Lab [Burke Lab](https://www.burkelab.com/) – Department of Electrical Engineering and Computer Science, University of California, Irvine

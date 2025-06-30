@@ -7,7 +7,9 @@ This package provides comprehensive control over the Swabian Pulse Streamer 8/2
 for generating precise pulse sequences required in ODMR experiments with 
 Nitrogen-Vacancy (NV) centers.
 
-Author: NV Lab
+Author: Javier Noé Ramos Silva
+Contact: jramossi@uci.edu
+Lab: Burke Lab, Department of Electrical Engineering and Computer Science, University of California, Irvine
 Date: 2025
 """
 
@@ -25,5 +27,5 @@ except ImportError as e:
     __all__ = []
 
 __version__ = "1.0.0"
-__author__ = "NV Lab"
-__email__ = "your.email@institution.edu" 
+__author__ = "Javier Noé Ramos Silva"
+__email__ = "jramossi@uci.edu" 

@@ -9,7 +9,9 @@ Channel Assignment:
 - Channel 1: Microwave (MW) control
 - Channel 2: Single Photon Detector (SPD) gate
 
-Author: NV Lab
+Author: Javier Noé Ramos Silva
+Contact: jramossi@uci.edu
+Lab: Burke Lab, Department of Electrical Engineering and Computer Science, University of California, Irvine
 Date: 2025
 """
 
