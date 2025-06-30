@@ -15,14 +15,17 @@ from plot_widgets.single_axis_plot import SingleAxisPlot
 class SingleAxisScanWidget(QWidget):
     """Widget for performing single axis scans at current cursor position"""
     
-    def __init__(self, config_manager, points_layer, layer, output_task, counter, binwidth, parent=None):
+    def __init__(self, config_manager, layer, output_task, counter, binwidth, parent=None):
         super().__init__(parent)
         self.config_manager = config_manager
-        self.points_layer = points_layer
         self.layer = layer
         self.output_task = output_task
         self.counter = counter
         self.binwidth = binwidth
+        
+        # Track current scanner position internally (default to center)
+        self.current_x_voltage = 0.0
+        self.current_y_voltage = 0.0
         
         layout = QGridLayout()
         layout.setSpacing(5)
@@ -66,35 +69,19 @@ class SingleAxisScanWidget(QWidget):
             title='Single Axis Scan',
             mark_peak=False
         )
+    
+    def update_current_position(self, x_voltage, y_voltage):
+        """Update the current scanner position"""
+        self.current_x_voltage = x_voltage
+        self.current_y_voltage = y_voltage
         
     def get_current_position(self):
-        """Get the current scanner position from the points layer"""
-        if len(self.points_layer.data) == 0:
-            return None, None
-        
-        world_coords = self.points_layer.data[0]
-        data_coords = self.layer.world_to_data(world_coords)
-        y_idx, x_idx = data_coords
-        
-        # Get current config values
-        config = self.config_manager.get_config()
-        x_range = config['scan_range']['x']
-        y_range = config['scan_range']['y']
-        x_res = config['resolution']['x']
-        y_res = config['resolution']['y']
-        
-        # Convert from pixel indices to voltage values
-        x_voltage = np.interp(x_idx, [0, x_res-1], [x_range[0], x_range[1]])
-        y_voltage = np.interp(y_idx, [0, y_res-1], [y_range[0], y_range[1]])
-        
-        return x_voltage, y_voltage
+        """Get the current scanner position from internal tracking"""
+        return self.current_x_voltage, self.current_y_voltage
     
     def start_scan(self, axis):
         """Start a single axis scan"""
         x_pos, y_pos = self.get_current_position()
-        if x_pos is None or y_pos is None:
-            show_info("❌ No current position set")
-            return
         
         # Get current config values
         config = self.config_manager.get_config()

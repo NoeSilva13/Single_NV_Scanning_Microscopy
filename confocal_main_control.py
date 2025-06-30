@@ -153,6 +153,7 @@ contrast_limits = (0, 10000)
 scan_history = []
 image = np.zeros((y_res, x_res), dtype=np.float32)
 data_path = None
+single_axis_widget_ref = None  # Reference to be set later
 
 # Initialize DAQ output task for galvo control
 output_task = nidaqmx.Task()
@@ -170,8 +171,6 @@ viewer.window.resize(screen.width(), screen.height())
 
 # Add an image layer to display the live scan
 layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
-# Add a points layer to show current scanner position
-points_layer = viewer.add_points(ndim=2, name="scanner position", face_color='red', size=1, opacity=1, symbol='o')
 # Add a shapes layer to display the zoom area
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
@@ -223,8 +222,9 @@ def on_mouse_click(layer, event):
         output_task.write([x_voltage, y_voltage])
         show_info(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
         
-        world_coords = layer.data_to_world([y_idx, x_idx])
-        points_layer.data = [[world_coords[0], world_coords[1]]]
+        # Update the single axis scan widget's position tracking
+        if single_axis_widget_ref is not None:
+            single_axis_widget_ref.update_current_position(x_voltage, y_voltage)
         
     except Exception as e:
         show_info(f"Error moving scanner: {str(e)}")
@@ -238,13 +238,12 @@ viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 # --------------------- SCANNING FUNCTION ---------------------
 def scan_pattern(x_points, y_points):
     """Perform a raster scan pattern using the galvo mirrors and collect APD counts."""
-    global image, layer, data_path, points_layer
+    global image, layer, data_path
 
     height, width = len(y_points), len(x_points)
     image = np.zeros((height, width), dtype=np.float32)
     layer.data = image
     layer.contrast_limits = contrast_limits
-    points_layer.data = []
     
     for y_idx, y in enumerate(y_points):
         for x_idx, x in enumerate(x_points):
@@ -308,7 +307,7 @@ def get_data_path():
 
 # Create scan control widgets
 new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes)
-close_scanner_widget = create_close_scanner(output_task, points_layer)
+close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
 update_scan_parameters_widget = create_update_scan_parameters(config_manager, scan_points_manager)
 update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, config_manager)
@@ -329,8 +328,11 @@ auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge)
 
 # Create single axis scan widget
 single_axis_scan_widget = SingleAxisScanWidget(
-    config_manager, points_layer, layer, output_task, counter, binwidth
+    config_manager, layer, output_task, counter, binwidth
 )
+
+# Set the global reference for position tracking
+single_axis_widget_ref = single_axis_scan_widget
 
 # Create file operation widgets
 load_scan_widget = create_load_scan(viewer)

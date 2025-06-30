@@ -150,10 +150,10 @@ class ZoomLevelManager:
 
 ### Single Axis Scan (`single_axis_scan.py`)
 
-- **`SingleAxisScanWidget(config_manager, points_layer, layer, output_task, counter, binwidth)`**
+- **`SingleAxisScanWidget(config_manager, layer, output_task, counter, binwidth)`**
   - Complete widget for X/Y axis scanning
   - Includes scan buttons and result plot
-  - Gets current position from points layer
+  - Tracks current scanner position internally
 
 ### File Operations (`file_operations.py`)
 

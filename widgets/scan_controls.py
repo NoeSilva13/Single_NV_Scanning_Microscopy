@@ -35,7 +35,7 @@ def new_scan(scan_pattern_func, scan_points_manager, shapes):
     return _new_scan
 
 
-def close_scanner(output_task, points_layer):
+def close_scanner(output_task):
     """Factory function to create close_scanner widget with dependencies"""
     
     @magicgui(call_button="🎯 Set to Zero")
@@ -45,7 +45,6 @@ def close_scanner(output_task, points_layer):
         """
         def run_close():
             output_task.write([0, 0])
-            points_layer.data = []  # Clear the scanner position marker
         
         threading.Thread(target=run_close, daemon=True).start()
         show_info("🎯 Scanner set to zero")
