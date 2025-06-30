@@ -4,7 +4,7 @@
 ![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-A cross-platform (Windows 10/11) Python toolkit developed at the **[Burke Lab](https://www.burkelab.com/)** for high-precision optical, microwave and timing control of single Nitrogen–Vacancy (NV) centers in diamond.  
+A Python toolkit developed at the **[Burke Lab](https://www.burkelab.com/)** for high-precision optical, microwave and timing control of single Nitrogen–Vacancy (NV) centers in diamond.  
 It bundles two flagship graphical applications:
 
 1. **Confocal Scan GUI** (`confocal_main_control.py`) – real-time raster scanning, live photon counting and auto-focus based on a Napari viewer.
@@ -16,12 +16,12 @@ Both programs share a common codebase and are designed to run out-of-the-box wit
 ## ✨ Key capabilities
 
 ### Confocal Scan GUI
-- Live **XY raster scanning** with down-to-nanosecond dwell-time control.
+- Live **XY raster scanning** with dwell-time control.
 - **Napari** based viewer (zoom, pan, 2-D colormaps, profile plots).
 - **Click-to-move** galvo positioning and ROI (**rectangle zoom**) with history.
 - Integrated **auto-focus** routine and **single-axis line scans**.
 - Real-time photon-count **histogram panel** driven by a Swabian TimeTagger.
-- Automatic data saving (`.csv` + `.npz`) and figure export after every scan.
+- Automatic data saving (`.csv` + `.npz` + `.tiff`) and figure export after every scan.
 
 ### ODMR Control Center
 - **Continuous-wave ODMR sweeps** with live spectral plot.
