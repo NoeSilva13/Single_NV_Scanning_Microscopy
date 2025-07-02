@@ -15,6 +15,7 @@ import json
 import numpy as np
 from magicgui import magicgui
 from napari.utils.notifications import show_info
+from utils import MICRONS_PER_VOLT
 
 
 def new_scan(scan_pattern_func, scan_points_manager, shapes):
@@ -134,9 +135,6 @@ def update_scan_parameters(config_manager, scan_points_manager):
     x_res = config['resolution']['x']
     y_res = config['resolution']['y']
     
-    # Calibration factor: 1V = 86µm
-    MICRONS_PER_VOLT = 86.0
-    
     @magicgui(
         x_min={"widget_type": "FloatSpinBox", "value": x_range[0], "min": -10, "max": 10, "step": 0.1, "label": "X Min"},
         x_min_um={"widget_type": "Label", "value": f"{x_range[0] * MICRONS_PER_VOLT:.1f} µm", "label": ""},
@@ -214,10 +212,10 @@ def update_scan_parameters_widget(widget_instance, config_manager):
         widget_instance.y_resolution.value = y_res
         
         # Update distance labels
-        widget_instance.x_min_um.value = f"{x_range[0] * 86.0:.1f} µm"
-        widget_instance.x_max_um.value = f"{x_range[1] * 86.0:.1f} µm"
-        widget_instance.y_min_um.value = f"{y_range[0] * 86.0:.1f} µm"
-        widget_instance.y_max_um.value = f"{y_range[1] * 86.0:.1f} µm"
+        widget_instance.x_min_um.value = f"{x_range[0] * MICRONS_PER_VOLT:.1f} µm"
+        widget_instance.x_max_um.value = f"{x_range[1] * MICRONS_PER_VOLT:.1f} µm"
+        widget_instance.y_min_um.value = f"{y_range[0] * MICRONS_PER_VOLT:.1f} µm"
+        widget_instance.y_max_um.value = f"{y_range[1] * MICRONS_PER_VOLT:.1f} µm"
     
     return _update_widget
 
