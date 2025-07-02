@@ -156,7 +156,7 @@ def update_scan_parameters(config_manager, scan_points_manager):
             self.x_min_spinbox = QDoubleSpinBox()
             self.x_min_spinbox.setRange(-10, 10)
             self.x_min_spinbox.setSingleStep(0.1)
-            self.x_min_spinbox.setDecimals(1)
+            self.x_min_spinbox.setDecimals(2)
             self.x_min_spinbox.setValue(x_range[0])
             layout.addWidget(self.x_min_spinbox, 1, 1)
             
@@ -169,7 +169,7 @@ def update_scan_parameters(config_manager, scan_points_manager):
             self.x_max_spinbox = QDoubleSpinBox()
             self.x_max_spinbox.setRange(-10, 10)
             self.x_max_spinbox.setSingleStep(0.1)
-            self.x_max_spinbox.setDecimals(1)
+            self.x_max_spinbox.setDecimals(2)
             self.x_max_spinbox.setValue(x_range[1])
             layout.addWidget(self.x_max_spinbox, 2, 1)
             
@@ -182,7 +182,7 @@ def update_scan_parameters(config_manager, scan_points_manager):
             self.y_min_spinbox = QDoubleSpinBox()
             self.y_min_spinbox.setRange(-10, 10)
             self.y_min_spinbox.setSingleStep(0.1)
-            self.y_min_spinbox.setDecimals(1)
+            self.y_min_spinbox.setDecimals(2)
             self.y_min_spinbox.setValue(y_range[0])
             layout.addWidget(self.y_min_spinbox, 3, 1)
             
@@ -195,7 +195,7 @@ def update_scan_parameters(config_manager, scan_points_manager):
             self.y_max_spinbox = QDoubleSpinBox()
             self.y_max_spinbox.setRange(-10, 10)
             self.y_max_spinbox.setSingleStep(0.1)
-            self.y_max_spinbox.setDecimals(1)
+            self.y_max_spinbox.setDecimals(2)
             self.y_max_spinbox.setValue(y_range[1])
             layout.addWidget(self.y_max_spinbox, 4, 1)
             
