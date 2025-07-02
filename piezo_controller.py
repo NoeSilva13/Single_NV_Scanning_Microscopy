@@ -109,7 +109,10 @@ class PiezoController:
     def perform_auto_focus(self, 
                          counter_function: Callable[[], int],
                          step_size: float = 5.0,
-                         settling_time: float = 0.1
+                         settling_time: float = 0.1,
+                         fine_tune: bool = True,
+                         fine_step_size: float = 0.5,
+                         fine_range: float = 10.0
                          ) -> Tuple[List[float], List[int], float]:
         """Perform auto-focus by scanning the Z axis and measuring counts.
         
@@ -117,11 +120,14 @@ class PiezoController:
             counter_function: Function that returns the current count value
             step_size: Step size for Z scanning in µm
             settling_time: Time to wait after each movement in seconds
+            fine_tune: Whether to perform fine-tuning after coarse scan
+            fine_step_size: Step size for fine-tuning scan in µm
+            fine_range: Range around peak to scan during fine-tuning in µm
             
         Returns:
             Tuple containing:
-            - List of positions scanned
-            - List of counts measured
+            - List of positions scanned (including fine-tuning if enabled)
+            - List of counts measured (including fine-tuning if enabled)
             - Optimal position found
         """
         if not self._is_connected:
@@ -132,57 +138,68 @@ class PiezoController:
         counts = []
         current_pos = 0.0
 
-        # Generate position list
+        print("Starting coarse auto-focus scan...")
+        
+        # Generate position list for coarse scan
         while current_pos <= max_pos:
             positions.append(current_pos)
             current_pos += step_size
 
-        # Perform Z sweep
+        # Perform coarse Z sweep
         for pos in positions:
             self.set_position(pos)  # set_position handles conversion to System.Decimal
             time.sleep(settling_time)
             count = counter_function()
             counts.append(count)
-            print(f'Position: {pos}, counts: {count}')
+            print(f'Coarse scan - Position: {pos:.1f} µm, counts: {count}')
 
-        # Find optimal position
+        # Find optimal position from coarse scan
         optimal_idx = np.argmax(counts)
-        optimal_pos = positions[optimal_idx]
+        coarse_optimal_pos = positions[optimal_idx]
+        print(f"Coarse scan complete. Peak found at {coarse_optimal_pos:.1f} µm")
 
-        # Move to optimal position
+        if fine_tune:
+            print("Starting fine-tuning scan...")
+            
+            # Define fine scan range around the coarse optimal position
+            fine_start = max(0.0, coarse_optimal_pos - fine_range/2)
+            fine_end = min(max_pos, coarse_optimal_pos + fine_range/2)
+            
+            # Generate fine position list
+            fine_positions = []
+            fine_counts = []
+            current_fine_pos = fine_start
+            
+            while current_fine_pos <= fine_end:
+                fine_positions.append(current_fine_pos)
+                current_fine_pos += fine_step_size
+            
+            # Perform fine Z sweep
+            for pos in fine_positions:
+                self.set_position(pos)
+                time.sleep(settling_time)
+                count = counter_function()
+                fine_counts.append(count)
+                print(f'Fine scan - Position: {pos:.2f} µm, counts: {count}')
+            
+            # Find optimal position from fine scan
+            fine_optimal_idx = np.argmax(fine_counts)
+            optimal_pos = fine_positions[fine_optimal_idx]
+            
+            # Combine coarse and fine scan results for return
+            all_positions = positions + fine_positions
+            all_counts = counts + fine_counts
+            
+            print(f"Fine scan complete. Refined peak found at {optimal_pos:.2f} µm")
+        else:
+            optimal_pos = coarse_optimal_pos
+            all_positions = positions
+            all_counts = counts
+
+        # Move to final optimal position
         self.set_position(optimal_pos)
         time.sleep(settling_time)
+        print(f"Auto-focus complete. Final position: {optimal_pos:.2f} µm")
 
-        return positions, counts, optimal_pos
+        return all_positions, all_counts, optimal_pos
 
-def simulate_auto_focus() -> Tuple[List[float], List[int], float]:
-    """Simulate auto-focus for testing purposes.
-    
-    Returns:
-        Tuple containing:
-        - List of positions scanned
-        - List of counts measured
-        - Optimal position found
-    """
-    max_pos = 100.0
-    step_size = 5.0
-    positions = np.arange(0, max_pos + step_size, step_size)
-    
-    # Simulate a Gaussian distribution of counts
-    center = np.random.uniform(30, 70)
-    width = 15.0
-    noise_level = 200
-    peak_height = 1000
-    
-    counts = noise_level + peak_height * np.exp(-((positions - center) ** 2) / (2 * width ** 2))
-    counts = counts + np.random.normal(0, noise_level * 0.1, len(positions))
-    counts = counts.astype(int)
-    
-    # Simulate scanning process
-    for i, pos in enumerate(positions):
-        time.sleep(0.05)
-        print(f'Position: {pos}, counts: {counts[i]}')
-    
-    optimal_pos = positions[np.argmax(counts)]
-    
-    return positions.tolist(), counts.tolist(), optimal_pos 
