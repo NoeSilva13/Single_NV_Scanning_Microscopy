@@ -300,11 +300,22 @@ def scan_pattern(x_points, y_points):
         data_path = data_manager.save_scan_data(scan_data)
         plot_scan_results(scan_data, data_path)
         
-        # Save image with scale information
+        # Get current scan parameters
+        current_config = config_manager.get_config()
+        
+        # Save image with scale information and scan parameters
         np.savez(data_path.replace('.csv', '.npz'), 
                  image=image,
                  scale_x=scale_um_per_px_x,
-                 scale_y=scale_um_per_px_y)
+                 scale_y=scale_um_per_px_y,
+                 x_range=current_config['scan_range']['x'],
+                 y_range=current_config['scan_range']['y'],
+                 x_resolution=current_config['resolution']['x'],
+                 y_resolution=current_config['resolution']['y'],
+                 dwell_time=current_config['dwell_time'],
+                 x_points=x_points,
+                 y_points=y_points,
+                 timestamp=time.strftime("%Y%m%d-%H%M%S"))
         layer.save(data_path.replace('.csv', '.tiff'))
         
     finally:
