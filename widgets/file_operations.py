@@ -44,6 +44,31 @@ def load_scan(viewer, config_manager=None, scan_points_manager=None, update_widg
             msg.setText("Loaded scan parameters:\n\n" + "\n".join(params))
             msg.setIcon(QMessageBox.Information)
             
+            # Style the message box to match Napari dark theme
+            msg.setStyleSheet("""
+                QMessageBox {
+                    background-color: #262930;
+                    color: #ffffff;
+                }
+                QMessageBox QLabel {
+                    color: #ffffff;
+                }
+                QPushButton {
+                    background-color: #44475a;
+                    color: #ffffff;
+                    border: 1px solid #44475a;
+                    padding: 5px 15px;
+                    border-radius: 3px;
+                }
+                QPushButton:hover {
+                    background-color: #6272a4;
+                    border: 1px solid #6272a4;
+                }
+                QPushButton:pressed {
+                    background-color: #3c3f4c;
+                }
+            """)
+            
             # Add option to apply parameters
             if config_manager and scan_points_manager and update_widget_func:
                 msg.setStandardButtons(QMessageBox.Apply | QMessageBox.Ok)

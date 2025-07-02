@@ -134,20 +134,32 @@ def update_scan_parameters(config_manager, scan_points_manager):
     x_res = config['resolution']['x']
     y_res = config['resolution']['y']
     
+    # Calibration factor: 1V = 86µm
+    MICRONS_PER_VOLT = 86.0
+    
     @magicgui(
-        x_min={"widget_type": "FloatSpinBox", "value": x_range[0], "min": -10, "max": 10, "step": 0.1, "label": "X Min (V)"},
-        x_max={"widget_type": "FloatSpinBox", "value": x_range[1], "min": -10, "max": 10, "step": 0.1, "label": "X Max (V)"},
-        y_min={"widget_type": "FloatSpinBox", "value": y_range[0], "min": -10, "max": 10, "step": 0.1, "label": "Y Min (V)"},
-        y_max={"widget_type": "FloatSpinBox", "value": y_range[1], "min": -10, "max": 10, "step": 0.1, "label": "Y Max (V)"},
-        x_resolution={"widget_type": "SpinBox", "value": x_res, "min": 2, "max": 200, "label": "X Res (px)"},
-        y_resolution={"widget_type": "SpinBox", "value": y_res, "min": 2, "max": 200, "label": "Y Res (px)"},
+        x_min={"widget_type": "FloatSpinBox", "value": x_range[0], "min": -10, "max": 10, "step": 0.1, "label": "X Min"},
+        x_min_um={"widget_type": "Label", "value": f"{x_range[0] * MICRONS_PER_VOLT:.1f} µm", "label": ""},
+        x_max={"widget_type": "FloatSpinBox", "value": x_range[1], "min": -10, "max": 10, "step": 0.1, "label": "X Max"},
+        x_max_um={"widget_type": "Label", "value": f"{x_range[1] * MICRONS_PER_VOLT:.1f} µm", "label": ""},
+        y_min={"widget_type": "FloatSpinBox", "value": y_range[0], "min": -10, "max": 10, "step": 0.1, "label": "Y Min"},
+        y_min_um={"widget_type": "Label", "value": f"{y_range[0] * MICRONS_PER_VOLT:.1f} µm", "label": ""},
+        y_max={"widget_type": "FloatSpinBox", "value": y_range[1], "min": -10, "max": 10, "step": 0.1, "label": "Y Max"},
+        y_max_um={"widget_type": "Label", "value": f"{y_range[1] * MICRONS_PER_VOLT:.1f} µm", "label": ""},
+        x_resolution={"widget_type": "SpinBox", "value": x_res, "min": 2, "max": 200, "label": "X Resolution (px)"},
+        y_resolution={"widget_type": "SpinBox", "value": y_res, "min": 2, "max": 200, "label": "Y Resolution (px)"},
+        layout="grid",
         call_button="Apply Changes"
     )
     def _update_scan_parameters(
         x_min: float,
+        x_min_um: str,
         x_max: float,
+        x_max_um: str,
         y_min: float,
+        y_min_um: str,
         y_max: float,
+        y_max_um: str,
         x_resolution: int,
         y_resolution: int,
     ) -> None:
@@ -169,6 +181,19 @@ def update_scan_parameters(config_manager, scan_points_manager):
         
         show_info('⚠️ Scan parameters updated successfully!')
     
+    # Add callback to update distance labels when voltage values change
+    def update_distance_labels():
+        _update_scan_parameters.x_min_um.value = f"{_update_scan_parameters.x_min.value * MICRONS_PER_VOLT:.1f} µm"
+        _update_scan_parameters.x_max_um.value = f"{_update_scan_parameters.x_max.value * MICRONS_PER_VOLT:.1f} µm"
+        _update_scan_parameters.y_min_um.value = f"{_update_scan_parameters.y_min.value * MICRONS_PER_VOLT:.1f} µm"
+        _update_scan_parameters.y_max_um.value = f"{_update_scan_parameters.y_max.value * MICRONS_PER_VOLT:.1f} µm"
+    
+    # Connect the callbacks
+    _update_scan_parameters.x_min.changed.connect(update_distance_labels)
+    _update_scan_parameters.x_max.changed.connect(update_distance_labels)
+    _update_scan_parameters.y_min.changed.connect(update_distance_labels)
+    _update_scan_parameters.y_max.changed.connect(update_distance_labels)
+    
     return _update_scan_parameters
 
 
@@ -187,6 +212,12 @@ def update_scan_parameters_widget(widget_instance, config_manager):
         widget_instance.y_max.value = y_range[1]
         widget_instance.x_resolution.value = x_res
         widget_instance.y_resolution.value = y_res
+        
+        # Update distance labels
+        widget_instance.x_min_um.value = f"{x_range[0] * 86.0:.1f} µm"
+        widget_instance.x_max_um.value = f"{x_range[1] * 86.0:.1f} µm"
+        widget_instance.y_min_um.value = f"{y_range[0] * 86.0:.1f} µm"
+        widget_instance.y_max_um.value = f"{y_range[1] * 86.0:.1f} µm"
     
     return _update_widget
 
