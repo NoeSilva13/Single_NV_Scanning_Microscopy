@@ -16,6 +16,8 @@ import numpy as np
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 from utils import MICRONS_PER_VOLT
+from PyQt5.QtWidgets import QWidget, QGridLayout, QLabel, QDoubleSpinBox, QSpinBox, QPushButton
+from PyQt5.QtCore import Qt
 
 
 def new_scan(scan_pattern_func, scan_points_manager, shapes):
@@ -135,64 +137,148 @@ def update_scan_parameters(config_manager, scan_points_manager):
     x_res = config['resolution']['x']
     y_res = config['resolution']['y']
     
-    @magicgui(
-        x_min={"widget_type": "FloatSpinBox", "value": x_range[0], "min": -10, "max": 10, "step": 0.1, "label": "X Min"},
-        x_min_um={"widget_type": "Label", "value": f"{x_range[0] * MICRONS_PER_VOLT:.1f} µm", "label": ""},
-        x_max={"widget_type": "FloatSpinBox", "value": x_range[1], "min": -10, "max": 10, "step": 0.1, "label": "X Max"},
-        x_max_um={"widget_type": "Label", "value": f"{x_range[1] * MICRONS_PER_VOLT:.1f} µm", "label": ""},
-        y_min={"widget_type": "FloatSpinBox", "value": y_range[0], "min": -10, "max": 10, "step": 0.1, "label": "Y Min"},
-        y_min_um={"widget_type": "Label", "value": f"{y_range[0] * MICRONS_PER_VOLT:.1f} µm", "label": ""},
-        y_max={"widget_type": "FloatSpinBox", "value": y_range[1], "min": -10, "max": 10, "step": 0.1, "label": "Y Max"},
-        y_max_um={"widget_type": "Label", "value": f"{y_range[1] * MICRONS_PER_VOLT:.1f} µm", "label": ""},
-        x_resolution={"widget_type": "SpinBox", "value": x_res, "min": 2, "max": 200, "label": "X Resolution (px)"},
-        y_resolution={"widget_type": "SpinBox", "value": y_res, "min": 2, "max": 200, "label": "Y Resolution (px)"},
-        layout="grid",
-        call_button="Apply Changes"
-    )
-    def _update_scan_parameters(
-        x_min: float,
-        x_min_um: str,
-        x_max: float,
-        x_max_um: str,
-        y_min: float,
-        y_min_um: str,
-        y_max: float,
-        y_max_um: str,
-        x_resolution: int,
-        y_resolution: int,
-    ) -> None:
-        # Update config manager
-        config_manager.update_scan_parameters(
-            x_range=[x_min, x_max],
-            y_range=[y_min, y_max],
-            x_res=x_resolution,
-            y_res=y_resolution
-        )
-        
-        # Update scan points manager
-        scan_points_manager.update_points(
-            x_range=[x_min, x_max],
-            y_range=[y_min, y_max],
-            x_res=x_resolution,
-            y_res=y_resolution
-        )
-        
-        show_info('⚠️ Scan parameters updated successfully!')
+    class ScanParametersWidget(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.setup_ui()
+            
+        def setup_ui(self):
+            # Create the main layout
+            layout = QGridLayout()
+            
+            # Headers
+            layout.addWidget(QLabel("Parameter"), 0, 0)
+            layout.addWidget(QLabel("Voltage (V)"), 0, 1)
+            layout.addWidget(QLabel("Distance (µm)"), 0, 2)
+            
+            # X Min
+            layout.addWidget(QLabel("X Min:"), 1, 0)
+            self.x_min_spinbox = QDoubleSpinBox()
+            self.x_min_spinbox.setRange(-10, 10)
+            self.x_min_spinbox.setSingleStep(0.1)
+            self.x_min_spinbox.setDecimals(1)
+            self.x_min_spinbox.setValue(x_range[0])
+            layout.addWidget(self.x_min_spinbox, 1, 1)
+            
+            self.x_min_label = QLabel(f"{x_range[0] * MICRONS_PER_VOLT:.1f}")
+            self.x_min_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(self.x_min_label, 1, 2)
+            
+            # X Max
+            layout.addWidget(QLabel("X Max:"), 2, 0)
+            self.x_max_spinbox = QDoubleSpinBox()
+            self.x_max_spinbox.setRange(-10, 10)
+            self.x_max_spinbox.setSingleStep(0.1)
+            self.x_max_spinbox.setDecimals(1)
+            self.x_max_spinbox.setValue(x_range[1])
+            layout.addWidget(self.x_max_spinbox, 2, 1)
+            
+            self.x_max_label = QLabel(f"{x_range[1] * MICRONS_PER_VOLT:.1f}")
+            self.x_max_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(self.x_max_label, 2, 2)
+            
+            # Y Min
+            layout.addWidget(QLabel("Y Min:"), 3, 0)
+            self.y_min_spinbox = QDoubleSpinBox()
+            self.y_min_spinbox.setRange(-10, 10)
+            self.y_min_spinbox.setSingleStep(0.1)
+            self.y_min_spinbox.setDecimals(1)
+            self.y_min_spinbox.setValue(y_range[0])
+            layout.addWidget(self.y_min_spinbox, 3, 1)
+            
+            self.y_min_label = QLabel(f"{y_range[0] * MICRONS_PER_VOLT:.1f}")
+            self.y_min_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(self.y_min_label, 3, 2)
+            
+            # Y Max
+            layout.addWidget(QLabel("Y Max:"), 4, 0)
+            self.y_max_spinbox = QDoubleSpinBox()
+            self.y_max_spinbox.setRange(-10, 10)
+            self.y_max_spinbox.setSingleStep(0.1)
+            self.y_max_spinbox.setDecimals(1)
+            self.y_max_spinbox.setValue(y_range[1])
+            layout.addWidget(self.y_max_spinbox, 4, 1)
+            
+            self.y_max_label = QLabel(f"{y_range[1] * MICRONS_PER_VOLT:.1f}")
+            self.y_max_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(self.y_max_label, 4, 2)
+            
+            # X Resolution
+            layout.addWidget(QLabel("X Resolution:"), 5, 0)
+            self.x_res_spinbox = QSpinBox()
+            self.x_res_spinbox.setRange(2, 200)
+            self.x_res_spinbox.setValue(x_res)
+            self.x_res_spinbox.setSuffix(" px")
+            layout.addWidget(self.x_res_spinbox, 5, 1, 1, 2)  # Span 2 columns
+            
+            # Y Resolution
+            layout.addWidget(QLabel("Y Resolution:"), 6, 0)
+            self.y_res_spinbox = QSpinBox()
+            self.y_res_spinbox.setRange(2, 200)
+            self.y_res_spinbox.setValue(y_res)
+            self.y_res_spinbox.setSuffix(" px")
+            layout.addWidget(self.y_res_spinbox, 6, 1, 1, 2)  # Span 2 columns
+            
+            # Apply button
+            self.apply_button = QPushButton("Apply Changes")
+            layout.addWidget(self.apply_button, 7, 0, 1, 3)  # Span all columns
+            
+            self.setLayout(layout)
+            
+            # Connect signals
+            self.x_min_spinbox.valueChanged.connect(self.update_x_min_distance)
+            self.x_max_spinbox.valueChanged.connect(self.update_x_max_distance)
+            self.y_min_spinbox.valueChanged.connect(self.update_y_min_distance)
+            self.y_max_spinbox.valueChanged.connect(self.update_y_max_distance)
+            self.apply_button.clicked.connect(self.apply_changes)
+            
+        def update_x_min_distance(self, value):
+            self.x_min_label.setText(f"{value * MICRONS_PER_VOLT:.1f}")
+            
+        def update_x_max_distance(self, value):
+            self.x_max_label.setText(f"{value * MICRONS_PER_VOLT:.1f}")
+            
+        def update_y_min_distance(self, value):
+            self.y_min_label.setText(f"{value * MICRONS_PER_VOLT:.1f}")
+            
+        def update_y_max_distance(self, value):
+            self.y_max_label.setText(f"{value * MICRONS_PER_VOLT:.1f}")
+            
+        def apply_changes(self):
+            # Update config manager
+            config_manager.update_scan_parameters(
+                x_range=[self.x_min_spinbox.value(), self.x_max_spinbox.value()],
+                y_range=[self.y_min_spinbox.value(), self.y_max_spinbox.value()],
+                x_res=self.x_res_spinbox.value(),
+                y_res=self.y_res_spinbox.value()
+            )
+            
+            # Update scan points manager
+            scan_points_manager.update_points(
+                x_range=[self.x_min_spinbox.value(), self.x_max_spinbox.value()],
+                y_range=[self.y_min_spinbox.value(), self.y_max_spinbox.value()],
+                x_res=self.x_res_spinbox.value(),
+                y_res=self.y_res_spinbox.value()
+            )
+            
+            show_info('⚠️ Scan parameters updated successfully!')
+            
+        def update_values(self, x_range, y_range, x_res, y_res):
+            """Update all widget values"""
+            self.x_min_spinbox.setValue(x_range[0])
+            self.x_max_spinbox.setValue(x_range[1])
+            self.y_min_spinbox.setValue(y_range[0])
+            self.y_max_spinbox.setValue(y_range[1])
+            self.x_res_spinbox.setValue(x_res)
+            self.y_res_spinbox.setValue(y_res)
+            
+            # Update distance labels
+            self.x_min_label.setText(f"{x_range[0] * MICRONS_PER_VOLT:.1f}")
+            self.x_max_label.setText(f"{x_range[1] * MICRONS_PER_VOLT:.1f}")
+            self.y_min_label.setText(f"{y_range[0] * MICRONS_PER_VOLT:.1f}")
+            self.y_max_label.setText(f"{y_range[1] * MICRONS_PER_VOLT:.1f}")
     
-    # Add callback to update distance labels when voltage values change
-    def update_distance_labels():
-        _update_scan_parameters.x_min_um.value = f"{_update_scan_parameters.x_min.value * MICRONS_PER_VOLT:.1f} µm"
-        _update_scan_parameters.x_max_um.value = f"{_update_scan_parameters.x_max.value * MICRONS_PER_VOLT:.1f} µm"
-        _update_scan_parameters.y_min_um.value = f"{_update_scan_parameters.y_min.value * MICRONS_PER_VOLT:.1f} µm"
-        _update_scan_parameters.y_max_um.value = f"{_update_scan_parameters.y_max.value * MICRONS_PER_VOLT:.1f} µm"
-    
-    # Connect the callbacks
-    _update_scan_parameters.x_min.changed.connect(update_distance_labels)
-    _update_scan_parameters.x_max.changed.connect(update_distance_labels)
-    _update_scan_parameters.y_min.changed.connect(update_distance_labels)
-    _update_scan_parameters.y_max.changed.connect(update_distance_labels)
-    
-    return _update_scan_parameters
+    return ScanParametersWidget()
 
 
 def update_scan_parameters_widget(widget_instance, config_manager):
@@ -204,18 +290,7 @@ def update_scan_parameters_widget(widget_instance, config_manager):
         x_res = config['resolution']['x']
         y_res = config['resolution']['y']
         
-        widget_instance.x_min.value = x_range[0]
-        widget_instance.x_max.value = x_range[1]
-        widget_instance.y_min.value = y_range[0]
-        widget_instance.y_max.value = y_range[1]
-        widget_instance.x_resolution.value = x_res
-        widget_instance.y_resolution.value = y_res
-        
-        # Update distance labels
-        widget_instance.x_min_um.value = f"{x_range[0] * MICRONS_PER_VOLT:.1f} µm"
-        widget_instance.x_max_um.value = f"{x_range[1] * MICRONS_PER_VOLT:.1f} µm"
-        widget_instance.y_min_um.value = f"{y_range[0] * MICRONS_PER_VOLT:.1f} µm"
-        widget_instance.y_max_um.value = f"{y_range[1] * MICRONS_PER_VOLT:.1f} µm"
+        widget_instance.update_values(x_range, y_range, x_res, y_res)
     
     return _update_widget
 
