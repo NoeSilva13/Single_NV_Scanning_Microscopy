@@ -40,7 +40,8 @@ from widgets.scan_controls import (
     save_image as create_save_image,
     reset_zoom as create_reset_zoom,
     update_scan_parameters as create_update_scan_parameters,
-    update_scan_parameters_widget as create_update_scan_parameters_widget
+    update_scan_parameters_widget as create_update_scan_parameters_widget,
+    stop_scan as create_stop_scan
 )
 from widgets.camera_controls import (
     create_camera_control_widget
@@ -154,6 +155,8 @@ scan_history = []
 image = np.zeros((y_res, x_res), dtype=np.float32)
 data_path = None
 single_axis_widget_ref = None  # Reference to be set later
+scan_in_progress = [False]  # Flag to track if scan is running (mutable)
+stop_scan_requested = [False]  # Flag to request scan stop (mutable)
 
 # Initialize DAQ output task for galvo control
 output_task = nidaqmx.Task()
@@ -239,63 +242,77 @@ viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 def scan_pattern(x_points, y_points):
     """Perform a raster scan pattern using the galvo mirrors and collect APD counts."""
     global image, layer, data_path
-
-    height, width = len(y_points), len(x_points)
-    image = np.zeros((height, width), dtype=np.float32)
-    layer.data = image
-    layer.contrast_limits = contrast_limits
     
-    for y_idx, y in enumerate(y_points):
-        for x_idx, x in enumerate(x_points):
-            output_task.write([x, y])
-            if x_idx == 0:
-                time.sleep(0.05)
-            else:
-                time.sleep(0.001)
-                
-            counts = counter.getData()[0][0]/(binwidth/1e12)
-            print(f"{counts}")
-            image[y_idx, x_idx] = counts
-            layer.data = image
+    scan_in_progress[0] = True
+    stop_scan_requested[0] = False
     
-    # Adjust contrast and save data
     try:
-        if image.size == 0 or np.all(np.isnan(image)):
-            show_info('⚠️ Image is empty or contains only NaNs. Contrast not updated.')
-        else:
-            min_val = np.nanmin(image)
-            max_val = np.nanmax(image)
-            if np.isclose(min_val, max_val):
-                show_info('⚠️ Image min and max are equal. Contrast not updated.')
+        height, width = len(y_points), len(x_points)
+        image = np.zeros((height, width), dtype=np.float32)
+        layer.data = image
+        layer.contrast_limits = contrast_limits
+        
+        for y_idx, y in enumerate(y_points):
+            for x_idx, x in enumerate(x_points):
+                if stop_scan_requested[0]:
+                    show_info("🛑 Scan stopped by user")
+                    output_task.write([0, 0])  # Return to zero position
+                    scan_in_progress[0] = False
+                    return None, None
+                    
+                output_task.write([x, y])
+                if x_idx == 0:
+                    time.sleep(0.05)
+                else:
+                    time.sleep(0.001)
+                    
+                counts = counter.getData()[0][0]/(binwidth/1e12)
+                print(f"{counts}")
+                image[y_idx, x_idx] = counts
+                layer.data = image
+        
+        # Adjust contrast and save data
+        try:
+            if image.size == 0 or np.all(np.isnan(image)):
+                show_info('⚠️ Image is empty or contains only NaNs. Contrast not updated.')
             else:
-                layer.contrast_limits = (min_val, max_val)
-    except Exception as e:
-        show_info(f'❌ Error setting contrast limits: {str(e)}')
-    
-    scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
-    scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
-    layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
-    
-    # Create a dictionary with image and scan positions
-    scan_data = {
-        'image': image,
-        'x_points': x_points,
-        'y_points': y_points,
-        'scale_x': scale_um_per_px_x,
-        'scale_y': scale_um_per_px_y
-    }
-    data_path = data_manager.save_scan_data(scan_data)
-    plot_scan_results(scan_data, data_path)
-    
-    # Save image with scale information
-    np.savez(data_path.replace('.csv', '.npz'), 
-             image=image,
-             scale_x=scale_um_per_px_x,
-             scale_y=scale_um_per_px_y)
-    layer.save(data_path.replace('.csv', '.tiff'))
-    # Return scanner to zero position after scan
-    output_task.write([0, 0])
-    show_info("🎯 Scanner returned to zero position")
+                min_val = np.nanmin(image)
+                max_val = np.nanmax(image)
+                if np.isclose(min_val, max_val):
+                    show_info('⚠️ Image min and max are equal. Contrast not updated.')
+                else:
+                    layer.contrast_limits = (min_val, max_val)
+        except Exception as e:
+            show_info(f'❌ Error setting contrast limits: {str(e)}')
+        
+        scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
+        scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
+        layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+        
+        # Create a dictionary with image and scan positions
+        scan_data = {
+            'image': image,
+            'x_points': x_points,
+            'y_points': y_points,
+            'scale_x': scale_um_per_px_x,
+            'scale_y': scale_um_per_px_y
+        }
+        data_path = data_manager.save_scan_data(scan_data)
+        plot_scan_results(scan_data, data_path)
+        
+        # Save image with scale information
+        np.savez(data_path.replace('.csv', '.npz'), 
+                 image=image,
+                 scale_x=scale_um_per_px_x,
+                 scale_y=scale_um_per_px_y)
+        layer.save(data_path.replace('.csv', '.tiff'))
+        
+    finally:
+        # Return scanner to zero position after scan
+        output_task.write([0, 0])
+        show_info("🎯 Scanner returned to zero position")
+        scan_in_progress[0] = False
+        
     return x_points, y_points
 
 # --------------------- DATA PATH FUNCTION ---------------------
@@ -311,6 +328,10 @@ close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
 update_scan_parameters_widget = create_update_scan_parameters(config_manager, scan_points_manager)
 update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, config_manager)
+
+# Create stop scan widget
+stop_scan_widget = create_stop_scan(scan_in_progress, stop_scan_requested)
+stop_scan_widget.native.setFixedSize(150, 50)
 
 reset_zoom_widget = create_reset_zoom(
     scan_pattern, scan_history, config_manager, scan_points_manager,
@@ -443,6 +464,7 @@ plot_profile_widget.native.setFixedSize(150, 50)
 
 # Add widgets to viewer
 viewer.window.add_dock_widget(new_scan_widget, area="bottom")
+viewer.window.add_dock_widget(stop_scan_widget, area="bottom")
 viewer.window.add_dock_widget(save_image_widget, area="bottom")
 viewer.window.add_dock_widget(reset_zoom_widget, area="bottom")
 viewer.window.add_dock_widget(close_scanner_widget, area="bottom")

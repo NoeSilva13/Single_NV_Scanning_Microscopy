@@ -7,6 +7,7 @@ Contains magicgui widgets for:
 - Saving images
 - Resetting zoom
 - Updating scan parameters
+- Stopping ongoing scans
 """
 
 import threading
@@ -187,4 +188,19 @@ def update_scan_parameters_widget(widget_instance, config_manager):
         widget_instance.x_resolution.value = x_res
         widget_instance.y_resolution.value = y_res
     
-    return _update_widget 
+    return _update_widget
+
+
+def stop_scan(scan_in_progress, stop_scan_requested):
+    """Factory function to create stop_scan widget with dependencies"""
+    
+    @magicgui(call_button="🛑 Stop Scan")
+    def _stop_scan():
+        """Safely stop the current scanning process."""
+        if scan_in_progress[0]:  # Use list to allow modification of mutable object
+            stop_scan_requested[0] = True
+            show_info("🛑 Stopping scan... Please wait.")
+        else:
+            show_info("ℹ️ No scan currently in progress.")
+    
+    return _stop_scan 
