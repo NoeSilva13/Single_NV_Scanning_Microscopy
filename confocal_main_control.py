@@ -367,7 +367,12 @@ single_axis_scan_widget = SingleAxisScanWidget(
 single_axis_widget_ref = single_axis_scan_widget
 
 # Create file operation widgets
-load_scan_widget = create_load_scan(viewer)
+load_scan_widget = create_load_scan(
+    viewer,
+    config_manager=config_manager,
+    scan_points_manager=scan_points_manager,
+    update_widget_func=update_widget_func
+)
 
 # Create ODMR control widgets
 launch_odmr_widget = create_launch_odmr_gui(tagger=tagger, counter=counter, binwidth=binwidth)
