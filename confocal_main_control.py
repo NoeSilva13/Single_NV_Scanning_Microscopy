@@ -199,8 +199,8 @@ except Exception as e:
     tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
     tagger.run()
 
-# Set bin width to 5 ns
-binwidth = int(5e9)
+# Set bin width 
+binwidth = int(1e9)
 n_values = 1
 counter = Counter(tagger, [1], binwidth, n_values)
 
@@ -266,7 +266,7 @@ def scan_pattern(x_points, y_points):
                 if x_idx == 0:
                     time.sleep(0.02)
                 else:
-                    time.sleep(0.008)
+                    time.sleep(0.002)
                     
                 counts = counter.getData()[0][0]/(binwidth/1e12)
                 print(f"{counts}")
