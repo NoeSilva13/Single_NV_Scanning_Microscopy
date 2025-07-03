@@ -264,9 +264,9 @@ def scan_pattern(x_points, y_points):
                     
                 output_task.write([x, y])
                 if x_idx == 0:
-                    time.sleep(0.01)
+                    time.sleep(0.02)
                 else:
-                    time.sleep(0.0005)
+                    time.sleep(0.008)
                     
                 counts = counter.getData()[0][0]/(binwidth/1e12)
                 print(f"{counts}")
@@ -274,7 +274,7 @@ def scan_pattern(x_points, y_points):
                 
                 # Update layer only every 10 pixels
                 pixel_count += 1
-                if pixel_count % 10 == 0:
+                if pixel_count % 15 == 0:
                     layer.data = image
                     
         # Final update to ensure last pixels are displayed
