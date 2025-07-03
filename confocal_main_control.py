@@ -252,6 +252,8 @@ def scan_pattern(x_points, y_points):
         layer.data = image
         layer.contrast_limits = contrast_limits
         
+        pixel_count = 0  # Counter for pixels scanned
+        start_time = time.time()
         for y_idx, y in enumerate(y_points):
             for x_idx, x in enumerate(x_points):
                 if stop_scan_requested[0]:
@@ -262,15 +264,23 @@ def scan_pattern(x_points, y_points):
                     
                 output_task.write([x, y])
                 if x_idx == 0:
-                    time.sleep(0.05)
+                    time.sleep(0.01)
                 else:
-                    time.sleep(0.001)
+                    time.sleep(0.0005)
                     
                 counts = counter.getData()[0][0]/(binwidth/1e12)
                 print(f"{counts}")
                 image[y_idx, x_idx] = counts
-                layer.data = image
-        
+                
+                # Update layer only every 10 pixels
+                pixel_count += 1
+                if pixel_count % 10 == 0:
+                    layer.data = image
+                    
+        # Final update to ensure last pixels are displayed
+        layer.data = image
+        end_time = time.time()
+        print(f"Scan time: {end_time - start_time} seconds, {len(x_points)}, {len(y_points)}")
         # Adjust contrast and save data
         try:
             if image.size == 0 or np.all(np.isnan(image)):
