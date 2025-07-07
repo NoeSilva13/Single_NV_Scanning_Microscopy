@@ -7,9 +7,17 @@ All notable changes to this project will be documented in this file following [K
 - Initial project-level `CHANGELOG.md`.
 - Comprehensive `requirements.txt` listing all runtime Python dependencies (Napari, PyQt5, pandas, etc.).
 - Draft packaging notes (optional vendor libraries such as `TimeTagger` and `PulseStreamer` clearly marked).
+- Enhanced TIFF metadata for ImageJ/Fiji compatibility
+  - Added comprehensive ImageJ-compatible metadata to saved TIFF files
+  - Includes pixel scale information (microns per pixel)
+  - Includes scan parameters (voltage ranges, resolution, dwell time)
+  - Includes calibration constants and acquisition details
+  - Automatic scale bar support when opening in ImageJ/Fiji
+  - Added `tifffile` dependency for proper metadata handling
 
 ### Changed
-
+- Replaced napari's default TIFF save with custom metadata-rich TIFF save function
+- Enhanced TIFF files now contain full acquisition context for analysis
 
 ### Fixed
 - Minor formatting issues encountered when building on Python 3.12.

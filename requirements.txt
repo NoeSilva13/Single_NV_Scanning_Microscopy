@@ -9,6 +9,7 @@ magicgui>=0.7
 qtpy>=2.4
 opencv-python>=4.7
 scikit-image>=0.19
+tifffile>=2023.7.10
 # Optional / vendor-specific (install separately)
 # TimeTagger (https://www.swabianinstruments.com/time-tagger/downloads/)
 # PulseStreamer (https://www.swabianinstruments.com/pulse-streamer/downloads/) 
