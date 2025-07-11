@@ -15,9 +15,9 @@ from plot_widgets.single_axis_plot import SingleAxisPlot
 class SingleAxisScanWidget(QWidget):
     """Widget for performing single axis scans at current cursor position"""
     
-    def __init__(self, config_manager, layer, output_task, counter, binwidth, parent=None):
+    def __init__(self, scan_params_manager, layer, output_task, counter, binwidth, parent=None):
         super().__init__(parent)
-        self.config_manager = config_manager
+        self.scan_params_manager = scan_params_manager
         self.layer = layer
         self.output_task = output_task
         self.counter = counter
@@ -55,9 +55,9 @@ class SingleAxisScanWidget(QWidget):
     
     def _initialize_plot(self):
         """Initialize the plot with current config values"""
-        config = self.config_manager.get_config()
-        x_range = config['scan_range']['x']
-        x_res = config['resolution']['x']
+        params = self.scan_params_manager.get_params()
+        x_range = params['scan_range']['x']
+        x_res = params['resolution']['x']
         
         x_data = np.linspace(x_range[0], x_range[1], x_res)
         y_data = np.zeros(x_res)
@@ -83,14 +83,14 @@ class SingleAxisScanWidget(QWidget):
         """Start a single axis scan"""
         x_pos, y_pos = self.get_current_position()
         
-        # Get current config values
-        config = self.config_manager.get_config()
-        x_range = config['scan_range']['x']
-        y_range = config['scan_range']['y']
-        x_res = config['resolution']['x']
-        y_res = config['resolution']['y']
+        # Get current parameter values
+        params = self.scan_params_manager.get_params()
+        x_range = params['scan_range']['x']
+        y_range = params['scan_range']['y']
+        x_res = params['resolution']['x']
+        y_res = params['resolution']['y']
         
-        # Use resolution and range from config
+        # Use resolution and range from parameters
         if axis == 'x':
             scan_points = np.linspace(x_range[0], x_range[1], x_res)
             fixed_pos = y_pos

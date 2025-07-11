@@ -10,20 +10,17 @@ class DataManager:
         """
         pass
     
-    def save_scan_data(self, scan_data):
+    def save_scan_data(self, scan_data, scan_params=None):
         """
         Save scan data to a CSV file in a daily folder.
         
         Args:
             scan_data: Dictionary containing 'image' (2D array), 'x_points', and 'y_points' arrays
+            scan_params: Dictionary containing scan parameters (optional)
             
         Returns:
             str: The path to the saved file
         """
-        # Load configuration
-        with open("config_template.json", "r", encoding="utf-8") as f:
-            config = json.load(f)
-        
         # Create daily folder for data
         daily_folder = time.strftime("%m%d%y")
         if not os.path.exists(daily_folder):
@@ -59,12 +56,13 @@ class DataManager:
             measurement_time = time.strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"# Measurement Time: {measurement_time}\n")
             
-            # Write configuration
-            config_json_str = json.dumps(config, ensure_ascii=False, indent=2)
-            f.write("# Experiment Configuration (JSON):\n")
-            for line in config_json_str.splitlines():
-                f.write(f"# {line}\n")
-            f.write("#\n")  # Empty line to separate header from data
+            # Write scan parameters if provided
+            if scan_params:
+                params_json_str = json.dumps(scan_params, ensure_ascii=False, indent=2)
+                f.write("# Scan Parameters (JSON):\n")
+                for line in params_json_str.splitlines():
+                    f.write(f"# {line}\n")
+                f.write("#\n")  # Empty line to separate header from data
             
             # Write the data matrix
             df.to_csv(f, float_format='%.7f')

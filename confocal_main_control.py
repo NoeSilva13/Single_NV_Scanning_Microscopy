@@ -54,53 +54,72 @@ from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan as create_load_scan
 from widgets.odmr_controls import launch_odmr_gui as create_launch_odmr_gui
 
-# --------------------- CONFIGURATION MANAGER CLASS ---------------------
-class ConfigManager:
-    """Manages configuration loading, saving, and updates"""
+# --------------------- SCAN PARAMETERS MANAGER CLASS ---------------------
+class ScanParametersManager:
+    """Manages scan parameters by getting them from the GUI widget"""
     
-    def __init__(self, config_file="config_template.json"):
-        self.config_file = config_file
-        self.config = self._load_config()
+    def __init__(self, widget_instance=None):
+        self.widget_instance = widget_instance
     
-    def _load_config(self):
-        with open(self.config_file, 'r') as f:
-            return json.load(f)
+    def set_widget_instance(self, widget_instance):
+        """Set the widget instance to get parameters from"""
+        self.widget_instance = widget_instance
     
-    def get_config(self):
-        return self.config
+    def get_params(self):
+        """Get current scan parameters from the GUI widget"""
+        if self.widget_instance and hasattr(self.widget_instance, 'get_parameters'):
+            return self.widget_instance.get_parameters()
+        else:
+            # Fallback default values if widget is not available
+            return {
+                "scan_range": {"x": [-1.0, 1.0], "y": [-1.0, 1.0]},
+                "resolution": {"x": 50, "y": 50},
+                "dwell_time": 0.1
+            }
     
     def update_scan_parameters(self, x_range=None, y_range=None, x_res=None, y_res=None):
-        if x_range is not None:
-            self.config['scan_range']['x'] = x_range
-        if y_range is not None:
-            self.config['scan_range']['y'] = y_range
-        if x_res is not None:
-            self.config['resolution']['x'] = x_res
-        if y_res is not None:
-            self.config['resolution']['y'] = y_res
-        
-        self._save_config()
-    
-    def _save_config(self):
-        with open(self.config_file, 'w') as f:
-            json.dump(self.config, f, indent=4)
+        """Update scan parameters in the GUI widget"""
+        if self.widget_instance and hasattr(self.widget_instance, 'update_values'):
+            # Get current values first
+            current_params = self.get_params()
+            
+            # Update with new values
+            new_x_range = x_range if x_range is not None else current_params['scan_range']['x']
+            new_y_range = y_range if y_range is not None else current_params['scan_range']['y']
+            new_x_res = x_res if x_res is not None else current_params['resolution']['x']
+            new_y_res = y_res if y_res is not None else current_params['resolution']['y']
+            
+            self.widget_instance.update_values(new_x_range, new_y_range, new_x_res, new_y_res)
 
 # --------------------- SCAN POINTS MANAGER CLASS ---------------------
 class ScanPointsManager:
     """Manages scan point generation and updates"""
     
-    def __init__(self, config_manager):
-        self.config_manager = config_manager
+    def __init__(self, scan_params_manager):
+        self.scan_params_manager = scan_params_manager
         self.original_x_points = None
         self.original_y_points = None
-        self._update_points_from_config()
+        # Initialize with default values
+        self._initialize_default_points()
     
-    def _update_points_from_config(self):
-        config = self.config_manager.get_config()
-        x_range = config['scan_range']['x']
-        y_range = config['scan_range']['y']
-        x_res = config['resolution']['x']
-        y_res = config['resolution']['y']
+    def _initialize_default_points(self):
+        """Initialize with default values"""
+        # Use same defaults as in the widget
+        x_range = [-1.0, 1.0]
+        y_range = [-1.0, 1.0]
+        x_res = 50
+        y_res = 50
+        
+        self.original_x_points = np.linspace(x_range[0], x_range[1], x_res)
+        self.original_y_points = np.linspace(y_range[0], y_range[1], y_res)
+    
+    def _update_points_from_params(self):
+        """Update points from current parameters"""
+        params = self.scan_params_manager.get_params()
+        x_range = params['scan_range']['x']
+        y_range = params['scan_range']['y']
+        x_res = params['resolution']['x']
+        y_res = params['resolution']['y']
         
         self.original_x_points = np.linspace(x_range[0], x_range[1], x_res)
         self.original_y_points = np.linspace(y_range[0], y_range[1], y_res)
@@ -133,18 +152,17 @@ class ZoomLevelManager:
 
 # --------------------- INITIAL CONFIGURATION ---------------------
 # Initialize managers
-config_manager = ConfigManager()
-scan_points_manager = ScanPointsManager(config_manager)
+scan_params_manager = ScanParametersManager()
+scan_points_manager = ScanPointsManager(scan_params_manager)
 zoom_manager = ZoomLevelManager()
 
 # Initialize hardware controllers
 galvo_controller = GalvoScannerController()
 data_manager = DataManager()
 
-# Extract scan parameters from config for initial setup
-config = config_manager.get_config()
-x_res = config['resolution']['x']
-y_res = config['resolution']['y']
+# Extract scan parameters for initial setup (using defaults)
+x_res = 50  # Default resolution
+y_res = 50  # Default resolution
 
 # Get initial scanning grids
 original_x_points, original_y_points = scan_points_manager.get_points()
@@ -182,9 +200,9 @@ viewer.scale_bar.visible = True
 viewer.scale_bar.unit = "µm"
 viewer.scale_bar.position = "bottom_left"
 
-# Calculate scale (in microns/pixel)
-x_range = config['scan_range']['x']
-y_range = config['scan_range']['y']
+# Calculate scale (in microns/pixel) using defaults initially
+x_range = [-1.0, 1.0]  # Default range
+y_range = [-1.0, 1.0]  # Default range
 scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
 scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
 layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
@@ -210,12 +228,12 @@ def on_mouse_click(layer, event):
     coords = layer.world_to_data(event.position)
     x_idx, y_idx = int(round(coords[1])), int(round(coords[0]))
     
-    # Get current ranges from config manager
-    config = config_manager.get_config()
-    x_range = config['scan_range']['x']
-    y_range = config['scan_range']['y']
-    x_res = config['resolution']['x']
-    y_res = config['resolution']['y']
+    # Get current ranges from scan parameters manager
+    params = scan_params_manager.get_params()
+    x_range = params['scan_range']['x']
+    y_range = params['scan_range']['y']
+    x_res = params['resolution']['x']
+    y_res = params['resolution']['y']
     
     # Convert from pixel coordinates to voltage values
     x_voltage = np.interp(x_idx, [0, x_res-1], [x_range[0], x_range[1]])
@@ -307,11 +325,13 @@ def scan_pattern(x_points, y_points):
             'scale_x': scale_um_per_px_x,
             'scale_y': scale_um_per_px_y
         }
-        data_path = data_manager.save_scan_data(scan_data)
+        # Get current scan parameters to save with the data
+        current_scan_params = scan_params_manager.get_params()
+        data_path = data_manager.save_scan_data(scan_data, current_scan_params)
         plot_scan_results(scan_data, data_path)
         
         # Get current scan parameters
-        current_config = config_manager.get_config()
+        current_params = scan_params_manager.get_params()
         
         # Save image with scale information and scan parameters
         timestamp_str = time.strftime("%Y%m%d-%H%M%S")
@@ -319,11 +339,11 @@ def scan_pattern(x_points, y_points):
                  image=image,
                  scale_x=scale_um_per_px_x,
                  scale_y=scale_um_per_px_y,
-                 x_range=current_config['scan_range']['x'],
-                 y_range=current_config['scan_range']['y'],
-                 x_resolution=current_config['resolution']['x'],
-                 y_resolution=current_config['resolution']['y'],
-                 dwell_time=current_config['dwell_time'],
+                 x_range=current_params['scan_range']['x'],
+                 y_range=current_params['scan_range']['y'],
+                 x_resolution=current_params['resolution']['x'],
+                 y_resolution=current_params['resolution']['y'],
+                 dwell_time=current_params['dwell_time'],
                  x_points=x_points,
                  y_points=y_points,
                  timestamp=timestamp_str)
@@ -334,7 +354,7 @@ def scan_pattern(x_points, y_points):
             filepath=data_path.replace('.csv', '.tiff'),
             x_points=x_points,
             y_points=y_points,
-            scan_config=current_config,
+            scan_config=current_params,
             timestamp=timestamp_str
         )
         
@@ -357,16 +377,19 @@ def get_data_path():
 new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes)
 close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
-update_scan_parameters_widget = create_update_scan_parameters(config_manager, scan_points_manager)
-update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, config_manager)
+update_scan_parameters_widget = create_update_scan_parameters(scan_params_manager, scan_points_manager)
+update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, scan_params_manager)
+
+# Update scan points manager with initial parameters from the widget
+scan_points_manager._update_points_from_params()
 
 # Create stop scan widget
 stop_scan_widget = create_stop_scan(scan_in_progress, stop_scan_requested)
 stop_scan_widget.native.setFixedSize(150, 50)
 
 reset_zoom_widget = create_reset_zoom(
-    scan_pattern, scan_history, config_manager, scan_points_manager,
-    shapes, lambda **kwargs: config_manager.update_scan_parameters(**kwargs), 
+    scan_pattern, scan_history, scan_params_manager, scan_points_manager,
+    shapes, lambda **kwargs: scan_params_manager.update_scan_parameters(**kwargs), 
     update_widget_func,
     zoom_manager
 )
@@ -380,7 +403,7 @@ auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge)
 
 # Create single axis scan widget
 single_axis_scan_widget = SingleAxisScanWidget(
-    config_manager, layer, output_task, counter, binwidth
+    scan_params_manager, layer, output_task, counter, binwidth
 )
 
 # Set the global reference for position tracking
@@ -389,7 +412,7 @@ single_axis_widget_ref = single_axis_scan_widget
 # Create file operation widgets
 load_scan_widget = create_load_scan(
     viewer,
-    config_manager=config_manager,
+    scan_params_manager=scan_params_manager,
     scan_points_manager=scan_points_manager,
     update_widget_func=update_widget_func
 )
@@ -455,9 +478,9 @@ def on_shape_added(event):
     scan_history.append((current_x_points, current_y_points))
 
     # Calculate new scan points maintaining original resolution
-    current_config = config_manager.get_config()
-    current_x_res = current_config['resolution']['x']
-    current_y_res = current_config['resolution']['y']
+    current_params = scan_params_manager.get_params()
+    current_x_res = current_params['resolution']['x']
+    current_y_res = current_params['resolution']['y']
     x_zoom = np.linspace(current_x_points[min_x], current_x_points[max_x - 1], current_x_res)
     y_zoom = np.linspace(current_y_points[min_y], current_y_points[max_y - 1], current_y_res)
 
@@ -465,7 +488,7 @@ def on_shape_added(event):
         global zoom_in_progress
         zoom_in_progress = True
         
-        config_manager.update_scan_parameters(
+        scan_params_manager.update_scan_parameters(
             x_range=[x_zoom[0], x_zoom[-1]],
             y_range=[y_zoom[0], y_zoom[-1]],
             x_res=current_x_res,
@@ -520,29 +543,12 @@ empty_counts = [0, 0]
 signal_bridge.update_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto-Focus Plot')
 
 # --------------------- CLEANUP ON CLOSE ---------------------
-default_config = {
-    "scan_range": {
-        "x": [-1.0, 1.0],
-        "y": [-1.0, 1.0]
-    },
-    "resolution": {
-        "x": 10,
-        "y": 10
-    },
-    "dwell_time": 0.1
-}
-
 def _on_close():
-    """Reset config file to default values and set scanner to zero when closing the app"""
+    """Set scanner to zero when closing the app"""
     try:
         # Set scanner to zero position before closing
         output_task.write([0, 0])
         show_info("🎯 Scanner set to zero position")
-        
-        # Reset config file to default values
-        with open("config_template.json", 'w') as f:
-            json.dump(default_config, f, indent=4)
-        show_info("✨ Config reset to default values")
     except Exception as e:
         show_info(f"❌ Error during app closure: {str(e)}")
 

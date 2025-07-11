@@ -13,7 +13,7 @@ from magicgui import magicgui
 from napari.utils.notifications import show_info
 
 
-def load_scan(viewer, config_manager=None, scan_points_manager=None, update_widget_func=None):
+def load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update_widget_func=None):
     """Factory function to create load_scan widget with dependencies"""
     
     def display_scan_parameters(data):
@@ -70,13 +70,13 @@ def load_scan(viewer, config_manager=None, scan_points_manager=None, update_widg
             """)
             
             # Add option to apply parameters
-            if config_manager and scan_points_manager and update_widget_func:
+            if scan_params_manager and scan_points_manager and update_widget_func:
                 msg.setStandardButtons(QMessageBox.Apply | QMessageBox.Ok)
                 result = msg.exec_()
                 
                 # If Apply was clicked, update the scan parameters
                 if result == QMessageBox.Apply:
-                    config_manager.update_scan_parameters(
+                    scan_params_manager.update_scan_parameters(
                         x_range=data['x_range'].tolist(),
                         y_range=data['y_range'].tolist(),
                         x_res=int(data['x_resolution']),
