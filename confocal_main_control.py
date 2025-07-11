@@ -74,10 +74,10 @@ class ScanParametersManager:
             return {
                 "scan_range": {"x": [-1.0, 1.0], "y": [-1.0, 1.0]},
                 "resolution": {"x": 50, "y": 50},
-                "dwell_time": 0.1
+                "dwell_time": 0.002
             }
     
-    def update_scan_parameters(self, x_range=None, y_range=None, x_res=None, y_res=None):
+    def update_scan_parameters(self, x_range=None, y_range=None, x_res=None, y_res=None, dwell_time=None):
         """Update scan parameters in the GUI widget"""
         if self.widget_instance and hasattr(self.widget_instance, 'update_values'):
             # Get current values first
@@ -88,8 +88,9 @@ class ScanParametersManager:
             new_y_range = y_range if y_range is not None else current_params['scan_range']['y']
             new_x_res = x_res if x_res is not None else current_params['resolution']['x']
             new_y_res = y_res if y_res is not None else current_params['resolution']['y']
+            new_dwell_time = dwell_time if dwell_time is not None else current_params['dwell_time']
             
-            self.widget_instance.update_values(new_x_range, new_y_range, new_x_res, new_y_res)
+            self.widget_instance.update_values(new_x_range, new_y_range, new_x_res, new_y_res, new_dwell_time)
 
 # --------------------- SCAN POINTS MANAGER CLASS ---------------------
 class ScanPointsManager:
@@ -264,6 +265,10 @@ def scan_pattern(x_points, y_points):
     scan_in_progress[0] = True
     stop_scan_requested[0] = False
     
+    # Get dwell time from scan parameters
+    params = scan_params_manager.get_params()
+    dwell_time = params['dwell_time']
+    
     try:
         height, width = len(y_points), len(x_points)
         image = np.zeros((height, width), dtype=np.float32)
@@ -281,10 +286,11 @@ def scan_pattern(x_points, y_points):
                     return None, None
                     
                 output_task.write([x, y])
+                # Use dwell time from parameters, with longer settling time for first pixel in each row
                 if x_idx == 0:
-                    time.sleep(0.02)
+                    time.sleep(max(dwell_time * 10, 0.02))  # Longer settling time for row start
                 else:
-                    time.sleep(0.002)
+                    time.sleep(dwell_time)
                     
                 counts = counter.getData()[0][0]/(binwidth/1e12)
                 print(f"{counts}")

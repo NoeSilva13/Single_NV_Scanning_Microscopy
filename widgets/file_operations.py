@@ -76,12 +76,19 @@ def load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update
                 
                 # If Apply was clicked, update the scan parameters
                 if result == QMessageBox.Apply:
-                    scan_params_manager.update_scan_parameters(
-                        x_range=data['x_range'].tolist(),
-                        y_range=data['y_range'].tolist(),
-                        x_res=int(data['x_resolution']),
-                        y_res=int(data['y_resolution'])
-                    )
+                    # Prepare parameters to update
+                    update_params = {
+                        'x_range': data['x_range'].tolist(),
+                        'y_range': data['y_range'].tolist(),
+                        'x_res': int(data['x_resolution']),
+                        'y_res': int(data['y_resolution'])
+                    }
+                    
+                    # Add dwell_time if available in the data
+                    if 'dwell_time' in data:
+                        update_params['dwell_time'] = float(data['dwell_time'])
+                    
+                    scan_params_manager.update_scan_parameters(**update_params)
                     scan_points_manager.update_points(
                         x_range=data['x_range'].tolist(),
                         y_range=data['y_range'].tolist(),

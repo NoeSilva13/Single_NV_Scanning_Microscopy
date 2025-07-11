@@ -153,6 +153,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             default_y_max = 1.0
             default_x_res = 50
             default_y_res = 50
+            default_dwell_time = 0.002  # Default dwell time in seconds
             
             # X Min
             layout.addWidget(QLabel("X Min:"), 1, 0)
@@ -222,9 +223,19 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             self.y_res_spinbox.setSuffix(" px")
             layout.addWidget(self.y_res_spinbox, 6, 1, 1, 2)  # Span 2 columns
             
+            # Dwell Time
+            layout.addWidget(QLabel("Dwell Time:"), 7, 0)
+            self.dwell_time_spinbox = QDoubleSpinBox()
+            self.dwell_time_spinbox.setRange(0.001, 10.0)  # 1ms to 10s
+            self.dwell_time_spinbox.setSingleStep(0.001)
+            self.dwell_time_spinbox.setDecimals(3)
+            self.dwell_time_spinbox.setValue(default_dwell_time)
+            self.dwell_time_spinbox.setSuffix(" s")
+            layout.addWidget(self.dwell_time_spinbox, 7, 1, 1, 2)  # Span 2 columns
+            
             # Apply button
             self.apply_button = QPushButton("Apply Changes")
-            layout.addWidget(self.apply_button, 7, 0, 1, 3)  # Span all columns
+            layout.addWidget(self.apply_button, 8, 0, 1, 3)  # Span all columns
             
             self.setLayout(layout)
             
@@ -247,7 +258,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
                         'x': self.x_res_spinbox.value(),
                         'y': self.y_res_spinbox.value()
                     },
-                    'dwell_time': 0.1  # Fixed value for now
+                    'dwell_time': self.dwell_time_spinbox.value()
                 }
             except Exception as e:
                 show_info(f"Error getting parameters: {e}")
@@ -279,7 +290,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
                 
                 show_info('⚠️ Scan parameters updated successfully!')
             
-        def update_values(self, x_range, y_range, x_res, y_res):
+        def update_values(self, x_range, y_range, x_res, y_res, dwell_time=None):
             """Update all widget values"""
             self.x_min_spinbox.setValue(x_range[0])
             self.x_max_spinbox.setValue(x_range[1])
@@ -287,6 +298,10 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             self.y_max_spinbox.setValue(y_range[1])
             self.x_res_spinbox.setValue(x_res)
             self.y_res_spinbox.setValue(y_res)
+            
+            # Update dwell time if provided
+            if dwell_time is not None:
+                self.dwell_time_spinbox.setValue(dwell_time)
             
             # Update distance labels
             self.x_min_label.setText(f"{x_range[0] * MICRONS_PER_VOLT:.1f}")
@@ -308,8 +323,9 @@ def update_scan_parameters_widget(widget_instance, scan_params_manager):
         y_range = params['scan_range']['y']
         x_res = params['resolution']['x']
         y_res = params['resolution']['y']
+        dwell_time = params['dwell_time']
         
-        widget_instance.update_values(x_range, y_range, x_res, y_res)
+        widget_instance.update_values(x_range, y_range, x_res, y_res, dwell_time)
     
     return _update_widget
 
