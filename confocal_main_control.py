@@ -183,8 +183,6 @@ output_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
 output_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
 output_task.start()
 
-# --------------------- SCALE FUNCTION (imported from utils) ---------------------
-
 # --------------------- NAPARI VIEWER SETUP ---------------------
 viewer = napari.Viewer(title="NV Scanning Microscopy")
 # Set window size to maximum screen size
@@ -265,9 +263,9 @@ def scan_pattern(x_points, y_points):
     scan_in_progress[0] = True
     stop_scan_requested[0] = False
     
-    # Get dwell time from scan parameters
-    params = scan_params_manager.get_params()
-    dwell_time = params['dwell_time']
+    # Get all scan parameters once at the start
+    current_scan_params = scan_params_manager.get_params()
+    dwell_time = current_scan_params['dwell_time']
     
     try:
         height, width = len(y_points), len(x_points)
@@ -331,13 +329,9 @@ def scan_pattern(x_points, y_points):
             'scale_x': scale_um_per_px_x,
             'scale_y': scale_um_per_px_y
         }
-        # Get current scan parameters to save with the data
-        current_scan_params = scan_params_manager.get_params()
+        # Save data using the parameters we got at the start
         data_path = data_manager.save_scan_data(scan_data, current_scan_params)
         plot_scan_results(scan_data, data_path)
-        
-        # Get current scan parameters
-        current_params = scan_params_manager.get_params()
         
         # Save image with scale information and scan parameters
         timestamp_str = time.strftime("%Y%m%d-%H%M%S")
@@ -345,11 +339,11 @@ def scan_pattern(x_points, y_points):
                  image=image,
                  scale_x=scale_um_per_px_x,
                  scale_y=scale_um_per_px_y,
-                 x_range=current_params['scan_range']['x'],
-                 y_range=current_params['scan_range']['y'],
-                 x_resolution=current_params['resolution']['x'],
-                 y_resolution=current_params['resolution']['y'],
-                 dwell_time=current_params['dwell_time'],
+                 x_range=current_scan_params['scan_range']['x'],
+                 y_range=current_scan_params['scan_range']['y'],
+                 x_resolution=current_scan_params['resolution']['x'],
+                 y_resolution=current_scan_params['resolution']['y'],
+                 dwell_time=current_scan_params['dwell_time'],
                  x_points=x_points,
                  y_points=y_points,
                  timestamp=timestamp_str)
@@ -360,7 +354,7 @@ def scan_pattern(x_points, y_points):
             filepath=data_path.replace('.csv', '.tiff'),
             x_points=x_points,
             y_points=y_points,
-            scan_config=current_params,
+            scan_config=current_scan_params,
             timestamp=timestamp_str
         )
         
