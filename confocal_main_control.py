@@ -56,6 +56,36 @@ from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan as create_load_scan
 from widgets.odmr_controls import launch_odmr_gui as create_launch_odmr_gui
 
+import qickdawg as qd
+
+qd.start_client('192.168.3.1')
+
+nv_config = qd.NVConfiguration()
+nv_config.adc_channel = 0
+nv_config.edge_counting = True
+nv_config.high_threshold = 2000
+nv_config.low_threshold = 500
+nv_config.mw_channel = 0
+nv_config.mw_nqz = 1
+nv_config.mw_gain = 5000
+nv_config.laser_gate_pmod = 0
+nv_config.relax_delay_tns = 50 # between each rep, wait for everything to catch up, mostly aom
+nv_config.readout_integration_treg = 2**16-1 # Maxium number of integrated points
+
+print(qd.max_int_time_tus)
+print(nv_config.readout_integration_tus)
+
+nv_config.reps = 1 
+
+prog = qd.PLIntensity(nv_config) 
+
+def get_cps():
+
+    d = prog.acquire(progress=False)
+
+    return d / qd.max_int_time_treg / qd.min_time_tns * 1e9
+
+
 # --------------------- SCAN PARAMETERS MANAGER CLASS ---------------------
 class ScanParametersManager:
     """Manages scan parameters by getting them from the GUI widget"""
