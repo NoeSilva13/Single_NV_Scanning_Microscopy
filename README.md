@@ -32,7 +32,6 @@ Both programs share a common codebase and are designed to run out-of-the-box wit
 
 ### Common infrastructure
 - Modular **hardware controller** classes (`galvo_controller.py`, `swabian_pulse_streamer.py`, etc.).
-- `config_template.json` for centralised scan parameters.
 - **DataManager** for automatic date-stamped folder hierarchies.
 - Tested on Python 3.8–3.12, Windows 10/11.
 
@@ -43,9 +42,9 @@ Mandatory for confocal scans
 - Thorlabs **LSKGG4** galvo-galvo scanner
 - NI **USB-6453** (static AO for galvos)
 - **Single-photon detector** (Excelitas SPCM-AQRH-10-FC)
+- **Swabian TimeTagger** 
 
 Additional for ODMR / advanced timing
-- **Swabian TimeTagger** 
 - **Swabian Pulse Streamer 8/2**
 - **Rigol DSG836** microwave source
 - **Acousto-Optic Modulator** (laser gating)
