@@ -9,6 +9,9 @@ from napari.utils.notifications import show_info
 # Calibration constant: microns per volt based on empirical measurements
 MICRONS_PER_VOLT = 86
 
+# Maximum zoom level allowed in the scanning interface
+MAX_ZOOM_LEVEL = 6
+
 
 def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):
     """

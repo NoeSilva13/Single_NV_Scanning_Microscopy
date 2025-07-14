@@ -27,7 +27,7 @@ from galvo_controller import GalvoScannerController
 from data_manager import DataManager
 from plot_widgets.live_plot_napari_widget import live_plot
 from plot_scan_results import plot_scan_results
-from utils import calculate_scale, MICRONS_PER_VOLT, save_tiff_with_imagej_metadata
+from utils import calculate_scale, MICRONS_PER_VOLT, MAX_ZOOM_LEVEL, save_tiff_with_imagej_metadata
 from qtpy.QtWidgets import QWidget
 
 # Import extracted widgets
@@ -135,7 +135,7 @@ class ScanPointsManager:
 class ZoomLevelManager:
     """Manages zoom level state"""
     
-    def __init__(self, max_zoom=6):
+    def __init__(self, max_zoom=MAX_ZOOM_LEVEL):
         self.zoom_level = 0
         self.max_zoom = max_zoom
     
