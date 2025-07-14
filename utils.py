@@ -15,6 +15,11 @@ MAX_ZOOM_LEVEL = 6
 # Default binwidth for TimeTagger counter in nanoseconds (5e9 = 5 seconds)
 BINWIDTH = int(5e9)
 
+# Piezo auto-focus parameters (in micrometers)
+PIEZO_COARSE_STEP = 5.0  # Step size for coarse focus scan
+PIEZO_FINE_STEP = 0.5    # Step size for fine focus scan
+PIEZO_FINE_RANGE = 10.0  # Range around peak for fine scan
+
 
 def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):
     """

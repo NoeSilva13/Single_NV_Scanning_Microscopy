@@ -10,6 +10,7 @@ import numpy as np
 import clr
 from typing import Tuple, List, Optional, Callable
 from System import Decimal  # Use .NET's Decimal type
+from utils import PIEZO_COARSE_STEP, PIEZO_FINE_STEP, PIEZO_FINE_RANGE
 
 # Add Thorlabs.Kinesis references
 clr.AddReference("C:\\Program Files\\Thorlabs\\Kinesis\\Thorlabs.MotionControl.DeviceManagerCLI.dll")
@@ -108,21 +109,21 @@ class PiezoController:
 
     def perform_auto_focus(self, 
                          counter_function: Callable[[], int],
-                         step_size: float = 5.0,
+                         step_size: float = PIEZO_COARSE_STEP,
                          settling_time: float = 0.1,
                          fine_tune: bool = True,
-                         fine_step_size: float = 0.5,
-                         fine_range: float = 10.0
+                         fine_step_size: float = PIEZO_FINE_STEP,
+                         fine_range: float = PIEZO_FINE_RANGE
                          ) -> Tuple[List[float], List[int], float]:
         """Perform auto-focus by scanning the Z axis and measuring counts.
         
         Args:
             counter_function: Function that returns the current count value
-            step_size: Step size for Z scanning in µm
+            step_size: Step size for Z scanning in µm (default: PIEZO_COARSE_STEP)
             settling_time: Time to wait after each movement in seconds
             fine_tune: Whether to perform fine-tuning after coarse scan
-            fine_step_size: Step size for fine-tuning scan in µm
-            fine_range: Range around peak to scan during fine-tuning in µm
+            fine_step_size: Step size for fine-tuning scan in µm (default: PIEZO_FINE_STEP)
+            fine_range: Range around peak to scan during fine-tuning in µm (default: PIEZO_FINE_RANGE)
             
         Returns:
             Tuple containing:
