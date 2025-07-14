@@ -93,6 +93,28 @@ python odmr_gui_qt.py
 Select the **ODMR** or **Rabi** tab, fill in microwave / laser timing, hit **Start**.  Real-time plots update during acquisition, and raw data can be exported afterwards.
 
 ---
+## ⚖️ Calibration Parameters
+
+The system's calibration parameters and constants are centrally defined in `utils.py`:
+
+### Microscope Calibration
+- `MICRONS_PER_VOLT = 86` - Galvo scanner calibration (µm/V)
+- `MAX_ZOOM_LEVEL = 6` - Maximum allowed zoom levels in the scanning interface
+
+### Auto-Focus Parameters
+- `PIEZO_COARSE_STEP = 5.0` - Step size for coarse focus scan (µm)
+- `PIEZO_FINE_STEP = 0.5` - Step size for fine focus scan (µm)
+- `PIEZO_FINE_RANGE = 10.0` - Range around peak for fine scan (µm)
+
+### Timing Parameters
+- `BINWIDTH = int(5e9)` - Default binwidth for TimeTagger counter (picoseconds, 5e9 = 5 milliseconds)
+
+To modify these parameters:
+1. Open `utils.py`
+2. Update the desired constant value
+3. Restart the application for changes to take effect
+
+---
 ## 📂 Data layout
 ```
 YYYYMMDD/
