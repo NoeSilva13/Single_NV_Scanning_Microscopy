@@ -108,9 +108,12 @@ class SingleAxisScanWidget(QWidget):
                     self.output_task.write([point, fixed_pos])
                 else:
                     self.output_task.write([fixed_pos, point])
-                    
-                time.sleep(0.001)  # Small delay for settling
+
+                # Get dwell time from parameters
+                dwell_time = params['dwell_time']
+                time.sleep(dwell_time)  # Small delay for settling
                 count = self.counter.getData()[0][0]/(self.binwidth/1e12)
+                print(count)
                 counts.append(count)
             
             # Plot results

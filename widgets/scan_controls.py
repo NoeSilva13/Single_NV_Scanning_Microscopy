@@ -153,7 +153,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             default_y_max = 1.0
             default_x_res = 50
             default_y_res = 50
-            default_dwell_time = 0.002  # Default dwell time in seconds
+            default_dwell_time = 0.008  # Default dwell time in seconds
             
             # X Min
             layout.addWidget(QLabel("X Min:"), 1, 0)

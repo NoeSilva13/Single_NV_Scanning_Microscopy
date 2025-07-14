@@ -187,7 +187,7 @@ screen = QDesktopWidget().screenGeometry()
 viewer.window.resize(screen.width(), screen.height())
 
 # Add an image layer to display the live scan
-layer = viewer.add_image(image, name="live scan", colormap="viridis", scale=(1, 1), contrast_limits=contrast_limits)
+layer = viewer.add_image(image, name="live scan", colormap="viridis", contrast_limits=contrast_limits)
 # Add a shapes layer to display the zoom area
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
@@ -214,7 +214,7 @@ except Exception as e:
     tagger.run()
 
 # Set bin width 
-binwidth = int(1e9)
+binwidth = int(5e9)
 n_values = 1
 counter = Counter(tagger, [1], binwidth, n_values)
 
@@ -283,7 +283,7 @@ def scan_pattern(x_points, y_points):
                 output_task.write([x, y])
                 # Use dwell time from parameters, with longer settling time for first pixel in each row
                 if x_idx == 0:
-                    time.sleep(max(dwell_time * 10, 0.02))  # Longer settling time for row start
+                    time.sleep(max(dwell_time * 2, 0.02))  # Longer settling time for row start
                 else:
                     time.sleep(dwell_time)
                     
@@ -291,9 +291,9 @@ def scan_pattern(x_points, y_points):
                 print(f"{counts}")
                 image[y_idx, x_idx] = counts
                 
-                # Update layer only every 10 pixels
+                # Update layer only every n pixels for faster display
                 pixel_count += 1
-                if pixel_count % 15 == 0:
+                if pixel_count % 10 == 0:
                     layer.data = image
                     
         # Final update to ensure last pixels are displayed
@@ -328,6 +328,8 @@ def scan_pattern(x_points, y_points):
         }
         # Save data using the parameters we got at the start
         data_path = data_manager.save_scan_data(scan_data, current_scan_params)
+
+        # Plot scan results in pdf file
         plot_scan_results(scan_data, data_path)
         
         # Save image with scale information and scan parameters
