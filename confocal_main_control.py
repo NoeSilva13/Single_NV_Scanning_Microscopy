@@ -85,6 +85,7 @@ def get_cps():
 
     return d / qd.max_int_time_treg / qd.min_time_tns * 1e9
 
+quick_count_prog = qd.NVAveragerProgram(nv_config)
 
 # --------------------- SCAN PARAMETERS MANAGER CLASS ---------------------
 class ScanParametersManager:
@@ -322,7 +323,10 @@ def scan_pattern(x_points, y_points):
                 else:
                     time.sleep(dwell_time)
                     
-                counts = counter.getData()[0][0]/(binwidth/1e12)
+                counts = quick_count_prog.quick_count(integration_time_treg=nv_config.readout_integration_treg)
+                # Convert counts to counts per second
+                counts = counts / nv_config.readout_integration_tus * 1e6  # Convert to counts/second
+
                 print(f"{counts}")
                 image[y_idx, x_idx] = counts
                 
