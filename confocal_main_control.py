@@ -324,8 +324,10 @@ def scan_pattern(x_points, y_points):
                     time.sleep(dwell_time)
                     
                 counts = quick_count_prog.quick_count(integration_time_treg=nv_config.readout_integration_treg)
-                # Convert counts to counts per second
-                counts = counts / nv_config.readout_integration_tus * 1e6  # Convert to counts/second
+                counts = int(counts / nv_config.readout_integration_tus * 1e6)  # Convert to counts/second
+
+                #counts = get_cps()
+                #counts = counter.getData()[0][0]/(binwidth/1e12)
 
                 print(f"{counts}")
                 image[y_idx, x_idx] = counts
