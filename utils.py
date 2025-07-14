@@ -12,6 +12,9 @@ MICRONS_PER_VOLT = 86
 # Maximum zoom level allowed in the scanning interface
 MAX_ZOOM_LEVEL = 6
 
+# Default binwidth for TimeTagger counter in nanoseconds (5e9 = 5 seconds)
+BINWIDTH = int(5e9)
+
 
 def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):
     """

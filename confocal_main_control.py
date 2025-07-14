@@ -27,7 +27,13 @@ from galvo_controller import GalvoScannerController
 from data_manager import DataManager
 from plot_widgets.live_plot_napari_widget import live_plot
 from plot_scan_results import plot_scan_results
-from utils import calculate_scale, MICRONS_PER_VOLT, MAX_ZOOM_LEVEL, save_tiff_with_imagej_metadata
+from utils import (
+    calculate_scale, 
+    MICRONS_PER_VOLT, 
+    MAX_ZOOM_LEVEL, 
+    BINWIDTH,
+    save_tiff_with_imagej_metadata
+)
 from qtpy.QtWidgets import QWidget
 
 # Import extracted widgets
@@ -214,7 +220,7 @@ except Exception as e:
     tagger.run()
 
 # Set bin width 
-binwidth = int(5e9)
+binwidth = BINWIDTH
 n_values = 1
 counter = Counter(tagger, [1], binwidth, n_values)
 
