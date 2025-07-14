@@ -1,5 +1,5 @@
 """
-Confocal Single-NV Microscopy Control Software (Refactored)
+Confocal Single-NV Microscopy Control Software
 -------------------------------------------
 This software controls a confocal microscope setup for single NV center imaging using:
 - Thorlabs LSKGG4 Galvo-Galvo Scanner
@@ -7,12 +7,9 @@ This software controls a confocal microscope setup for single NV center imaging 
 - Single Photon Detector SPD
 
 The system provides real-time visualization and control through a Napari-based GUI.
-
-This is a refactored version showing how the widgets are extracted to separate modules.
 """
 
 # Standard library imports
-import json
 import threading
 import time
 

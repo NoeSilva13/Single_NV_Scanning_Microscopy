@@ -1,7 +1,6 @@
 import os
 import time
 import pandas as pd
-import json
 
 class DataManager:
     def __init__(self):
