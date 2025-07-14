@@ -12,7 +12,7 @@ MICRONS_PER_VOLT = 86
 # Maximum zoom level allowed in the scanning interface
 MAX_ZOOM_LEVEL = 6
 
-# Default binwidth for TimeTagger counter in nanoseconds (5e9 = 5 seconds)
+# Default binwidth for TimeTagger counter in picoseconds (5e9 = 5 milliseconds)
 BINWIDTH = int(5e9)
 
 # Piezo auto-focus parameters (in micrometers)

@@ -29,7 +29,6 @@ from plot_widgets.live_plot_napari_widget import live_plot
 from plot_scan_results import plot_scan_results
 from utils import (
     calculate_scale, 
-    MICRONS_PER_VOLT, 
     MAX_ZOOM_LEVEL, 
     BINWIDTH,
     save_tiff_with_imagej_metadata
