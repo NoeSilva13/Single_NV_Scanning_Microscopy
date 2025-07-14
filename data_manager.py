@@ -10,7 +10,7 @@ class DataManager:
         """
         pass
     
-    def save_scan_data(self, scan_data, scan_params=None):
+    def save_scan_data(self, scan_data, scan_params):
         """
         Save scan data to a CSV file in a daily folder.
         
@@ -58,33 +58,24 @@ class DataManager:
             measurement_time = time.strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"# Measurement Time: {measurement_time}\n")
             
-            # Write scale information if available
-            if scale_x is not None and scale_y is not None:
-                f.write(f"# Scale: {scale_x:.6f} × {scale_y:.6f} µm/pixel\n")
+            # Write scale information 
+            f.write(f"# Scale: {scale_x:.6f} x {scale_y:.6f} µm/pixel\n")
             
-            # Write scan parameters if provided
-            if scan_params:
-                # Write scan ranges
-                x_range = scan_params['scan_range']['x']
-                y_range = scan_params['scan_range']['y']
-                f.write(f"# X Range: {x_range[0]:.3f} to {x_range[1]:.3f} V\n")
-                f.write(f"# Y Range: {y_range[0]:.3f} to {y_range[1]:.3f} V\n")
+            # Write scan ranges
+            x_range = scan_params['scan_range']['x']
+            y_range = scan_params['scan_range']['y']
+            f.write(f"# X Range: {x_range[0]:.3f} to {x_range[1]:.3f} V\n")
+            f.write(f"# Y Range: {y_range[0]:.3f} to {y_range[1]:.3f} V\n")
                 
-                # Write resolutions
-                x_res = scan_params['resolution']['x']
-                y_res = scan_params['resolution']['y']
-                f.write(f"# X Resolution: {x_res} pixels\n")
-                f.write(f"# Y Resolution: {y_res} pixels\n")
+            # Write resolutions
+            x_res = scan_params['resolution']['x']
+            y_res = scan_params['resolution']['y']
+            f.write(f"# X Resolution: {x_res} pixels\n")
+            f.write(f"# Y Resolution: {y_res} pixels\n")
                 
-                # Write dwell time
-                dwell_time = scan_params['dwell_time']
-                f.write(f"# Dwell Time: {dwell_time:.3f} s\n")
-                
-                # Write full parameters as JSON for programmatic access
-                params_json_str = json.dumps(scan_params, ensure_ascii=False, indent=2)
-                f.write("# Full Scan Parameters (JSON):\n")
-                for line in params_json_str.splitlines():
-                    f.write(f"# {line}\n")
+            # Write dwell time
+            dwell_time = scan_params['dwell_time']
+            f.write(f"# Dwell Time: {dwell_time:.3f} s\n")
             
             # Write scan points information
             f.write(f"# X Points: {len(x_points)} points from {x_points[0]:.3f}V to {x_points[-1]:.3f}V\n")
