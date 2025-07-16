@@ -206,30 +206,6 @@ class SpectrometerMainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("CCD Camera Spectrometer")
         self.setGeometry(100, 100, 1400, 800)
-        
-        # Initialize components
-        self.camera_worker = CameraWorker()
-        self.spectrum_processor = SpectrumProcessor()
-        self.current_frame = None
-        self.is_recording = False
-        self.recorded_spectra = []
-        
-        # Setup UI
-        self.setup_ui()
-        self.setup_connections()
-        
-        # Status bar
-        self.status_bar = QStatusBar()
-        self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready")
-        
-        # Initialize camera
-        self.initialize_camera()
-    
-    def setup_ui(self):
-        """Setup the user interface"""
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #262930;
@@ -313,6 +289,30 @@ class SpectrometerMainWindow(QMainWindow):
                 background-color: #555555;
             }
         """)
+        # Initialize components
+        self.camera_worker = CameraWorker()
+        self.spectrum_processor = SpectrumProcessor()
+        self.current_frame = None
+        self.is_recording = False
+        self.recorded_spectra = []
+        
+        # Setup UI
+        self.setup_ui()
+        self.setup_connections()
+        
+        # Status bar
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+        self.status_bar.showMessage("Ready")
+        
+        # Initialize camera
+        self.initialize_camera()
+    
+    def setup_ui(self):
+        """Setup the user interface"""
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
         # Main layout
         main_layout = QHBoxLayout(central_widget)
         
