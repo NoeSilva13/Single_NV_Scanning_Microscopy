@@ -230,7 +230,89 @@ class SpectrometerMainWindow(QMainWindow):
         """Setup the user interface"""
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #262930;
+                color: #ffffff;
+            }
+            QWidget {
+                background-color: #262930;
+                color: #ffffff;
+            }
+            QPushButton {
+                background-color: #00d4aa;
+                color: #262930;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background-color: #00ffcc;
+            }
+            QPushButton:pressed {
+                background-color: #009980;
+            }
+            QPushButton:disabled {
+                background-color: #555555;
+                color: #999999;
+            }
+            QGroupBox {
+                color: #ffffff;
+                border: 2px solid #555555;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                font-weight: bold;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #00d4aa;
+            }
+            QLabel {
+                color: #ffffff;
+            }
+            QLineEdit {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 10pt;
+            }
+            QLineEdit:focus {
+                border: 2px solid #00d4aa;
+            }
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #00ff00;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 9pt;
+            }
+            QProgressBar {
+                border: 1px solid #555555;
+                border-radius: 4px;
+                background-color: #3c3c3c;
+                text-align: center;
+                color: #ffffff;
+            }
+            QProgressBar::chunk {
+                background-color: #00d4aa;
+                border-radius: 3px;
+            }
+            QScrollArea {
+                background-color: #262930;
+                border: none;
+            }
+            QSplitter::handle {
+                background-color: #555555;
+            }
+        """)
         # Main layout
         main_layout = QHBoxLayout(central_widget)
         
