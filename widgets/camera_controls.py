@@ -85,7 +85,7 @@ def camera_live(viewer, get_camera_type_func=None):
             # Start camera feed
             if not hasattr(_camera_live, 'camera_layer') or _camera_live.camera_layer not in viewer.layers:
                 # Connect to camera
-                if not _camera_live.camera.connect(camera_index=0, width=1920, height=1080):  # Set desired resolution
+                if not _camera_live.camera.connect(camera_index=0, width=1024, height=1024):  # Set desired resolution
                     show_info("❌ Failed to connect to camera")
                     return
                 
@@ -125,7 +125,7 @@ def camera_live(viewer, get_camera_type_func=None):
                 )
             else:
                 # Reuse existing layer but reconnect camera
-                if not _camera_live.camera.connect(camera_index=0, width=1920, height=1080):
+                if not _camera_live.camera.connect(camera_index=0, width=1024, height=1024):
                     show_info("❌ Failed to connect to camera")
                     return
                 
@@ -206,7 +206,7 @@ def capture_shot(viewer, settings_callback=None, get_camera_type_func=None):
             
             # Connect to camera if not already connected
             if not _capture_shot.camera.is_connected:
-                if not _capture_shot.camera.connect(camera_index=0, width=1920, height=1080):
+                if not _capture_shot.camera.connect(camera_index=0, width=1024, height=1024):
                     show_info("❌ Failed to connect to camera")
                     return
                 
