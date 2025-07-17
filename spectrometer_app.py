@@ -846,8 +846,11 @@ class SpectrometerMainWindow(QMainWindow):
     def _pause_camera_for_roi(self):
         """Pause camera during ROI operations for better performance"""
         try:
-            # Avoid double-pausing
-            if hasattr(self, '_camera_was_streaming') and hasattr(self, '_roi_pause_active'):
+            # Avoid double-pausing - check if flags exist AND are True
+            if (hasattr(self, '_camera_was_streaming') and 
+                hasattr(self, '_roi_pause_active') and 
+                self._camera_was_streaming and 
+                self._roi_pause_active):
                 return  # Already paused
                 
             # Check if camera worker thread is running (same approach as stop_camera button)
@@ -918,6 +921,12 @@ class SpectrometerMainWindow(QMainWindow):
             print(f"=== ROI BUTTON CLICKED ===")
             print(f"ROI button checked: {self.camera_view.ui.roiBtn.isChecked()}")
             
+            # Debug state information
+            if hasattr(self, '_camera_was_streaming'):
+                print(f"_camera_was_streaming: {self._camera_was_streaming}")
+            if hasattr(self, '_roi_pause_active'):
+                print(f"_roi_pause_active: {self._roi_pause_active}")
+            
             # Check if ROI is being enabled or disabled
             if self.camera_view.ui.roiBtn.isChecked():
                 print("ROI being enabled - initializing...")
@@ -977,9 +986,11 @@ class SpectrometerMainWindow(QMainWindow):
                 # Update spectrum processor
                 self.spectrum_processor.set_roi(start_y, height)
                 
-                # Close ROI view by unchecking the ROI button
+                # Close ROI view by unchecking the ROI button (temporarily disconnect to avoid double-resume)
                 print("Closing ROI view...")
+                self.camera_view.ui.roiBtn.clicked.disconnect(self._handle_roi_button_click)
                 self.camera_view.ui.roiBtn.setChecked(False)
+                self.camera_view.ui.roiBtn.clicked.connect(self._handle_roi_button_click)
                 
                 # Resume camera after applying ROI
                 self._resume_camera_from_roi()
@@ -988,13 +999,17 @@ class SpectrometerMainWindow(QMainWindow):
             else:
                 self.status_bar.showMessage("No visual ROI active or no camera frame available")
                 # Close ROI view and resume camera even if ROI application failed
+                self.camera_view.ui.roiBtn.clicked.disconnect(self._handle_roi_button_click)
                 self.camera_view.ui.roiBtn.setChecked(False)
+                self.camera_view.ui.roiBtn.clicked.connect(self._handle_roi_button_click)
                 self._resume_camera_from_roi()
         except Exception as e:
             print(f"Apply visual ROI error: {e}")
             self.status_bar.showMessage("Error applying visual ROI - using manual controls")
             # Close ROI view and resume camera on error
+            self.camera_view.ui.roiBtn.clicked.disconnect(self._handle_roi_button_click)
             self.camera_view.ui.roiBtn.setChecked(False)
+            self.camera_view.ui.roiBtn.clicked.connect(self._handle_roi_button_click)
             self._resume_camera_from_roi()
     
     def _test_pause_resume(self):
