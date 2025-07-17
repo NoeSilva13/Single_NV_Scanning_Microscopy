@@ -430,19 +430,7 @@ class SpectrometerMainWindow(QMainWindow):
         
         left_layout.addWidget(cal_group)
         
-        # Reference controls
-        ref_group = QGroupBox("Reference & Dark")
-        ref_layout = QHBoxLayout(ref_group)
-        
-        self.capture_dark_button = QPushButton("Capture Dark")
-        self.capture_reference_button = QPushButton("Capture Reference")
-        self.clear_corrections_button = QPushButton("Clear Corrections")
-        
-        ref_layout.addWidget(self.capture_dark_button)
-        ref_layout.addWidget(self.capture_reference_button)
-        ref_layout.addWidget(self.clear_corrections_button)
-        
-        left_layout.addWidget(ref_group)
+
         
         # Right panel - Spectrum display
         right_widget = QWidget()
@@ -493,10 +481,7 @@ class SpectrometerMainWindow(QMainWindow):
         self.roi_start_spinbox.valueChanged.connect(self.update_roi)
         self.roi_height_spinbox.valueChanged.connect(self.update_roi)
         
-        # Reference controls
-        self.capture_dark_button.clicked.connect(self.capture_dark_frame)
-        self.capture_reference_button.clicked.connect(self.capture_reference_frame)
-        self.clear_corrections_button.clicked.connect(self.clear_corrections)
+
         
         # Recording controls
         self.record_button.clicked.connect(self.toggle_recording)
@@ -586,24 +571,7 @@ class SpectrometerMainWindow(QMainWindow):
         self.spectrum_plot.setLabel('bottom', 'Wavelength (nm)')
         self.status_bar.showMessage(f"Wavelength calibration applied: {start_wl}-{end_wl} nm")
     
-    def capture_dark_frame(self):
-        """Capture dark frame"""
-        if self.current_frame is not None:
-            self.spectrum_processor.set_dark_frame(self.current_frame)
-            self.status_bar.showMessage("Dark frame captured")
-    
-    def capture_reference_frame(self):
-        """Capture reference frame"""
-        if self.current_frame is not None:
-            self.spectrum_processor.set_reference_frame(self.current_frame)
-            self.status_bar.showMessage("Reference frame captured")
-    
-    def clear_corrections(self):
-        """Clear dark and reference corrections"""
-        self.spectrum_processor.dark_frame = None
-        self.spectrum_processor.reference_frame = None
-        self.status_bar.showMessage("Corrections cleared")
-    
+
     def toggle_recording(self):
         """Toggle spectrum recording"""
         if self.is_recording:
