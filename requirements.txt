@@ -1,15 +1,6 @@
-numpy>=1.21
-matplotlib>=3.4
-pandas>=1.3
-nidaqmx>=0.6
-pyvisa>=1.11
-napari[all]>=0.4.18
-PyQt5>=5.15
-magicgui>=0.7
-qtpy>=2.4
-opencv-python>=4.7
-scikit-image>=0.19
-tifffile>=2023.7.10
-# Optional / vendor-specific (install separately)
-# TimeTagger (https://www.swabianinstruments.com/time-tagger/downloads/)
-# PulseStreamer (https://www.swabianinstruments.com/pulse-streamer/downloads/) 
+PyQt5>=5.15.0
+pyqtgraph>=0.12.0
+numpy>=1.21.0
+opencv-python>=4.5.0
+matplotlib>=3.5.0
+ctypes-callable>=1.0.0 

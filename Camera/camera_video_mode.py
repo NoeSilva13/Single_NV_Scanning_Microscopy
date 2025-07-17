@@ -183,6 +183,13 @@ class POACameraController:
         Returns:
             int: Current exposure time in microseconds
         """
+        if self.is_connected and self.camera_id is not None:
+            try:
+                error, actual_exposure, auto = pyPOACamera.GetExp(self.camera_id)
+                if error == pyPOACamera.POAErrors.POA_OK:
+                    return actual_exposure
+            except Exception as e:
+                print(f"Error getting actual exposure: {e}")
         return self.exposure
     
     def set_gain(self, gain: int) -> bool:
@@ -208,6 +215,13 @@ class POACameraController:
         Returns:
             int: Current gain value
         """
+        if self.is_connected and self.camera_id is not None:
+            try:
+                error, actual_gain, auto = pyPOACamera.GetGain(self.camera_id)
+                if error == pyPOACamera.POAErrors.POA_OK:
+                    return actual_gain
+            except Exception as e:
+                print(f"Error getting actual gain: {e}")
         return self.gain
     
     def get_image_dimensions(self) -> Tuple[int, int]:
