@@ -511,6 +511,47 @@ class SpectrometerMainWindow(QMainWindow):
         self.save_button.clicked.connect(self.save_spectrum)
         self.clear_button.clicked.connect(self.clear_spectrum)
     
+    def sync_gui_with_camera_values(self):
+        """Synchronize GUI controls with actual camera values"""
+        try:
+            # Wait a moment for camera to be ready
+            import time
+            time.sleep(0.1)
+            
+            info = self.camera_worker.get_camera_info()
+            if info:
+                # Get actual camera values
+                actual_exposure_us = info.get('exposure', 50000)
+                actual_gain = info.get('gain', 300)
+                
+                # Convert exposure from microseconds to milliseconds
+                actual_exposure_ms = actual_exposure_us / 1000.0
+                
+                # Only update GUI if values are different from current GUI values
+                current_exposure_ms = self.exposure_spinbox.value()
+                current_gain = self.gain_spinbox.value()
+                
+                if abs(current_exposure_ms - actual_exposure_ms) > 0.1 or current_gain != actual_gain:
+                    # Temporarily disconnect signals to avoid triggering camera updates
+                    self.exposure_spinbox.valueChanged.disconnect()
+                    self.gain_spinbox.valueChanged.disconnect()
+                    
+                    # Update GUI with actual values
+                    self.exposure_spinbox.setValue(actual_exposure_ms)
+                    self.gain_spinbox.setValue(actual_gain)
+                    
+                    # Reconnect signals
+                    self.exposure_spinbox.valueChanged.connect(self.update_exposure)
+                    self.gain_spinbox.valueChanged.connect(self.update_gain)
+                    
+                    print(f"GUI updated with actual camera values - Exposure: {actual_exposure_ms:.1f}ms, Gain: {actual_gain}")
+                
+                # Update status to show actual values
+                self.status_bar.showMessage(f"Camera ready - Exposure: {actual_exposure_ms:.1f}ms, Gain: {actual_gain}")
+                
+        except Exception as e:
+            print(f"Error syncing GUI with camera values: {e}")
+    
     def initialize_camera(self):
         """Initialize camera connection"""
         self.status_bar.showMessage("Initializing camera...")
@@ -519,6 +560,9 @@ class SpectrometerMainWindow(QMainWindow):
         if self.camera_worker.initialize_camera():
             info = self.camera_worker.get_camera_info()
             self.status_bar.showMessage(f"Camera ready: {info.get('model', 'Unknown')} - {info.get('width', 0)}x{info.get('height', 0)}")
+            
+            # Sync GUI with actual camera values
+            self.sync_gui_with_camera_values()
             
             # Set initial ROI
             self.update_roi()
@@ -533,6 +577,10 @@ class SpectrometerMainWindow(QMainWindow):
         self.camera_worker.start_streaming()
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
+        
+        # Sync GUI with actual camera values after streaming starts
+        self.sync_gui_with_camera_values()
+        
         self.status_bar.showMessage("Camera streaming started")
     
     def stop_camera(self):
