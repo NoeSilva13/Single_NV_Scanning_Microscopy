@@ -617,7 +617,7 @@ class SpectrometerMainWindow(QMainWindow):
         
         # Update spectrum plot
         self.spectrum_plot.clear()
-        self.spectrum_plot.plot(wavelengths, intensities, pen='w')
+        self.spectrum_plot.plot(wavelengths, intensities, pen='#00d4aa', width=2)
         
         # If recording, save spectrum
         if self.is_recording:
