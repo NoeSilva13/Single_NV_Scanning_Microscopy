@@ -375,6 +375,10 @@ class SpectrometerMainWindow(QMainWindow):
             roi_layout.addWidget(self.apply_visual_roi_button, 3, 0, 1, 1)
         if hasattr(self, 'reset_visual_roi_button'):
             roi_layout.addWidget(self.reset_visual_roi_button, 3, 1, 1, 1)
+        if hasattr(self, 'resume_camera_button'):
+            roi_layout.addWidget(self.resume_camera_button, 4, 0, 1, 1)
+        if hasattr(self, 'test_pause_button'):
+            roi_layout.addWidget(self.test_pause_button, 4, 1, 1, 1)
         
         left_layout.addWidget(roi_group)
         
@@ -670,7 +674,7 @@ class SpectrometerMainWindow(QMainWindow):
             self.camera_view.ui.roiBtn.setToolTip("Click to enable visual ROI selection on camera image")
             
             # Connect ROI button to our initialization
-            self.camera_view.ui.roiBtn.clicked.connect(self.initialize_visual_roi)
+            self.camera_view.ui.roiBtn.clicked.connect(self._handle_roi_button_click)
             
             # Create the apply button
             self.apply_visual_roi_button = QPushButton("Apply Visual ROI")
@@ -682,6 +686,16 @@ class SpectrometerMainWindow(QMainWindow):
             self.reset_visual_roi_button.setToolTip("Reset and reinitialize the visual ROI rectangle")
             self.reset_visual_roi_button.clicked.connect(self.reset_visual_roi)
             
+            # Create resume camera button
+            self.resume_camera_button = QPushButton("Resume Camera")
+            self.resume_camera_button.setToolTip("Manually resume camera if paused during ROI operations")
+            self.resume_camera_button.clicked.connect(self._resume_camera_from_roi)
+            
+            # Create test pause button for debugging
+            self.test_pause_button = QPushButton("Test Pause/Resume")
+            self.test_pause_button.setToolTip("Test the camera pause/resume mechanism")
+            self.test_pause_button.clicked.connect(self._test_pause_resume)
+            
 
             
         except Exception as e:
@@ -691,11 +705,18 @@ class SpectrometerMainWindow(QMainWindow):
             self.apply_visual_roi_button.setEnabled(False)
             self.reset_visual_roi_button = QPushButton("Reset ROI")
             self.reset_visual_roi_button.setEnabled(False)
+            self.resume_camera_button = QPushButton("Resume Camera")
+            self.resume_camera_button.setEnabled(False)
+            self.test_pause_button = QPushButton("Test Pause/Resume")
+            self.test_pause_button.setEnabled(False)
             self.status_bar.showMessage("ROI setup failed - using manual controls only")
     
     def initialize_visual_roi(self):
         """Initialize the visual ROI with proper size and position"""
         try:
+            # Pause camera during ROI operations for better performance
+            self._pause_camera_for_roi()
+            
             # Give PyQtGraph time to create the ROI
             from PyQt5.QtCore import QTimer
             QTimer.singleShot(100, self._setup_roi_rectangle)
@@ -744,14 +765,18 @@ class SpectrometerMainWindow(QMainWindow):
                 # Make sure it's visible
                 roi_item.show()
                 
-                self.status_bar.showMessage(f"Visual ROI initialized: drag to move, resize with corners (be gentle!)")
+                self.status_bar.showMessage(f"Visual ROI initialized: drag to move, resize with corners. Camera paused for performance.")
                 
             else:
                 self.status_bar.showMessage("ROI not available yet - please try again")
+                # Resume camera if ROI setup failed
+                self._resume_camera_from_roi()
                 
         except Exception as e:
             print(f"Setup ROI rectangle error: {e}")
             self.status_bar.showMessage("Error setting up ROI rectangle")
+            # Resume camera on error
+            self._resume_camera_from_roi()
     
     def _optimize_roi_performance(self, roi_item):
         """Optimize ROI for better performance during resize operations"""
@@ -818,17 +843,113 @@ class SpectrometerMainWindow(QMainWindow):
         except Exception as e:
             print(f"ROI resize finished error: {e}")
     
+    def _pause_camera_for_roi(self):
+        """Pause camera during ROI operations for better performance"""
+        try:
+            # Avoid double-pausing
+            if hasattr(self, '_camera_was_streaming') and hasattr(self, '_roi_pause_active'):
+                return  # Already paused
+                
+            # Check if camera worker thread is running (same approach as stop_camera button)
+            is_camera_running = (self.camera_worker.isRunning() and 
+                               self.camera_worker.camera.is_connected and 
+                               hasattr(self, 'current_frame') and 
+                               self.current_frame is not None)
+            
+            # Remember current state
+            self._camera_was_streaming = is_camera_running
+            self._roi_pause_active = True
+            
+            if self._camera_was_streaming:
+                print("Pausing camera for ROI operations...")
+                # Use exact same approach as stop_camera button
+                self.camera_worker.stop_streaming()
+                self.status_bar.showMessage("Camera paused for ROI operations...")
+                
+                # Update button states (same as stop_camera)
+                self.start_button.setEnabled(True)
+                self.stop_button.setEnabled(False)
+            else:
+                print("Camera was not running, no need to pause")
+                self.status_bar.showMessage("Camera already stopped - ROI ready")
+                
+        except Exception as e:
+            print(f"Pause camera error: {e}")
+            self._camera_was_streaming = False
+            self._roi_pause_active = False
+    
+    def _resume_camera_from_roi(self):
+        """Resume camera after ROI operations are complete"""
+        try:
+            # Only resume if camera was streaming before we paused it
+            if (hasattr(self, '_camera_was_streaming') and 
+                hasattr(self, '_roi_pause_active') and 
+                self._camera_was_streaming and 
+                self._roi_pause_active):
+                
+                if self.camera_worker.camera.is_connected:
+                    print("Resuming camera after ROI operations...")
+                    # Use exact same approach as start_camera button
+                    self.camera_worker.start_streaming()
+                    self.status_bar.showMessage("Camera resumed after ROI operations")
+                    
+                    # Update button states (same as start_camera)
+                    self.start_button.setEnabled(False)
+                    self.stop_button.setEnabled(True)
+                else:
+                    self.status_bar.showMessage("Camera not connected - cannot resume")
+                
+            else:
+                print("Camera was not paused or was not streaming before")
+                self.status_bar.showMessage("Camera state unchanged")
+                
+            # Reset the flags
+            self._camera_was_streaming = False
+            self._roi_pause_active = False
+                
+        except Exception as e:
+            print(f"Resume camera error: {e}")
+            self._camera_was_streaming = False
+            self._roi_pause_active = False
+    
+    def _handle_roi_button_click(self):
+        """Handle ROI button clicks (both enable and disable)"""
+        try:
+            print(f"=== ROI BUTTON CLICKED ===")
+            print(f"ROI button checked: {self.camera_view.ui.roiBtn.isChecked()}")
+            
+            # Check if ROI is being enabled or disabled
+            if self.camera_view.ui.roiBtn.isChecked():
+                print("ROI being enabled - initializing...")
+                # ROI is being enabled - initialize it
+                self.initialize_visual_roi()
+            else:
+                print("ROI being disabled - resuming camera...")
+                # ROI is being disabled - resume camera
+                self._resume_camera_from_roi()
+                self.status_bar.showMessage("ROI disabled - camera resumed")
+                
+        except Exception as e:
+            print(f"Handle ROI button click error: {e}")
+            self.status_bar.showMessage("Error handling ROI button")
+            # Try to resume camera on error
+            self._resume_camera_from_roi()
+    
     def reset_visual_roi(self):
         """Reset and reinitialize the visual ROI"""
         try:
             # If ROI is active, reinitialize it
             if hasattr(self.camera_view, 'roi') and self.camera_view.roi is not None:
+                # Pause camera for reset operation
+                self._pause_camera_for_roi()
                 self._setup_roi_rectangle()
             else:
                 self.status_bar.showMessage("ROI not active - click ROI button first")
         except Exception as e:
             print(f"Reset visual ROI error: {e}")
             self.status_bar.showMessage("Error resetting visual ROI")
+            # Resume camera on error
+            self._resume_camera_from_roi()
     
 
     
@@ -856,12 +977,55 @@ class SpectrometerMainWindow(QMainWindow):
                 # Update spectrum processor
                 self.spectrum_processor.set_roi(start_y, height)
                 
-                self.status_bar.showMessage(f"Visual ROI applied: Y={start_y}, Height={height}")
+                # Resume camera after applying ROI
+                self._resume_camera_from_roi()
+                
+                self.status_bar.showMessage(f"Visual ROI applied: Y={start_y}, Height={height}. Camera resumed.")
             else:
                 self.status_bar.showMessage("No visual ROI active or no camera frame available")
+                # Resume camera even if ROI application failed
+                self._resume_camera_from_roi()
         except Exception as e:
             print(f"Apply visual ROI error: {e}")
             self.status_bar.showMessage("Error applying visual ROI - using manual controls")
+            # Resume camera on error
+            self._resume_camera_from_roi()
+    
+    def _test_pause_resume(self):
+        """Test function to manually test pause/resume mechanism"""
+        try:
+            print("=== TESTING PAUSE/RESUME MECHANISM ===")
+            print(f"Camera worker connected: {self.camera_worker.camera.is_connected}")
+            print(f"Camera worker isRunning(): {self.camera_worker.isRunning()}")
+            print(f"Has current_frame: {hasattr(self, 'current_frame') and self.current_frame is not None}")
+            print(f"Start button enabled: {self.start_button.isEnabled()}")
+            print(f"Stop button enabled: {self.stop_button.isEnabled()}")
+            
+            if hasattr(self, '_camera_was_streaming'):
+                print(f"_camera_was_streaming: {self._camera_was_streaming}")
+            if hasattr(self, '_roi_pause_active'):
+                print(f"_roi_pause_active: {self._roi_pause_active}")
+            
+            # Test the pause mechanism
+            self.status_bar.showMessage("Testing pause mechanism...")
+            self._pause_camera_for_roi()
+            
+            # Wait 2 seconds then resume
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(2000, self._test_resume_part)
+            
+        except Exception as e:
+            print(f"Test pause/resume error: {e}")
+            self.status_bar.showMessage("Test failed - check console for details")
+    
+    def _test_resume_part(self):
+        """Second part of the test - resume the camera"""
+        try:
+            self.status_bar.showMessage("Testing resume mechanism...")
+            self._resume_camera_from_roi()
+            print("=== TEST COMPLETE ===")
+        except Exception as e:
+            print(f"Test resume error: {e}")
     
     def update_roi(self):
         """Update ROI settings"""
