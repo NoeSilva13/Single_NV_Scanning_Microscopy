@@ -977,18 +977,24 @@ class SpectrometerMainWindow(QMainWindow):
                 # Update spectrum processor
                 self.spectrum_processor.set_roi(start_y, height)
                 
+                # Close ROI view by unchecking the ROI button
+                print("Closing ROI view...")
+                self.camera_view.ui.roiBtn.setChecked(False)
+                
                 # Resume camera after applying ROI
                 self._resume_camera_from_roi()
                 
-                self.status_bar.showMessage(f"Visual ROI applied: Y={start_y}, Height={height}. Camera resumed.")
+                self.status_bar.showMessage(f"Visual ROI applied: Y={start_y}, Height={height}. ROI closed, camera resumed.")
             else:
                 self.status_bar.showMessage("No visual ROI active or no camera frame available")
-                # Resume camera even if ROI application failed
+                # Close ROI view and resume camera even if ROI application failed
+                self.camera_view.ui.roiBtn.setChecked(False)
                 self._resume_camera_from_roi()
         except Exception as e:
             print(f"Apply visual ROI error: {e}")
             self.status_bar.showMessage("Error applying visual ROI - using manual controls")
-            # Resume camera on error
+            # Close ROI view and resume camera on error
+            self.camera_view.ui.roiBtn.setChecked(False)
             self._resume_camera_from_roi()
     
     def _test_pause_resume(self):
