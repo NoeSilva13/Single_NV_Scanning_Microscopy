@@ -353,7 +353,7 @@ class SpectrometerMainWindow(QMainWindow):
         roi_layout = QGridLayout(roi_group)
         
         # Add instruction label
-        instruction_label = QLabel("1. Start camera first\n2. Click ROI button in camera view\n3. Drag rectangle over spectral line\n4. Click 'Apply Visual ROI' button\n\nNote: Use 'Simple ROI' for better performance if resizing is slow")
+        instruction_label = QLabel("1. Start camera first\n2. Click ROI button in camera view\n3. Drag rectangle over spectral line\n4. Click 'Apply Visual ROI' button")
         instruction_label.setWordWrap(True)
         instruction_label.setStyleSheet("color: #00d4aa; font-size: 9pt; font-style: italic;")
         roi_layout.addWidget(instruction_label, 0, 0, 1, 2)
@@ -375,8 +375,6 @@ class SpectrometerMainWindow(QMainWindow):
             roi_layout.addWidget(self.apply_visual_roi_button, 3, 0, 1, 1)
         if hasattr(self, 'reset_visual_roi_button'):
             roi_layout.addWidget(self.reset_visual_roi_button, 3, 1, 1, 1)
-        if hasattr(self, 'simple_roi_button'):
-            roi_layout.addWidget(self.simple_roi_button, 4, 0, 1, 2)
         
         left_layout.addWidget(roi_group)
         
@@ -684,10 +682,7 @@ class SpectrometerMainWindow(QMainWindow):
             self.reset_visual_roi_button.setToolTip("Reset and reinitialize the visual ROI rectangle")
             self.reset_visual_roi_button.clicked.connect(self.reset_visual_roi)
             
-            # Create simple ROI button (alternative)
-            self.simple_roi_button = QPushButton("Simple ROI")
-            self.simple_roi_button.setToolTip("Create a simple ROI without resize handles (better performance)")
-            self.simple_roi_button.clicked.connect(self.create_simple_roi)
+
             
         except Exception as e:
             print(f"ROI setup error: {e}")
@@ -696,8 +691,6 @@ class SpectrometerMainWindow(QMainWindow):
             self.apply_visual_roi_button.setEnabled(False)
             self.reset_visual_roi_button = QPushButton("Reset ROI")
             self.reset_visual_roi_button.setEnabled(False)
-            self.simple_roi_button = QPushButton("Simple ROI")
-            self.simple_roi_button.setEnabled(False)
             self.status_bar.showMessage("ROI setup failed - using manual controls only")
     
     def initialize_visual_roi(self):
@@ -837,61 +830,7 @@ class SpectrometerMainWindow(QMainWindow):
             print(f"Reset visual ROI error: {e}")
             self.status_bar.showMessage("Error resetting visual ROI")
     
-    def create_simple_roi(self):
-        """Create a simple ROI without resize handles for better performance"""
-        try:
-            # First enable ROI if not already enabled
-            if not self.camera_view.ui.roiBtn.isChecked():
-                self.camera_view.ui.roiBtn.click()
-            
-            # Wait a moment for ROI to be created
-            from PyQt5.QtCore import QTimer
-            QTimer.singleShot(150, self._setup_simple_roi)
-            
-        except Exception as e:
-            print(f"Create simple ROI error: {e}")
-            self.status_bar.showMessage("Error creating simple ROI")
-    
-    def _setup_simple_roi(self):
-        """Setup a simple ROI with limited functionality"""
-        try:
-            roi_item = self.camera_view.roi
-            if roi_item is not None:
-                # Get current settings
-                start_y = self.roi_start_spinbox.value()
-                height = self.roi_height_spinbox.value()
-                
-                # Get image dimensions
-                if self.current_frame is not None:
-                    if len(self.current_frame.shape) == 3:
-                        img_height, img_width = self.current_frame.shape[:2]
-                    else:
-                        img_height, img_width = self.current_frame.shape
-                else:
-                    img_width, img_height = 1920, 1080
-                
-                # Set up simple ROI
-                roi_item.setPos([0, start_y])
-                roi_item.setSize([img_width, height])
-                
-                # Disable resize handles to prevent performance issues
-                if hasattr(roi_item, 'setResizable'):
-                    roi_item.setResizable(False)
-                
-                # Make it only movable, not resizable
-                if hasattr(roi_item, 'setMovable'):
-                    roi_item.setMovable(True)
-                
-                roi_item.show()
-                
-                self.status_bar.showMessage("Simple ROI created - drag to move (no resize). Use spinboxes to adjust height.")
-                
-            else:
-                self.status_bar.showMessage("ROI not available - please try again")
-                
-        except Exception as e:
-            print(f"Setup simple ROI error: {e}")
-            self.status_bar.showMessage("Error setting up simple ROI")
+
     
     def apply_visual_roi(self):
         """Apply the current visual ROI selection to our spectrum processing"""
