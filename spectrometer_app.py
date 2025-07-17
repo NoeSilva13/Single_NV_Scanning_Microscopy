@@ -262,6 +262,17 @@ class SpectrometerMainWindow(QMainWindow):
             QLineEdit:focus {
                 border: 2px solid #00d4aa;
             }
+            QSpinBox, QDoubleSpinBox {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 10pt;
+            }
+            QSpinBox:focus, QDoubleSpinBox:focus {
+                border: 2px solid #00d4aa;
+            }
             QTextEdit {
                 background-color: #1e1e1e;
                 color: #00ff00;
@@ -303,7 +314,7 @@ class SpectrometerMainWindow(QMainWindow):
         # Status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        self.status_bar.showMessage("Ready")
+        self.status_bar.showMessage("Ready - Start camera, then use ROI button in camera view to select spectrum region")
         
         # Initialize camera
         self.initialize_camera()
@@ -329,21 +340,36 @@ class SpectrometerMainWindow(QMainWindow):
         self.camera_view.setMinimumSize(400, 300)
         left_layout.addWidget(self.camera_view)
         
+        # Setup ROI button with simpler implementation
+        self.setup_roi_button()
+        
         # ROI controls
         roi_group = QGroupBox("ROI Settings")
         roi_layout = QGridLayout(roi_group)
         
-        roi_layout.addWidget(QLabel("Start Y:"), 0, 0)
+        # Add instruction label
+        instruction_label = QLabel("1. Start camera first\n2. Click ROI button in camera view\n3. Drag the rectangle over spectral line\n4. Click 'Apply Visual ROI' button")
+        instruction_label.setWordWrap(True)
+        instruction_label.setStyleSheet("color: #00d4aa; font-size: 9pt; font-style: italic;")
+        roi_layout.addWidget(instruction_label, 0, 0, 1, 2)
+        
+        roi_layout.addWidget(QLabel("Start Y:"), 1, 0)
         self.roi_start_spinbox = QSpinBox()
         self.roi_start_spinbox.setRange(0, 1080)
         self.roi_start_spinbox.setValue(500)
-        roi_layout.addWidget(self.roi_start_spinbox, 0, 1)
+        roi_layout.addWidget(self.roi_start_spinbox, 1, 1)
         
-        roi_layout.addWidget(QLabel("Height:"), 1, 0)
+        roi_layout.addWidget(QLabel("Height:"), 2, 0)
         self.roi_height_spinbox = QSpinBox()
         self.roi_height_spinbox.setRange(1, 500)
         self.roi_height_spinbox.setValue(50)
-        roi_layout.addWidget(self.roi_height_spinbox, 1, 1)
+        roi_layout.addWidget(self.roi_height_spinbox, 2, 1)
+        
+        # Add the ROI buttons after they're created
+        if hasattr(self, 'apply_visual_roi_button'):
+            roi_layout.addWidget(self.apply_visual_roi_button, 3, 0, 1, 1)
+        if hasattr(self, 'reset_visual_roi_button'):
+            roi_layout.addWidget(self.reset_visual_roi_button, 3, 1, 1, 1)
         
         left_layout.addWidget(roi_group)
         
@@ -537,11 +563,7 @@ class SpectrometerMainWindow(QMainWindow):
         """Update camera gain"""
         self.camera_worker.set_gain(value)
     
-    def update_roi(self):
-        """Update ROI settings"""
-        start_y = self.roi_start_spinbox.value()
-        height = self.roi_height_spinbox.value()
-        self.spectrum_processor.set_roi(start_y, height)
+
     
     def apply_wavelength_calibration(self):
         """Apply wavelength calibration"""
@@ -635,6 +657,138 @@ class SpectrometerMainWindow(QMainWindow):
         self.recorded_spectra = []
         self.status_bar.showMessage("Spectrum cleared")
     
+    def setup_roi_button(self):
+        """Setup ROI button with simplified functionality"""
+        try:
+            # Enable ROI functionality but don't auto-sync
+            self.camera_view.ui.roiBtn.setEnabled(True)
+            self.camera_view.ui.roiBtn.setToolTip("Click to enable visual ROI selection on camera image")
+            
+            # Connect ROI button to our initialization
+            self.camera_view.ui.roiBtn.clicked.connect(self.initialize_visual_roi)
+            
+            # Create the apply button
+            self.apply_visual_roi_button = QPushButton("Apply Visual ROI")
+            self.apply_visual_roi_button.setToolTip("Apply the visual ROI selection to spectrum processing")
+            self.apply_visual_roi_button.clicked.connect(self.apply_visual_roi)
+            
+            # Create reset button
+            self.reset_visual_roi_button = QPushButton("Reset ROI")
+            self.reset_visual_roi_button.setToolTip("Reset and reinitialize the visual ROI rectangle")
+            self.reset_visual_roi_button.clicked.connect(self.reset_visual_roi)
+            
+        except Exception as e:
+            print(f"ROI setup error: {e}")
+            # Create disabled buttons as fallback
+            self.apply_visual_roi_button = QPushButton("Visual ROI Unavailable")
+            self.apply_visual_roi_button.setEnabled(False)
+            self.reset_visual_roi_button = QPushButton("Reset ROI")
+            self.reset_visual_roi_button.setEnabled(False)
+            self.status_bar.showMessage("ROI setup failed - using manual controls only")
+    
+    def initialize_visual_roi(self):
+        """Initialize the visual ROI with proper size and position"""
+        try:
+            # Give PyQtGraph time to create the ROI
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(100, self._setup_roi_rectangle)
+            
+        except Exception as e:
+            print(f"Initialize visual ROI error: {e}")
+            self.status_bar.showMessage("Error initializing visual ROI")
+    
+    def _setup_roi_rectangle(self):
+        """Setup the ROI rectangle with proper dimensions"""
+        try:
+            roi_item = self.camera_view.roi
+            if roi_item is not None:
+                # Get current ROI settings or use defaults
+                start_y = self.roi_start_spinbox.value()
+                height = self.roi_height_spinbox.value()
+                
+                # Get image dimensions for proper sizing
+                if self.current_frame is not None:
+                    if len(self.current_frame.shape) == 3:
+                        img_height, img_width = self.current_frame.shape[:2]
+                    else:
+                        img_height, img_width = self.current_frame.shape
+                else:
+                    # Use defaults if no frame available
+                    img_width, img_height = 1920, 1080
+                
+                # Set ROI to span full width and specified height
+                roi_width = img_width
+                roi_height = height
+                
+                # Position the ROI
+                roi_x = 0
+                roi_y = start_y
+                
+                # Set the ROI rectangle
+                roi_item.setPos([roi_x, roi_y])
+                roi_item.setSize([roi_width, roi_height])
+                
+                # Make sure it's visible
+                roi_item.show()
+                
+                self.status_bar.showMessage(f"Visual ROI initialized: drag to adjust position and size")
+                
+            else:
+                self.status_bar.showMessage("ROI not available yet - please try again")
+                
+        except Exception as e:
+            print(f"Setup ROI rectangle error: {e}")
+            self.status_bar.showMessage("Error setting up ROI rectangle")
+    
+    def reset_visual_roi(self):
+        """Reset and reinitialize the visual ROI"""
+        try:
+            # If ROI is active, reinitialize it
+            if hasattr(self.camera_view, 'roi') and self.camera_view.roi is not None:
+                self._setup_roi_rectangle()
+            else:
+                self.status_bar.showMessage("ROI not active - click ROI button first")
+        except Exception as e:
+            print(f"Reset visual ROI error: {e}")
+            self.status_bar.showMessage("Error resetting visual ROI")
+    
+    def apply_visual_roi(self):
+        """Apply the current visual ROI selection to our spectrum processing"""
+        try:
+            roi_item = self.camera_view.roi
+            if roi_item is not None and self.current_frame is not None:
+                # Get ROI position and size
+                pos = roi_item.pos()
+                size = roi_item.size()
+                
+                # Extract Y position and height (roi uses [x, y] format)
+                start_y = int(pos[1])
+                height = int(size[1])
+                
+                # Clamp values to valid ranges
+                start_y = max(0, min(start_y, 1079))
+                height = max(1, min(height, 1080 - start_y))
+                
+                # Update our controls
+                self.roi_start_spinbox.setValue(start_y)
+                self.roi_height_spinbox.setValue(height)
+                
+                # Update spectrum processor
+                self.spectrum_processor.set_roi(start_y, height)
+                
+                self.status_bar.showMessage(f"Visual ROI applied: Y={start_y}, Height={height}")
+            else:
+                self.status_bar.showMessage("No visual ROI active or no camera frame available")
+        except Exception as e:
+            print(f"Apply visual ROI error: {e}")
+            self.status_bar.showMessage("Error applying visual ROI - using manual controls")
+    
+    def update_roi(self):
+        """Update ROI settings"""
+        start_y = self.roi_start_spinbox.value()
+        height = self.roi_height_spinbox.value()
+        self.spectrum_processor.set_roi(start_y, height)
+    
     def closeEvent(self, event):
         """Handle application close"""
         self.camera_worker.cleanup()
@@ -644,39 +798,8 @@ class SpectrometerMainWindow(QMainWindow):
 def main():
     """Main application entry point"""
     app = QApplication(sys.argv)
-    app.setStyleSheet("""
-        QMainWindow {
-            background-color: #2b2b2b;
-        }
-        QGroupBox {
-            font-weight: bold;
-            border: 2px solid #555;
-            border-radius: 5px;
-            margin-top: 1ex;
-            padding-top: 10px;
-        }
-        QGroupBox::title {
-            subcontrol-origin: margin;
-            left: 10px;
-            padding: 0 5px 0 5px;
-        }
-        QPushButton {
-            background-color: #404040;
-            border: 1px solid #555;
-            padding: 5px;
-            border-radius: 3px;
-        }
-        QPushButton:hover {
-            background-color: #505050;
-        }
-        QPushButton:pressed {
-            background-color: #606060;
-        }
-        QPushButton:disabled {
-            background-color: #303030;
-            color: #666;
-        }
-    """)
+    # Note: Main styling is now applied in the SpectrometerMainWindow class
+    # This ensures consistent styling across all components
     
     window = SpectrometerMainWindow()
     window.show()
