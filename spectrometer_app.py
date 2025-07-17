@@ -124,13 +124,17 @@ class SpectrumProcessor:
         self.wavelength_calibration = None
         self.roi_start_y = 0
         self.roi_height = 50
+        self.roi_start_x = 0
+        self.roi_width = 1920
         self.dark_frame = None
         self.reference_frame = None
         
-    def set_roi(self, start_y: int, height: int):
+    def set_roi(self, start_y: int, height: int, start_x: int = 0, width: int = 1920):
         """Set region of interest for spectrum extraction"""
         self.roi_start_y = start_y
         self.roi_height = height
+        self.roi_start_x = start_x
+        self.roi_width = width
     
     def set_wavelength_calibration(self, wavelengths: np.ndarray):
         """Set wavelength calibration array"""
@@ -139,15 +143,17 @@ class SpectrumProcessor:
     def set_dark_frame(self, frame: np.ndarray):
         """Set dark frame for subtraction"""
         if frame is not None:
-            # Extract ROI and average vertically
-            roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, :]
+            # Extract ROI with both x and y dimensions and average vertically
+            roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, 
+                       self.roi_start_x:self.roi_start_x + self.roi_width]
             self.dark_frame = np.mean(roi, axis=0)
     
     def set_reference_frame(self, frame: np.ndarray):
         """Set reference frame for normalization"""
         if frame is not None:
-            # Extract ROI and average vertically
-            roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, :]
+            # Extract ROI with both x and y dimensions and average vertically
+            roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, 
+                       self.roi_start_x:self.roi_start_x + self.roi_width]
             self.reference_frame = np.mean(roi, axis=0)
     
     def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -164,8 +170,9 @@ class SpectrumProcessor:
             else:
                 frame = frame[:, :, 0]  # Take first channel
         
-        # Extract ROI
-        roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, :]
+        # Extract ROI with both x and y dimensions
+        roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, 
+                   self.roi_start_x:self.roi_start_x + self.roi_width]
         
         # Average vertically to get horizontal line spectrum
         spectrum = np.mean(roi, axis=0, dtype=np.float64)
@@ -186,9 +193,11 @@ class SpectrumProcessor:
         
         # Create x-axis (wavelengths or pixels)
         if self.wavelength_calibration is not None:
-            x_axis = self.wavelength_calibration
+            # Extract the wavelength range corresponding to the selected x ROI
+            x_axis = self.wavelength_calibration[self.roi_start_x:self.roi_start_x + self.roi_width]
         else:
-            x_axis = np.arange(len(spectrum))
+            # Use pixel indices relative to the ROI start
+            x_axis = np.arange(self.roi_start_x, self.roi_start_x + len(spectrum))
         
         return x_axis, spectrum
     
@@ -353,7 +362,7 @@ class SpectrometerMainWindow(QMainWindow):
         roi_layout = QGridLayout(roi_group)
         
         # Add instruction label
-        instruction_label = QLabel("1. Start camera first\n2. Click ROI button in camera view\n3. Drag rectangle over spectral line\n4. Click 'Apply Visual ROI' button")
+        instruction_label = QLabel("1. Start camera first\n2. Click ROI button in camera view\n3. Drag rectangle over spectral region\n4. Click 'Apply Visual ROI' button")
         instruction_label.setWordWrap(True)
         instruction_label.setStyleSheet("color: #00d4aa; font-size: 9pt; font-style: italic;")
         roi_layout.addWidget(instruction_label, 0, 0, 1, 2)
@@ -370,9 +379,21 @@ class SpectrometerMainWindow(QMainWindow):
         self.roi_height_spinbox.setValue(50)
         roi_layout.addWidget(self.roi_height_spinbox, 2, 1)
         
+        roi_layout.addWidget(QLabel("Start X:"), 3, 0)
+        self.roi_start_x_spinbox = QSpinBox()
+        self.roi_start_x_spinbox.setRange(0, 1920)
+        self.roi_start_x_spinbox.setValue(0)
+        roi_layout.addWidget(self.roi_start_x_spinbox, 3, 1)
+        
+        roi_layout.addWidget(QLabel("Width:"), 4, 0)
+        self.roi_width_spinbox = QSpinBox()
+        self.roi_width_spinbox.setRange(1, 1920)
+        self.roi_width_spinbox.setValue(1920)
+        roi_layout.addWidget(self.roi_width_spinbox, 4, 1)
+        
         # Add the ROI button after it's created
         if hasattr(self, 'apply_visual_roi_button'):
-            roi_layout.addWidget(self.apply_visual_roi_button, 3, 0, 1, 2)
+            roi_layout.addWidget(self.apply_visual_roi_button, 5, 0, 1, 2)
         
         left_layout.addWidget(roi_group)
         
@@ -480,6 +501,8 @@ class SpectrometerMainWindow(QMainWindow):
         self.gain_spinbox.valueChanged.connect(self.update_gain)
         self.roi_start_spinbox.valueChanged.connect(self.update_roi)
         self.roi_height_spinbox.valueChanged.connect(self.update_roi)
+        self.roi_start_x_spinbox.valueChanged.connect(self.update_roi)
+        self.roi_width_spinbox.valueChanged.connect(self.update_roi)
         
 
         
@@ -675,7 +698,9 @@ class SpectrometerMainWindow(QMainWindow):
                 roi_item.setAcceptedMouseButtons(pg.QtCore.Qt.LeftButton)
                 
                 # Get current ROI settings or use defaults
+                start_x = self.roi_start_x_spinbox.value()
                 start_y = self.roi_start_spinbox.value()
+                width = self.roi_width_spinbox.value()
                 height = self.roi_height_spinbox.value()
                 
                 # Get image dimensions for proper sizing
@@ -688,12 +713,12 @@ class SpectrometerMainWindow(QMainWindow):
                     # Use defaults if no frame available
                     img_width, img_height = 1920, 1080
                 
-                # Set ROI to span full width and specified height
-                roi_width = img_width
+                # Set ROI size from spinbox values
+                roi_width = width
                 roi_height = height
                 
-                # Position the ROI
-                roi_x = 0
+                # Position the ROI from spinbox values
+                roi_x = start_x
                 roi_y = start_y
                 
                 # Optimize ROI for better performance
@@ -706,7 +731,7 @@ class SpectrometerMainWindow(QMainWindow):
                 # Make sure it's visible
                 roi_item.show()
                 
-                self.status_bar.showMessage(f"Visual ROI initialized: drag to move, resize with corners. Camera paused for performance.")
+                self.status_bar.showMessage(f"Visual ROI initialized: drag to move, resize with corners to select X/Y region. Camera paused for performance.")
                 
             else:
                 self.status_bar.showMessage("ROI not available yet - please try again")
@@ -882,20 +907,26 @@ class SpectrometerMainWindow(QMainWindow):
                 pos = roi_item.pos()
                 size = roi_item.size()
                 
-                # Extract Y position and height (roi uses [x, y] format)
+                # Extract X and Y position and size (roi uses [x, y] format)
+                start_x = int(pos[0])
                 start_y = int(pos[1])
+                width = int(size[0])
                 height = int(size[1])
                 
                 # Clamp values to valid ranges
+                start_x = max(0, min(start_x, 1919))
                 start_y = max(0, min(start_y, 1079))
+                width = max(1, min(width, 1920 - start_x))
                 height = max(1, min(height, 1080 - start_y))
                 
                 # Update our controls
                 self.roi_start_spinbox.setValue(start_y)
                 self.roi_height_spinbox.setValue(height)
+                self.roi_start_x_spinbox.setValue(start_x)
+                self.roi_width_spinbox.setValue(width)
                 
                 # Update spectrum processor
-                self.spectrum_processor.set_roi(start_y, height)
+                self.spectrum_processor.set_roi(start_y, height, start_x, width)
                 
                 # Close ROI view by unchecking the ROI button (temporarily disconnect to avoid double-resume)
                 self.camera_view.ui.roiBtn.clicked.disconnect(self._handle_roi_button_click)
@@ -905,7 +936,7 @@ class SpectrometerMainWindow(QMainWindow):
                 # Resume camera after applying ROI
                 self._resume_camera_from_roi()
                 
-                self.status_bar.showMessage(f"Visual ROI applied: Y={start_y}, Height={height}. ROI closed, camera resumed.")
+                self.status_bar.showMessage(f"Visual ROI applied: X={start_x}, Y={start_y}, Width={width}, Height={height}. ROI closed, camera resumed.")
             else:
                 self.status_bar.showMessage("No visual ROI active or no camera frame available")
                 # Close ROI view and resume camera even if ROI application failed
@@ -927,7 +958,9 @@ class SpectrometerMainWindow(QMainWindow):
         """Update ROI settings"""
         start_y = self.roi_start_spinbox.value()
         height = self.roi_height_spinbox.value()
-        self.spectrum_processor.set_roi(start_y, height)
+        start_x = self.roi_start_x_spinbox.value()
+        width = self.roi_width_spinbox.value()
+        self.spectrum_processor.set_roi(start_y, height, start_x, width)
     
     def closeEvent(self, event):
         """Handle application close"""
