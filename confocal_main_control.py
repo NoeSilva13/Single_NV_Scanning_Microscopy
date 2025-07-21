@@ -288,7 +288,7 @@ def scan_pattern(x_points, y_points):
                 output_task.write([x, y])
                 # Use dwell time from parameters, with longer settling time for first pixel in each row
                 if x_idx == 0:
-                    time.sleep(max(dwell_time * 2, 0.02))  # Longer settling time for row start
+                    time.sleep(max(dwell_time * 2, 0.05))  # Longer settling time for row start
                 else:
                     time.sleep(dwell_time)
                     
