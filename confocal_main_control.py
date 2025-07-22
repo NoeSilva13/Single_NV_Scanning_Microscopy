@@ -257,6 +257,23 @@ layer.mouse_drag_callbacks.append(on_mouse_click)
 mpl_widget = live_plot(measure_function=lambda: counter.getData()[0][0]/(binwidth/1e12), histogram_range=100, dt=0.2)
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
+def update_contrast_limits(layer, image):
+    """Helper function to update contrast limits for an image layer."""
+    try:
+        if image.size == 0 or np.all(np.isnan(image)):
+            show_info('⚠️ Image is empty or contains only NaNs. Contrast not updated.')
+            return
+        
+        min_val = np.nanmin(image)
+        max_val = np.nanmax(image)
+        if np.isclose(min_val, max_val):
+            show_info('⚠️ Image min and max are equal. Contrast not updated.')
+            return
+            
+        layer.contrast_limits = (min_val, max_val)
+    except Exception as e:
+        show_info(f'❌ Error setting contrast limits: {str(e)}')
+
 # --------------------- SCANNING FUNCTION ---------------------
 def scan_pattern(x_points, y_points):
     """Perform a raster scan pattern using the galvo mirrors and collect APD counts."""
@@ -300,24 +317,14 @@ def scan_pattern(x_points, y_points):
                 pixel_count += 1
                 if pixel_count % 10 == 0:
                     layer.data = image
+                    update_contrast_limits(layer, image)
                     
         # Final update to ensure last pixels are displayed
         layer.data = image
         end_time = time.time()
         print(f"Scan time: {end_time - start_time} seconds, {len(x_points)}, {len(y_points)}")
         # Adjust contrast and save data
-        try:
-            if image.size == 0 or np.all(np.isnan(image)):
-                show_info('⚠️ Image is empty or contains only NaNs. Contrast not updated.')
-            else:
-                min_val = np.nanmin(image)
-                max_val = np.nanmax(image)
-                if np.isclose(min_val, max_val):
-                    show_info('⚠️ Image min and max are equal. Contrast not updated.')
-                else:
-                    layer.contrast_limits = (min_val, max_val)
-        except Exception as e:
-            show_info(f'❌ Error setting contrast limits: {str(e)}')
+        update_contrast_limits(layer, image)
         
         scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
         scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
