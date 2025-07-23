@@ -167,6 +167,73 @@ class RabiWorker(QThread):
             self.measurement_finished.emit()
 
 
+class T1Worker(QThread):
+    """Worker thread for running T1 decay measurements"""
+    
+    progress_updated = pyqtSignal(int)
+    status_updated = pyqtSignal(str)
+    data_updated = pyqtSignal(list, list)  # delays, count_rates
+    measurement_finished = pyqtSignal()
+    error_occurred = pyqtSignal(str)
+    
+    def __init__(self, experiments, parameters):
+        super().__init__()
+        self.experiments = experiments
+        self.parameters = parameters
+        self.is_running = True
+    
+    def stop(self):
+        """Stop the measurement"""
+        self.is_running = False
+    
+    def run(self):
+        """Run the T1 decay measurement"""
+        try:
+            delay_times = self.parameters['delay_times']
+            total_points = len(delay_times)
+            
+            all_delays = []
+            all_count_rates = []
+            
+            for i, delay in enumerate(delay_times):
+                if not self.is_running:
+                    break
+                
+                # Update progress and status
+                progress = int((i / total_points) * 100)
+                self.progress_updated.emit(progress)
+                self.status_updated.emit(f"Measuring {delay} ns delay ({i+1}/{total_points})")
+                
+                # Run single delay measurement
+                result = self.experiments.t1_decay(
+                    delay_times=[delay],
+                    init_laser_duration=self.parameters['init_laser_duration'],
+                    readout_laser_duration=self.parameters['readout_laser_duration'],
+                    detection_duration=self.parameters['detection_duration'],
+                    init_laser_delay=self.parameters['init_laser_delay'],
+                    readout_laser_delay=self.parameters.get('readout_laser_delay'),
+                    detection_delay=self.parameters.get('detection_delay'),
+                    sequence_interval=self.parameters['sequence_interval'],
+                    repetitions=self.parameters['repetitions']
+                )
+                
+                if result and 'count_rates' in result and len(result['count_rates']) > 0:
+                    all_delays.append(delay)
+                    all_count_rates.append(result['count_rates'][0])
+                    
+                    # Emit data update for real-time plotting
+                    self.data_updated.emit(all_delays.copy(), all_count_rates.copy())
+            
+            if self.is_running:
+                self.progress_updated.emit(100)
+                self.status_updated.emit("T1 decay measurement completed!")
+            
+        except Exception as e:
+            self.error_occurred.emit(str(e))
+        finally:
+            self.measurement_finished.emit()
+
+
 class LivePlotWidget(QWidget):
     """Real-time plotting widget for ODMR spectrum"""
     
@@ -487,6 +554,9 @@ class ODMRControlCenter(QMainWindow):
         # Create Rabi Control tab
         self.create_rabi_control_tab()
         
+        # Create T1 Decay Control tab
+        self.create_t1_control_tab()
+        
         # Create Device Settings tab
         self.create_device_settings_tab()
         
@@ -685,6 +755,98 @@ class ODMRControlCenter(QMainWindow):
         
         # Add to tab widget
         self.tab_widget.addTab(control_widget, "📈 Rabi Control")
+    
+    def create_t1_control_tab(self):
+        """Create the T1 Decay Control tab"""
+        control_widget = QWidget()
+        layout = QVBoxLayout()
+        
+        # Create scroll area for controls
+        scroll_area = QScrollArea()
+        scroll_widget = QWidget()
+        scroll_layout = QVBoxLayout()
+        
+        # Delay Time parameters
+        delay_group = ParameterGroupBox("Delay Time Parameters")
+        self.start_delay = delay_group.add_parameter("Start Delay (ns):", "0", "Starting delay time between init and readout")
+        self.stop_delay = delay_group.add_parameter("Stop Delay (ns):", "10000", "Ending delay time between init and readout")
+        self.delay_step = delay_group.add_parameter("Step Size (ns):", "100", "Step size for delay time sweep")
+        scroll_layout.addWidget(delay_group)
+        
+        # Laser parameters
+        laser_group = ParameterGroupBox("Laser Parameters")
+        self.t1_init_laser_duration = laser_group.add_parameter("Init Laser Duration (ns):", "1000", "Duration of initialization laser pulse")
+        self.t1_readout_laser_duration = laser_group.add_parameter("Readout Laser Duration (ns):", "1000", "Duration of readout laser pulse")
+        self.t1_detection_duration = laser_group.add_parameter("Detection Duration (ns):", "500", "Duration of detection window")
+        scroll_layout.addWidget(laser_group)
+        
+        # Timing parameters
+        timing_group = ParameterGroupBox("Timing Parameters")
+        self.t1_init_laser_delay = timing_group.add_parameter("Init Laser Delay (ns):", "0", "Delay before initialization laser pulse")
+        self.t1_readout_laser_delay = timing_group.add_parameter("Readout Laser Delay (ns):", "auto", "Delay before readout laser (auto-calculated if 'auto')")
+        self.t1_detection_delay = timing_group.add_parameter("Detection Delay (ns):", "auto", "Delay before detection window (auto-calculated if 'auto')")
+        scroll_layout.addWidget(timing_group)
+        
+        # Sequence parameters
+        seq_group = ParameterGroupBox("Sequence Parameters")
+        self.t1_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "50000", "Time between sequence repetitions")
+        self.t1_repetitions = seq_group.add_parameter("Repetitions:", "1000", "Number of sequence repetitions")
+        scroll_layout.addWidget(seq_group)
+        
+        # Control buttons
+        button_group = QGroupBox("Measurement Control")
+        button_layout = QVBoxLayout()
+        
+        self.start_t1_btn = QPushButton("🚀 Start T1 Decay")
+        self.start_t1_btn.setFixedHeight(40)
+        self.start_t1_btn.clicked.connect(self.start_t1_measurement)
+        button_layout.addWidget(self.start_t1_btn)
+        
+        self.stop_t1_btn = QPushButton("⏹️ Stop")
+        self.stop_t1_btn.setFixedHeight(40)
+        self.stop_t1_btn.setEnabled(False)
+        self.stop_t1_btn.clicked.connect(self.stop_t1_measurement)
+        button_layout.addWidget(self.stop_t1_btn)
+        
+        # Progress bar
+        self.t1_progress_bar = QProgressBar()
+        self.t1_progress_bar.setVisible(False)
+        button_layout.addWidget(self.t1_progress_bar)
+        
+        button_group.setLayout(button_layout)
+        scroll_layout.addWidget(button_group)
+        
+        # File operations
+        file_group = QGroupBox("File Operations")
+        file_layout = QVBoxLayout()
+        
+        save_t1_params_btn = QPushButton("💾 Save Parameters")
+        save_t1_params_btn.clicked.connect(self.save_t1_parameters)
+        file_layout.addWidget(save_t1_params_btn)
+        
+        load_t1_params_btn = QPushButton("📁 Load Parameters")
+        load_t1_params_btn.clicked.connect(self.load_t1_parameters)
+        file_layout.addWidget(load_t1_params_btn)
+        
+        save_t1_results_btn = QPushButton("📊 Save Results")
+        save_t1_results_btn.clicked.connect(self.save_t1_results)
+        file_layout.addWidget(save_t1_results_btn)
+        
+        file_group.setLayout(file_layout)
+        scroll_layout.addWidget(file_group)
+        
+        # Add stretch to push everything to top
+        scroll_layout.addStretch()
+        
+        scroll_widget.setLayout(scroll_layout)
+        scroll_area.setWidget(scroll_widget)
+        scroll_area.setWidgetResizable(True)
+        
+        layout.addWidget(scroll_area)
+        control_widget.setLayout(layout)
+        
+        # Add to tab widget
+        self.tab_widget.addTab(control_widget, "⏱️ T1 Decay")
     
     def create_device_settings_tab(self):
         """Create the Device Settings tab"""
@@ -1317,6 +1479,234 @@ class ODMRControlCenter(QMainWindow):
         except Exception as e:
             QMessageBox.warning(self, "Save Error", f"Error saving Rabi results: {e}")
     
+    def get_t1_parameters(self):
+        """Get all parameters for T1 decay measurement"""
+        try:
+            start_delay = int(self.start_delay.text())
+            stop_delay = int(self.stop_delay.text())
+            step_size = int(self.delay_step.text())
+            delay_times = list(range(start_delay, stop_delay + step_size, step_size))
+            
+            # Handle auto-calculated delays
+            readout_laser_delay = None
+            detection_delay = None
+            
+            if self.t1_readout_laser_delay.text().lower() != "auto":
+                readout_laser_delay = int(self.t1_readout_laser_delay.text())
+            
+            if self.t1_detection_delay.text().lower() != "auto":
+                detection_delay = int(self.t1_detection_delay.text())
+            
+            return {
+                'delay_times': delay_times,
+                'init_laser_duration': int(self.t1_init_laser_duration.text()),
+                'readout_laser_duration': int(self.t1_readout_laser_duration.text()),
+                'detection_duration': int(self.t1_detection_duration.text()),
+                'init_laser_delay': int(self.t1_init_laser_delay.text()),
+                'readout_laser_delay': readout_laser_delay,
+                'detection_delay': detection_delay,
+                'sequence_interval': int(self.t1_sequence_interval.text()),
+                'repetitions': int(self.t1_repetitions.text())
+            }
+        except ValueError as e:
+            QMessageBox.warning(self, "Parameter Error", f"Invalid parameter value: {e}")
+            return None
+    
+    def start_t1_measurement(self):
+        """Start T1 decay measurement"""
+        if not self.pulse_controller or not self.pulse_controller.is_connected:
+            QMessageBox.warning(self, "Connection Error", "Pulse Streamer not connected!")
+            return
+        
+        parameters = self.get_t1_parameters()
+        if parameters is None:
+            return
+        
+        # Initialize experiments if needed
+        if not self.experiments:
+            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator, self.shared_tagger)
+        
+        # Update UI
+        self.start_t1_btn.setEnabled(False)
+        self.stop_t1_btn.setEnabled(True)
+        self.t1_progress_bar.setVisible(True)
+        self.t1_progress_bar.setValue(0)
+        self.current_results = {'delays': [], 'count_rates': []}
+        
+        # Start worker thread
+        self.worker = T1Worker(self.experiments, parameters)
+        self.worker.progress_updated.connect(self.t1_progress_bar.setValue)
+        self.worker.status_updated.connect(self.log_message)
+        self.worker.data_updated.connect(self.update_t1_plot)
+        self.worker.measurement_finished.connect(self.t1_measurement_finished)
+        self.worker.error_occurred.connect(self.handle_error)
+        self.worker.start()
+        
+        self.log_message("🚀 T1 decay measurement started")
+    
+    def stop_t1_measurement(self):
+        """Stop T1 decay measurement"""
+        if self.worker:
+            self.worker.stop()
+            self.log_message("⏹️ Stopping T1 measurement...")
+    
+    def update_t1_plot(self, delays, count_rates):
+        """Update the real-time plot with T1 data"""
+        self.current_results['delays'] = delays
+        self.current_results['count_rates'] = count_rates
+        self.plot_widget.ax.clear()
+        
+        # Plot data
+        self.plot_widget.ax.plot(np.array(delays)/1000, count_rates, 'o-', markersize=4, linewidth=2,
+                               color='#00ff88', markerfacecolor='#00d4aa', markeredgecolor='#00ff88')
+        
+        # Update labels and title
+        self.plot_widget.ax.set_xlabel('Delay Time (µs)', fontsize=12, color='white')
+        self.plot_widget.ax.set_ylabel('Count Rate (Hz)', fontsize=12, color='white')
+        self.plot_widget.ax.set_title('T1 Decay (Live)', fontsize=14, fontweight='bold', color='white')
+        
+        # Re-apply dark theme styling
+        self.plot_widget.ax.set_facecolor('#262930')
+        self.plot_widget.ax.grid(True, alpha=0.3, color='#555555')
+        self.plot_widget.ax.tick_params(colors='white')
+        for spine in self.plot_widget.ax.spines.values():
+            spine.set_color('white')
+        
+        # Auto-scale with padding
+        if len(delays) > 1:
+            delay_range = max(delays) - min(delays)
+            self.plot_widget.ax.set_xlim((min(delays) - 0.05*delay_range)/1000,
+                                       (max(delays) + 0.05*delay_range)/1000)
+        
+        if len(count_rates) > 1:
+            count_range = max(count_rates) - min(count_rates)
+            if count_range > 0:
+                self.plot_widget.ax.set_ylim(min(count_rates) - 0.1*count_range,
+                                           max(count_rates) + 0.1*count_range)
+        
+        self.plot_widget.figure.tight_layout()
+        self.plot_widget.canvas.draw()
+    
+    def t1_measurement_finished(self):
+        """Handle T1 measurement completion"""
+        self.start_t1_btn.setEnabled(True)
+        self.stop_t1_btn.setEnabled(False)
+        self.t1_progress_bar.setVisible(False)
+    
+    def save_t1_parameters(self):
+        """Save current T1 parameters to JSON file"""
+        try:
+            params = self.get_t1_parameters()
+            if params is None:
+                return
+            
+            # Add UI-specific parameters
+            params['start_delay'] = int(self.start_delay.text())
+            params['stop_delay'] = int(self.stop_delay.text())
+            params['delay_step'] = int(self.delay_step.text())
+            params['readout_laser_delay_text'] = self.t1_readout_laser_delay.text()
+            params['detection_delay_text'] = self.t1_detection_delay.text()
+            
+            filename, _ = QFileDialog.getSaveFileName(
+                self, "Save T1 Parameters", "", "JSON files (*.json);;All files (*.*)"
+            )
+            
+            if filename:
+                with open(filename, 'w') as f:
+                    json.dump(params, f, indent=2)
+                self.log_message(f"💾 T1 parameters saved to {filename}")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Save Error", f"Error saving T1 parameters: {e}")
+    
+    def load_t1_parameters(self):
+        """Load T1 parameters from JSON file"""
+        try:
+            filename, _ = QFileDialog.getOpenFileName(
+                self, "Load T1 Parameters", "", "JSON files (*.json);;All files (*.*)"
+            )
+            
+            if filename:
+                with open(filename, 'r') as f:
+                    params = json.load(f)
+                
+                # Set UI parameters
+                if 'start_delay' in params:
+                    self.start_delay.setText(str(params['start_delay']))
+                if 'stop_delay' in params:
+                    self.stop_delay.setText(str(params['stop_delay']))
+                if 'delay_step' in params:
+                    self.delay_step.setText(str(params['delay_step']))
+                
+                # Set timing parameters
+                if 'init_laser_duration' in params:
+                    self.t1_init_laser_duration.setText(str(params['init_laser_duration']))
+                if 'readout_laser_duration' in params:
+                    self.t1_readout_laser_duration.setText(str(params['readout_laser_duration']))
+                if 'detection_duration' in params:
+                    self.t1_detection_duration.setText(str(params['detection_duration']))
+                if 'init_laser_delay' in params:
+                    self.t1_init_laser_delay.setText(str(params['init_laser_delay']))
+                
+                # Handle auto/manual delay settings
+                if 'readout_laser_delay_text' in params:
+                    self.t1_readout_laser_delay.setText(params['readout_laser_delay_text'])
+                elif 'readout_laser_delay' in params and params['readout_laser_delay'] is not None:
+                    self.t1_readout_laser_delay.setText(str(params['readout_laser_delay']))
+                
+                if 'detection_delay_text' in params:
+                    self.t1_detection_delay.setText(params['detection_delay_text'])
+                elif 'detection_delay' in params and params['detection_delay'] is not None:
+                    self.t1_detection_delay.setText(str(params['detection_delay']))
+                
+                if 'sequence_interval' in params:
+                    self.t1_sequence_interval.setText(str(params['sequence_interval']))
+                if 'repetitions' in params:
+                    self.t1_repetitions.setText(str(params['repetitions']))
+                
+                self.log_message(f"📁 T1 parameters loaded from {filename}")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Load Error", f"Error loading T1 parameters: {e}")
+    
+    def save_t1_results(self):
+        """Save T1 measurement results"""
+        if not self.current_results.get('delays'):
+            QMessageBox.warning(self, "No Data", "No T1 results to save!")
+            return
+        
+        try:
+            filename, file_type = QFileDialog.getSaveFileName(
+                self, "Save T1 Results", "", 
+                "JSON files (*.json);;CSV files (*.csv);;All files (*.*)"
+            )
+            
+            if filename:
+                if filename.endswith('.csv') or 'CSV' in file_type:
+                    # Save as CSV
+                    import csv
+                    with open(filename, 'w', newline='') as f:
+                        writer = csv.writer(f)
+                        writer.writerow(['Delay_Time_ns', 'Count_Rate_Hz'])
+                        for delay, count in zip(self.current_results['delays'],
+                                              self.current_results['count_rates']):
+                            writer.writerow([delay, count])
+                else:
+                    # Save as JSON
+                    data = {
+                        'delay_times_ns': self.current_results['delays'],
+                        'count_rates_hz': self.current_results['count_rates'],
+                        'parameters': self.get_t1_parameters(),
+                        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+                    }
+                    with open(filename, 'w') as f:
+                        json.dump(data, f, indent=2)
+                
+                self.log_message(f"📊 T1 results saved to {filename}")
+                
+        except Exception as e:
+            QMessageBox.warning(self, "Save Error", f"Error saving T1 results: {e}")
+    
     def closeEvent(self, event):
         """Handle application closing"""
         if self.worker and self.worker.isRunning():
@@ -1325,7 +1715,9 @@ class ODMRControlCenter(QMainWindow):
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No
             )
             if reply == QMessageBox.Yes:
-                self.stop_measurement()
+                # Stop any running measurement
+                if hasattr(self.worker, 'stop'):
+                    self.worker.stop()
                 self.worker.wait(3000)  # Wait up to 3 seconds
             else:
                 event.ignore()

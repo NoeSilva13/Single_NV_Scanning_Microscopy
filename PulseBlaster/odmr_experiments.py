@@ -429,6 +429,184 @@ class ODMRExperiments:
         print("✅ Automated ODMR sweep completed")
         return self.results['automated_odmr']
     
+    def t1_decay(self,
+                 delay_times: List[int],
+                 init_laser_duration: int = 1000,
+                 readout_laser_duration: int = 1000,
+                 detection_duration: int = 500,
+                 init_laser_delay: int = 0,
+                 readout_laser_delay: Optional[int] = None,
+                 detection_delay: Optional[int] = None,
+                 sequence_interval: int = 10000,
+                 repetitions: int = 1000) -> Dict:
+        """
+        Perform T1 decay time measurement.
+        
+        T1 decay measures the relaxation time from excited state to ground state.
+        Sequence: Init laser -> variable delay -> readout laser + detection
+        
+        Args:
+            delay_times: List of delay times between init and readout in ns
+            init_laser_duration: Duration of initialization laser pulse in ns
+            readout_laser_duration: Duration of readout laser pulse in ns
+            detection_duration: Duration of detection window in ns
+            init_laser_delay: Delay before initialization laser in ns
+            readout_laser_delay: Delay before readout laser in ns (auto-calculated if None)
+            detection_delay: Delay before detection in ns (auto-calculated if None)
+            sequence_interval: Interval between sequences in ns
+            repetitions: Number of repetitions
+            
+        Returns:
+            Dictionary containing delay times and count rates
+        """
+        print("🔬 Starting T1 decay time measurement...")
+        
+        delays = []
+        count_rates = []
+        self.counter = Countrate(tagger=self.tagger, channels=[1])
+        
+        for delay_time in delay_times:
+            print(f"⏱️ Delay time: {delay_time} ns")
+            
+            # Calculate readout laser delay if not provided
+            local_readout_delay = readout_laser_delay if readout_laser_delay is not None else init_laser_delay + init_laser_duration + delay_time
+            local_detection_delay = detection_delay if detection_delay is not None else local_readout_delay
+            
+            # Create T1 decay sequence
+            sequence, total_duration = self._create_t1_sequence(
+                init_laser_duration=init_laser_duration,
+                readout_laser_duration=readout_laser_duration,
+                detection_duration=detection_duration,
+                delay_time=delay_time,
+                init_laser_delay=init_laser_delay,
+                readout_laser_delay=local_readout_delay,
+                detection_delay=local_detection_delay,
+                sequence_interval=sequence_interval,
+                repetitions=repetitions
+            )
+            
+            if sequence:
+                self.counter.clear()
+                self.pulse_controller.run_sequence(sequence)
+                time.sleep(total_duration/1e9)
+                self.pulse_controller.stop_sequence()
+                
+                # Get real count rate from TimeTagger
+                count_rate = np.mean(self.counter.getData())
+                print(f"Count rate: {count_rate} Hz")
+                
+                delays.append(delay_time)
+                count_rates.append(count_rate)
+                
+                time.sleep(0.05)
+        
+        self.results['t1_decay'] = {
+            'delays': delays,
+            'count_rates': count_rates
+        }
+        
+        print("✅ T1 decay measurement completed")
+        return self.results['t1_decay']
+    
+    def _create_t1_sequence(self, 
+                           init_laser_duration: int,
+                           readout_laser_duration: int,
+                           detection_duration: int,
+                           delay_time: int,
+                           init_laser_delay: int,
+                           readout_laser_delay: int,
+                           detection_delay: int,
+                           sequence_interval: int,
+                           repetitions: int) -> Optional[Tuple]:
+        """
+        Create T1 decay pulse sequence.
+        
+        Sequence timing:
+        - Init laser: starts at init_laser_delay, duration init_laser_duration
+        - Delay period: delay_time between end of init laser and start of readout
+        - Readout laser: starts at readout_laser_delay, duration readout_laser_duration  
+        - Detection: starts at detection_delay (typically same as readout), duration detection_duration
+        """
+        try:
+            # Align all timing parameters to 8 ns boundaries
+            init_laser_duration = self.pulse_controller.align_timing(init_laser_duration)
+            readout_laser_duration = self.pulse_controller.align_timing(readout_laser_duration)
+            detection_duration = self.pulse_controller.align_timing(detection_duration)
+            delay_time = self.pulse_controller.align_timing(delay_time)
+            init_laser_delay = self.pulse_controller.align_timing(init_laser_delay)
+            readout_laser_delay = self.pulse_controller.align_timing(readout_laser_delay)
+            detection_delay = self.pulse_controller.align_timing(detection_delay)
+            sequence_interval = self.pulse_controller.align_timing(sequence_interval)
+            
+            # Calculate total sequence duration per repetition
+            single_seq_duration = max(
+                init_laser_delay + init_laser_duration,
+                readout_laser_delay + readout_laser_duration,
+                detection_delay + detection_duration
+            )
+            
+            # Ensure single sequence duration is 8ns aligned
+            single_seq_duration = self.pulse_controller.align_timing(single_seq_duration)
+            
+            # Create pattern arrays for each channel
+            aom_pattern = []
+            spd_pattern = []
+            
+            for rep in range(repetitions):
+                # Add inter-sequence delay if not first repetition
+                if rep > 0:
+                    aom_pattern.append((sequence_interval, 0))
+                    spd_pattern.append((sequence_interval, 0))
+                
+                # AOM pattern: init laser -> off during delay -> readout laser
+                if init_laser_delay > 0:
+                    aom_pattern.append((init_laser_delay, 0))
+                aom_pattern.append((init_laser_duration, 1))  # Init laser ON
+                
+                # Calculate time until readout laser
+                time_to_readout = readout_laser_delay - (init_laser_delay + init_laser_duration)
+                if time_to_readout > 0:
+                    aom_pattern.append((time_to_readout, 0))
+                
+                aom_pattern.append((readout_laser_duration, 1))  # Readout laser ON
+                
+                # Fill remaining time to complete sequence
+                used_time = readout_laser_delay + readout_laser_duration
+                remaining_time = single_seq_duration - used_time
+                if remaining_time > 0:
+                    aom_pattern.append((remaining_time, 0))
+                
+                # SPD pattern: off during init laser and delay -> detection during readout
+                if detection_delay > 0:
+                    spd_pattern.append((detection_delay, 0))
+                spd_pattern.append((detection_duration, 1))  # SPD ON for detection
+                
+                # Fill remaining time to complete sequence
+                used_time_spd = detection_delay + detection_duration
+                remaining_time_spd = single_seq_duration - used_time_spd
+                if remaining_time_spd > 0:
+                    spd_pattern.append((remaining_time_spd, 0))
+            
+            # Validate total pattern duration is 8ns aligned
+            total_duration = sum(duration for duration, _ in aom_pattern)
+            if total_duration % 8 != 0:
+                print(f"❌ Error: T1 sequence length ({total_duration} ns) not multiple of 8 ns")
+                return None
+            
+            # Create sequence using createSequence method
+            sequence = self.pulse_controller.pulse_streamer.createSequence()
+            
+            # Set patterns for each channel (no MW needed for T1)
+            sequence.setDigital(self.pulse_controller.CHANNEL_AOM, aom_pattern)
+            sequence.setDigital(self.pulse_controller.CHANNEL_SPD, spd_pattern)
+            
+            print(f"✅ T1 sequence created: delay={delay_time}ns, {repetitions} reps, {total_duration} ns total")
+            return sequence, total_duration
+            
+        except Exception as e:
+            print(f"❌ Error creating T1 sequence: {e}")
+            return None
+    
     def _create_ramsey_sequence(self, pi_half_duration: int, tau: int, 
                                laser_duration: int, detection_duration: int):
         """Create a Ramsey pulse sequence: pi/2 - tau - pi/2 - detection"""
@@ -552,6 +730,17 @@ class ODMRExperiments:
         signal = baseline * (1 - contrast * decay)
         return signal + np.random.normal(0, np.sqrt(signal))
     
+    def _simulate_t1_decay_signal(self, delay: int, t1: int) -> float:
+        """Simulate T1 decay"""
+        baseline = 1000
+        contrast = 0.7  # Higher contrast for T1 measurements
+        
+        # Exponential decay with T1 time constant
+        decay = np.exp(-delay * 1e-9 / (t1 * 1e-9))
+        
+        signal = baseline * (1 - contrast * decay)
+        return signal + np.random.normal(0, np.sqrt(signal))
+    
     def plot_results(self, experiment_type: str):
         """Plot the results of a specific experiment"""
         if experiment_type not in self.results:
@@ -592,6 +781,12 @@ class ODMRExperiments:
             plt.xlabel('Delay (µs)')
             plt.ylabel('Count Rate (Hz)')
             plt.title('Spin Echo')
+            
+        elif experiment_type == 't1_decay':
+            plt.plot(np.array(data['delays'])/1000, data['count_rates'], 'co-')
+            plt.xlabel('Delay (µs)')
+            plt.ylabel('Count Rate (Hz)')
+            plt.title('T1 Decay')
         
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
