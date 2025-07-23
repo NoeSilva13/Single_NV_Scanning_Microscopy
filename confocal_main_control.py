@@ -85,8 +85,6 @@ def get_cps():
 
     return d / qd.max_int_time_treg / qd.min_time_tns * 1e9
 
-quick_count_prog = qd.NVAveragerProgram(nv_config)
-
 # --------------------- SCAN PARAMETERS MANAGER CLASS ---------------------
 class ScanParametersManager:
     """Manages scan parameters by getting them from the GUI widget"""
@@ -285,7 +283,7 @@ def on_mouse_click(layer, event):
 layer.mouse_drag_callbacks.append(on_mouse_click)
 
 # --------------------- MPL WIDGET (SIGNAL LIVE PLOT) ---------------------
-mpl_widget = live_plot(measure_function=lambda: counter.getData()[0][0]/(binwidth/1e12), histogram_range=100, dt=0.2)
+mpl_widget = live_plot(measure_function=lambda: get_cps(), histogram_range=100, dt=0.2)
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING FUNCTION ---------------------
