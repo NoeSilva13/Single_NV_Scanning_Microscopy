@@ -58,7 +58,7 @@ from widgets.odmr_controls import launch_odmr_gui as create_launch_odmr_gui
 
 import qickdawg as qd
 
-qd.start_client('192.168.3.1')
+qd.start_client('192.168.1.101')
 
 nv_config = qd.NVConfiguration()
 nv_config.adc_channel = 0
@@ -283,8 +283,8 @@ def on_mouse_click(layer, event):
 layer.mouse_drag_callbacks.append(on_mouse_click)
 
 # --------------------- MPL WIDGET (SIGNAL LIVE PLOT) ---------------------
-mpl_widget = live_plot(measure_function=lambda: get_cps(), histogram_range=100, dt=0.2)
-viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
+#mpl_widget = live_plot(measure_function=lambda: get_cps(), histogram_range=100, dt=0.2)
+#viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING FUNCTION ---------------------
 def scan_pattern(x_points, y_points):
@@ -320,11 +320,8 @@ def scan_pattern(x_points, y_points):
                     time.sleep(max(dwell_time * 2, 0.02))  # Longer settling time for row start
                 else:
                     time.sleep(dwell_time)
-                    
-                counts = quick_count_prog.quick_count(integration_time_treg=nv_config.readout_integration_treg)
-                counts = int(counts / nv_config.readout_integration_tus * 1e6)  # Convert to counts/second
-
-                #counts = get_cps()
+                
+                counts = get_cps()
                 #counts = counter.getData()[0][0]/(binwidth/1e12)
 
                 print(f"{counts}")
