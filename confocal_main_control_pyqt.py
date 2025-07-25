@@ -604,11 +604,8 @@ class ConfocalMainWindow(QMainWindow):
         if hasattr(self.image_view, 'ui') and hasattr(self.image_view.ui, 'histogram'):
             self.image_view.ui.histogram.setBackground('#262930')
         
-        # Add coordinate information as text overlays (more reliable than forcing ImageView axes)
-        self.coordinate_labels = self.create_coordinate_labels()
-        view = self.image_view.getView()
-        for label in self.coordinate_labels:
-            view.addItem(label)
+        # Enable proper axes for the ImageView
+        self.setup_image_axes()
         
         # Connect mouse events
         self.image_view.getImageItem().mouseClickEvent = self.on_image_click
@@ -911,11 +908,79 @@ class ConfocalMainWindow(QMainWindow):
         labels.extend([self.x_label, self.y_label])
         return labels
     
-    def update_coordinate_labels(self):
-        """Update coordinate labels based on current scan parameters"""
-        if not hasattr(self, 'x_label') or not hasattr(self, 'y_label'):
+    def setup_image_axes(self):
+        """Set up proper X and Y axes for the ImageView"""
+        try:
+            # Access the ImageView's internal structure to enable axes
+            # ImageView contains a PlotItem that we can access
+            if hasattr(self.image_view, 'view') and hasattr(self.image_view.view, 'vb'):
+                # Get the ViewBox
+                vb = self.image_view.view.vb
+                
+                # Try to get the PlotItem from the ImageView
+                plot_item = None
+                if hasattr(self.image_view, 'view'):
+                    plot_item = self.image_view.view
+                
+                if plot_item and hasattr(plot_item, 'showAxis'):
+                    # Show the axes
+                    plot_item.showAxis('left', True)
+                    plot_item.showAxis('bottom', True)
+                    plot_item.showAxis('top', False)
+                    plot_item.showAxis('right', False)
+                    
+                    # Style the axes
+                    left_axis = plot_item.getAxis('left')
+                    bottom_axis = plot_item.getAxis('bottom')
+                    
+                    # Set axis colors to white
+                    left_axis.setPen('white')
+                    bottom_axis.setPen('white')
+                    left_axis.setTextPen('white')
+                    bottom_axis.setTextPen('white')
+                    
+                    # Set axis labels
+                    left_axis.setLabel('Y Position', units='μm', color='white')
+                    bottom_axis.setLabel('X Position', units='μm', color='white')
+                    
+                    # Store references for later updates
+                    self.left_axis = left_axis
+                    self.bottom_axis = bottom_axis
+                    
+                    print("✅ Successfully enabled ImageView axes")
+                    return True
+                    
+        except Exception as e:
+            print(f"ImageView axes setup failed: {e}")
+        
+        # Fallback: Create custom axis overlay
+        print("Using custom axis overlay")
+        self.create_custom_axes()
+        return False
+    
+    def create_custom_axes(self):
+        """Create custom axis lines and labels as an overlay"""
+        view = self.image_view.getView()
+        
+        # Create axis lines
+        self.x_axis_line = pg.PlotDataItem([0, 1], [0, 0], pen=pg.mkPen('white', width=2))
+        self.y_axis_line = pg.PlotDataItem([0, 0], [0, 1], pen=pg.mkPen('white', width=2))
+        
+        view.addItem(self.x_axis_line)
+        view.addItem(self.y_axis_line)
+        
+        # Create axis labels - we'll update these with proper positions
+        self.axis_labels = []
+        self.axis_ticks = []
+        
+        # Store references for updates
+        self.custom_axes_enabled = True
+    
+    def update_builtin_axes(self):
+        """Update the built-in ImageView axes with proper scaling"""
+        if not (hasattr(self, 'left_axis') and hasattr(self, 'bottom_axis')):
             return
-            
+        
         params = self.scan_params_manager.get_params()
         x_range = params['scan_range']['x']
         y_range = params['scan_range']['y']
@@ -927,21 +992,185 @@ class ConfocalMainWindow(QMainWindow):
         y_min_um = y_range[0] * MICRONS_PER_VOLT
         y_max_um = y_range[1] * MICRONS_PER_VOLT
         
-        # Update label text
-        self.x_label.setText(f'X: {x_min_um:.1f} to {x_max_um:.1f} μm')
-        self.y_label.setText(f'Y: {y_min_um:.1f} to {y_max_um:.1f} μm')
+        # Set axis ranges to match the image coordinates
+        try:
+            # The axes should automatically scale with the image
+            # but we can set preferred tick spacing
+            x_span = abs(x_max_um - x_min_um)
+            y_span = abs(y_max_um - y_min_um)
+            
+            # Set nice tick spacing
+            if x_span <= 20:
+                x_tick_spacing = 5
+            elif x_span <= 100:
+                x_tick_spacing = 20
+            elif x_span <= 500:
+                x_tick_spacing = 100
+            else:
+                x_tick_spacing = 200
+            
+            if y_span <= 20:
+                y_tick_spacing = 5
+            elif y_span <= 100:
+                y_tick_spacing = 20
+            elif y_span <= 500:
+                y_tick_spacing = 100
+            else:
+                y_tick_spacing = 200
+            
+            # Set tick spacing if the method exists
+            if hasattr(self.bottom_axis, 'setTickSpacing'):
+                self.bottom_axis.setTickSpacing(x_tick_spacing)
+                self.left_axis.setTickSpacing(y_tick_spacing)
+            
+        except Exception as e:
+            print(f"Error updating built-in axes: {e}")
+    
+    def update_custom_axes(self):
+        """Update custom axis overlay with current scan parameters"""
+        if not hasattr(self, 'custom_axes_enabled') or not self.custom_axes_enabled:
+            return
+            
+        # Remove old labels and ticks
+        view = self.image_view.getView()
+        for item in self.axis_labels + self.axis_ticks:
+            try:
+                view.removeItem(item)
+            except:
+                pass
         
-        # Position labels in corners with margins
-        fov_x_um = abs(x_max_um - x_min_um)
-        fov_y_um = abs(y_max_um - y_min_um)
-        margin_x = fov_x_um * 0.02
-        margin_y = fov_y_um * 0.02
+        self.axis_labels.clear()
+        self.axis_ticks.clear()
         
-        # Position X label at top-left
-        self.x_label.setPos(x_min_um + margin_x, y_max_um - margin_y)
+        params = self.scan_params_manager.get_params()
+        x_range = params['scan_range']['x']
+        y_range = params['scan_range']['y']
         
-        # Position Y label at bottom-right  
-        self.y_label.setPos(x_max_um - fov_x_um * 0.3, y_min_um + margin_y)
+        # Convert to micrometers
+        from utils import MICRONS_PER_VOLT
+        x_min_um = x_range[0] * MICRONS_PER_VOLT
+        x_max_um = x_range[1] * MICRONS_PER_VOLT
+        y_min_um = y_range[0] * MICRONS_PER_VOLT
+        y_max_um = y_range[1] * MICRONS_PER_VOLT
+        
+        # Update axis lines to span the image
+        self.x_axis_line.setData([x_min_um, x_max_um], [y_min_um, y_min_um])
+        self.y_axis_line.setData([x_min_um, x_min_um], [y_min_um, y_max_um])
+        
+        # Create tick marks and labels
+        self.create_axis_ticks(x_min_um, x_max_um, y_min_um, y_max_um)
+    
+    def create_axis_ticks(self, x_min, x_max, y_min, y_max):
+        """Create tick marks and labels for custom axes"""
+        view = self.image_view.getView()
+        
+        # Calculate appropriate tick spacing
+        x_range = x_max - x_min
+        y_range = y_max - y_min
+        
+        # Choose nice tick intervals
+        def nice_interval(range_val):
+            """Choose a nice interval for ticks"""
+            if range_val <= 10:
+                return 2
+            elif range_val <= 50:
+                return 10
+            elif range_val <= 100:
+                return 20
+            elif range_val <= 500:
+                return 50
+            else:
+                return 100
+        
+        x_interval = nice_interval(x_range)
+        y_interval = nice_interval(y_range)
+        
+        # Create X-axis ticks and labels
+        x_start = int(x_min / x_interval) * x_interval
+        x_positions = np.arange(x_start, x_max + x_interval, x_interval)
+        
+        for x_pos in x_positions:
+            if x_min <= x_pos <= x_max:
+                # Create tick mark
+                tick = pg.PlotDataItem([x_pos, x_pos], [y_min, y_min - y_range * 0.02], 
+                                     pen=pg.mkPen('white', width=2))
+                view.addItem(tick)
+                self.axis_ticks.append(tick)
+                
+                # Create label
+                label = pg.TextItem(f'{x_pos:.0f}', color='white', anchor=(0.5, 1))
+                label.setPos(x_pos, y_min - y_range * 0.05)
+                view.addItem(label)
+                self.axis_labels.append(label)
+        
+        # Create Y-axis ticks and labels
+        y_start = int(y_min / y_interval) * y_interval
+        y_positions = np.arange(y_start, y_max + y_interval, y_interval)
+        
+        for y_pos in y_positions:
+            if y_min <= y_pos <= y_max:
+                # Create tick mark
+                tick = pg.PlotDataItem([x_min, x_min - x_range * 0.02], [y_pos, y_pos], 
+                                     pen=pg.mkPen('white', width=2))
+                view.addItem(tick)
+                self.axis_ticks.append(tick)
+                
+                # Create label
+                label = pg.TextItem(f'{y_pos:.0f}', color='white', anchor=(1, 0.5))
+                label.setPos(x_min - x_range * 0.05, y_pos)
+                view.addItem(label)
+                self.axis_labels.append(label)
+        
+        # Add axis titles
+        x_title = pg.TextItem('X Position (μm)', color='white', anchor=(0.5, 0))
+        x_title.setPos((x_min + x_max) / 2, y_min - y_range * 0.15)
+        view.addItem(x_title)
+        self.axis_labels.append(x_title)
+        
+        y_title = pg.TextItem('Y Position (μm)', color='white', anchor=(0.5, 0))
+        y_title.setPos(x_min - x_range * 0.15, (y_min + y_max) / 2)
+        y_title.setRotation(90)
+        view.addItem(y_title)
+        self.axis_labels.append(y_title)
+    
+    def update_coordinate_labels(self):
+        """Update coordinate labels and custom axes based on current scan parameters"""
+        # Update built-in axes if they are available
+        if hasattr(self, 'left_axis') and hasattr(self, 'bottom_axis'):
+            self.update_builtin_axes()
+        
+        # Update custom axes if they are enabled
+        elif hasattr(self, 'custom_axes_enabled') and self.custom_axes_enabled:
+            self.update_custom_axes()
+        
+        # Update text labels if they exist (fallback display)
+        if hasattr(self, 'x_label') and hasattr(self, 'y_label'):
+            params = self.scan_params_manager.get_params()
+            x_range = params['scan_range']['x']
+            y_range = params['scan_range']['y']
+            
+            # Convert to micrometers
+            from utils import MICRONS_PER_VOLT
+            x_min_um = x_range[0] * MICRONS_PER_VOLT
+            x_max_um = x_range[1] * MICRONS_PER_VOLT
+            y_min_um = y_range[0] * MICRONS_PER_VOLT
+            y_max_um = y_range[1] * MICRONS_PER_VOLT
+            
+            # Update label text
+            self.x_label.setText(f'X: {x_min_um:.1f} to {x_max_um:.1f} μm')
+            self.y_label.setText(f'Y: {y_min_um:.1f} to {y_max_um:.1f} μm')
+            
+            # Position labels in corners with margins
+            fov_x_um = abs(x_max_um - x_min_um)
+            fov_y_um = abs(y_max_um - y_min_um)
+            margin_x = fov_x_um * 0.02
+            margin_y = fov_y_um * 0.02
+            
+            # Position X label at top-left
+            self.x_label.setPos(x_min_um + margin_x, y_max_um - margin_y)
+            
+            # Position Y label at bottom-right  
+            self.y_label.setPos(x_max_um - fov_x_um * 0.3, y_min_um + margin_y)
     
     def update_scale_bar(self):
         """Update scale bar based on current scan parameters"""
