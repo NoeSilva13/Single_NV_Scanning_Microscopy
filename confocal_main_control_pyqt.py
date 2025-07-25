@@ -125,6 +125,7 @@ class LivePlotWidget(QWidget):
         super().__init__(parent)
         self.measure_function = measure_function
         self.histogram_range = histogram_range
+        self.update_interval = update_interval
         
         # Setup plot widget with dark theme matching ODMR GUI
         self.plot_widget = pg.PlotWidget(title="Live Signal")
@@ -175,6 +176,16 @@ class LivePlotWidget(QWidget):
         except Exception as e:
             print(f"Error updating live plot: {e}")
     
+    def pause_updates(self):
+        """Pause live plot updates during scanning for better performance"""
+        if hasattr(self, 'timer'):
+            self.timer.stop()
+    
+    def resume_updates(self):
+        """Resume live plot updates after scanning"""
+        if hasattr(self, 'timer'):
+            self.timer.start(self.update_interval)
+    
     def closeEvent(self, event):
         """Clean up timer when widget is closed"""
         if hasattr(self, 'timer'):
@@ -186,7 +197,7 @@ class ScanThread(QThread):
     """Background thread for scanning operations"""
     
     update_image = pyqtSignal(np.ndarray)
-    update_position = pyqtSignal(int, int, int, int)  # y_idx, x_idx, total_y, total_x
+    update_progress = pyqtSignal(int)  # Progress percentage (0-100)
     scan_complete = pyqtSignal(np.ndarray, np.ndarray, np.ndarray)  # image, x_points, y_points
     error_occurred = pyqtSignal(str)
     
@@ -208,7 +219,27 @@ class ScanThread(QThread):
                 return
                 
             height, width = len(self.y_points), len(self.x_points)
+            total_pixels = height * width
             image = np.zeros((height, width), dtype=np.float32)
+            
+            # Calculate adaptive update intervals based on scan size
+            # For small scans: update more frequently
+            # For large scans: update less frequently to maintain performance
+            if total_pixels <= 100:        # Small scans (10x10 or less)
+                progress_interval = 5      # Update every 5 pixels
+                image_interval = 10        # Update image every 10 pixels
+            elif total_pixels <= 1000:    # Medium scans (up to ~32x32)
+                progress_interval = 25     # Update every 25 pixels  
+                image_interval = 50        # Update image every 50 pixels
+            elif total_pixels <= 5000:    # Large scans (up to ~71x71)
+                progress_interval = 100    # Update every 100 pixels
+                image_interval = 200       # Update image every 200 pixels
+            else:                          # Very large scans (100x100+)
+                progress_interval = 250    # Update every 250 pixels
+                image_interval = 500       # Update image every 500 pixels
+            
+            pixel_count = 0
+            last_progress_update = 0
             
             for y_idx, y in enumerate(self.y_points):
                 if self.stop_requested:
@@ -229,14 +260,22 @@ class ScanThread(QThread):
                     counts = self.counter.getData()[0][0] / (self.binwidth / 1e12)
                     image[y_idx, x_idx] = counts
                     
-                    # Emit position update
-                    self.update_position.emit(y_idx, x_idx, height, width)
+                    pixel_count += 1
                     
-                    # Emit image update every 10 pixels
-                    if (y_idx * width + x_idx) % 10 == 0:
+                    # Emit progress update at adaptive intervals
+                    if pixel_count - last_progress_update >= progress_interval:
+                        progress = int((pixel_count / total_pixels) * 100)
+                        self.update_progress.emit(progress)
+                        last_progress_update = pixel_count
+                    
+                    # Emit image update at adaptive intervals
+                    # Use numpy view instead of copy when possible for better performance
+                    if pixel_count % image_interval == 0:
                         self.update_image.emit(image.copy())
             
             if not self.stop_requested:
+                # Final progress update
+                self.update_progress.emit(100)
                 self.scan_complete.emit(image, self.x_points, self.y_points)
                 
         except Exception as e:
@@ -1431,8 +1470,13 @@ class ConfocalMainWindow(QMainWindow):
         
         # Connect signals
         self.scan_thread.update_image.connect(self.update_image_display)
+        self.scan_thread.update_progress.connect(self.on_scan_progress)
         self.scan_thread.scan_complete.connect(self.on_scan_complete)
         self.scan_thread.error_occurred.connect(self.on_scan_error)
+        
+        # Pause live plot during scanning for better performance
+        if hasattr(self, 'live_plot'):
+            self.live_plot.pause_updates()
         
         self.scan_thread.start()
         self.show_message("🔬 New scan started")
@@ -1441,6 +1485,9 @@ class ConfocalMainWindow(QMainWindow):
         """Stop the current scan"""
         if self.scan_thread and self.scan_thread.isRunning():
             self.scan_thread.stop()
+            # Resume live plot when scan is stopped
+            if hasattr(self, 'live_plot'):
+                self.live_plot.resume_updates()
             self.show_message("🛑 Scan stop requested")
     
     def save_image(self):
@@ -1564,6 +1611,10 @@ class ConfocalMainWindow(QMainWindow):
         self.update_scale_bar()
         self.update_coordinate_labels()
     
+    def on_scan_progress(self, progress):
+        """Handle scan progress updates"""
+        self.show_message(f"🔬 Scanning... {progress}% complete")
+    
     def on_scan_complete(self, image, x_points, y_points):
         """Handle scan completion"""
         self.current_image = image
@@ -1628,10 +1679,17 @@ class ConfocalMainWindow(QMainWindow):
             scan_config=params, timestamp=timestamp_str
         )
         
+        # Resume live plot after scanning
+        if hasattr(self, 'live_plot'):
+            self.live_plot.resume_updates()
+        
         self.show_message("✅ Scan completed and data saved")
     
     def on_scan_error(self, error_msg):
         """Handle scan errors"""
+        # Resume live plot if scan fails
+        if hasattr(self, 'live_plot'):
+            self.live_plot.resume_updates()
         self.show_message(f"❌ Scan error: {error_msg}")
     
     def show_message(self, message):
