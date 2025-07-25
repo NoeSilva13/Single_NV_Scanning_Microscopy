@@ -25,7 +25,7 @@ from magicgui import magicgui
 # Local imports
 from galvo_controller import GalvoScannerController
 from data_manager import DataManager
-from plot_widgets.live_plot_napari_widget import live_plot
+from plot_widgets.live_plot_pyqtgraph_widget import live_plot_pyqtgraph as live_plot
 from plot_scan_results import plot_scan_results
 from utils import (
     calculate_scale, 
@@ -283,8 +283,8 @@ def on_mouse_click(layer, event):
 layer.mouse_drag_callbacks.append(on_mouse_click)
 
 # --------------------- MPL WIDGET (SIGNAL LIVE PLOT) ---------------------
-#mpl_widget = live_plot(measure_function=lambda: get_cps(), histogram_range=100, dt=0.2)
-#viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
+mpl_widget = live_plot(measure_function=lambda: get_cps(), histogram_range=100, dt=0.2)
+viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 # --------------------- SCANNING FUNCTION ---------------------
 def scan_pattern(x_points, y_points):
