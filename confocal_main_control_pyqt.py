@@ -39,7 +39,6 @@ from utils import (
 )
 
 # Import pure PyQt widget components
-from widgets.pyqt_odmr_widget import create_odmr_control_widget
 from widgets.pyqt_auto_focus import create_auto_focus_widget
 from widgets.pyqt_single_axis_scan import create_single_axis_scan_widget
 
@@ -524,17 +523,13 @@ class ConfocalMainWindow(QMainWindow):
         params_group.setLayout(params_layout)
         left_layout.addWidget(params_group)
         
-        # Additional control widgets (Auto focus, ODMR)
+        # Additional control widgets
         additional_group = QGroupBox("Additional Controls")
         additional_layout = QVBoxLayout()
         
         # Auto focus widget
         self.auto_focus_widget = create_auto_focus_widget(self.counter, self.binwidth)
         additional_layout.addWidget(self.auto_focus_widget)
-        
-        # ODMR widget
-        self.odmr_widget = create_odmr_control_widget(self.tagger, self.counter, self.binwidth)
-        additional_layout.addWidget(self.odmr_widget)
         
         additional_group.setLayout(additional_layout)
         left_layout.addWidget(additional_group)
