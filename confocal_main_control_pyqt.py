@@ -588,7 +588,7 @@ class ConfocalMainWindow(QMainWindow):
         image_controls_widget = QWidget()
         image_controls_layout = QHBoxLayout()
         
-        # Image view with dark theme
+        # Image view with dark theme and proper scaling
         self.image_view = pg.ImageView()
         self.image_view.ui.roiBtn.hide()  # Hide ROI button initially
         self.image_view.ui.menuBtn.hide()  # Hide menu button
@@ -604,6 +604,12 @@ class ConfocalMainWindow(QMainWindow):
         if hasattr(self.image_view, 'ui') and hasattr(self.image_view.ui, 'histogram'):
             self.image_view.ui.histogram.setBackground('#262930')
         
+        # Add coordinate information as text overlays (more reliable than forcing ImageView axes)
+        self.coordinate_labels = self.create_coordinate_labels()
+        view = self.image_view.getView()
+        for label in self.coordinate_labels:
+            view.addItem(label)
+        
         # Connect mouse events
         self.image_view.getImageItem().mouseClickEvent = self.on_image_click
         
@@ -612,6 +618,10 @@ class ConfocalMainWindow(QMainWindow):
         self.zoom_roi.sigRegionChanged.connect(self.on_roi_changed)
         self.image_view.getView().addItem(self.zoom_roi)
         self.zoom_roi.hide()  # Initially hidden
+        
+        # Add scale bar
+        self.scale_bar = self.create_scale_bar()
+        self.image_view.getView().addItem(self.scale_bar)
         
         # Add zoom toggle button
         zoom_controls = QWidget()
@@ -676,17 +686,142 @@ class ConfocalMainWindow(QMainWindow):
         
         # Set colormap to match ODMR GUI viridis-inspired theme
         self.image_view.setColorMap(pg.colormap.get('viridis'))
-        self.image_view.setImage(self.current_image, autoLevels=True)
         
-        # Set scale
+        # Calculate scale and position for proper micrometer display
         x_range = params['scan_range']['x']
         y_range = params['scan_range']['y']
         scale_x = calculate_scale(x_range[0], x_range[1], x_res)
         scale_y = calculate_scale(y_range[0], y_range[1], y_res)
         
+        # Convert voltage ranges to micrometer positions
+        from utils import MICRONS_PER_VOLT
+        x_start_um = x_range[0] * MICRONS_PER_VOLT
+        y_start_um = y_range[0] * MICRONS_PER_VOLT
+        
+        # Set image with proper scale and position
+        self.image_view.setImage(self.current_image, 
+                                autoLevels=True,
+                                scale=(scale_x, scale_y),
+                                pos=(x_start_um, y_start_um))
+        
         # Update scan parameters manager
         self.scan_params_manager.set_widget_instance(self.scan_params_widget)
         self.scan_points_manager._update_points_from_params()
+        
+        # Update scale bar and coordinate labels for initial display
+        self.update_scale_bar()
+        self.update_coordinate_labels()
+    
+    def create_scale_bar(self):
+        """Create a scale bar for the image display"""
+        # Create a group to hold scale bar elements
+        scale_group = pg.QtWidgets.QGraphicsItemGroup()
+        
+        # Default scale bar parameters (will be updated based on scan parameters)
+        scale_length_um = 10  # 10 micrometers default
+        
+        # Create scale bar line
+        line = pg.PlotDataItem([0, scale_length_um], [0, 0], 
+                              pen=pg.mkPen('white', width=3))
+        scale_group.addToGroup(line)
+        
+        # Create scale bar text
+        text = pg.TextItem(f'{scale_length_um} μm', color='white', anchor=(0, 1))
+        text.setPos(0, -2)  # Position text slightly below the line
+        scale_group.addToGroup(text)
+        
+        # Store references for updates
+        scale_group.scale_line = line
+        scale_group.scale_text = text
+        scale_group.scale_length_um = scale_length_um
+        
+        return scale_group
+    
+    def create_coordinate_labels(self):
+        """Create coordinate labels as text overlays"""
+        labels = []
+        
+        # Create corner labels for coordinate reference
+        self.x_label = pg.TextItem('X: 0 μm', color='white', anchor=(0, 0))
+        self.y_label = pg.TextItem('Y: 0 μm', color='white', anchor=(0, 0))
+        
+        labels.extend([self.x_label, self.y_label])
+        return labels
+    
+    def update_coordinate_labels(self):
+        """Update coordinate labels based on current scan parameters"""
+        if not hasattr(self, 'x_label') or not hasattr(self, 'y_label'):
+            return
+            
+        params = self.scan_params_manager.get_params()
+        x_range = params['scan_range']['x']
+        y_range = params['scan_range']['y']
+        
+        # Convert to micrometers
+        from utils import MICRONS_PER_VOLT
+        x_min_um = x_range[0] * MICRONS_PER_VOLT
+        x_max_um = x_range[1] * MICRONS_PER_VOLT
+        y_min_um = y_range[0] * MICRONS_PER_VOLT
+        y_max_um = y_range[1] * MICRONS_PER_VOLT
+        
+        # Update label text
+        self.x_label.setText(f'X: {x_min_um:.1f} to {x_max_um:.1f} μm')
+        self.y_label.setText(f'Y: {y_min_um:.1f} to {y_max_um:.1f} μm')
+        
+        # Position labels in corners with margins
+        fov_x_um = abs(x_max_um - x_min_um)
+        fov_y_um = abs(y_max_um - y_min_um)
+        margin_x = fov_x_um * 0.02
+        margin_y = fov_y_um * 0.02
+        
+        # Position X label at top-left
+        self.x_label.setPos(x_min_um + margin_x, y_max_um - margin_y)
+        
+        # Position Y label at bottom-right  
+        self.y_label.setPos(x_max_um - fov_x_um * 0.3, y_min_um + margin_y)
+    
+    def update_scale_bar(self):
+        """Update scale bar based on current scan parameters"""
+        if not hasattr(self, 'scale_bar'):
+            return
+            
+        params = self.scan_params_manager.get_params()
+        x_range = params['scan_range']['x']
+        x_res = params['resolution']['x']
+        
+        # Calculate the field of view in micrometers
+        from utils import MICRONS_PER_VOLT
+        fov_um = abs(x_range[1] - x_range[0]) * MICRONS_PER_VOLT
+        
+        # Choose appropriate scale bar length (10-20% of field of view)
+        target_length = fov_um * 0.15
+        
+        # Round to nice numbers
+        if target_length >= 50:
+            scale_length_um = round(target_length / 50) * 50
+        elif target_length >= 10:
+            scale_length_um = round(target_length / 10) * 10
+        elif target_length >= 5:
+            scale_length_um = round(target_length / 5) * 5
+        else:
+            scale_length_um = round(target_length)
+        
+        scale_length_um = max(1, scale_length_um)  # Minimum 1 μm
+        
+        # Update scale bar position (bottom left corner with margins)
+        x_start_um = x_range[0] * MICRONS_PER_VOLT + fov_um * 0.05  # 5% margin
+        y_range = params['scan_range']['y']
+        y_start_um = y_range[0] * MICRONS_PER_VOLT + abs(y_range[1] - y_range[0]) * MICRONS_PER_VOLT * 0.05  # 5% from bottom
+        
+        # Update line data
+        self.scale_bar.scale_line.setData([x_start_um, x_start_um + scale_length_um], 
+                                         [y_start_um, y_start_um])
+        
+        # Update text
+        self.scale_bar.scale_text.setText(f'{scale_length_um} μm')
+        self.scale_bar.scale_text.setPos(x_start_um, y_start_um - fov_um * 0.02)  # Slightly below line
+        
+        self.scale_bar.scale_length_um = scale_length_um
     
     def init_connections(self):
         """Initialize signal connections"""
@@ -700,28 +835,26 @@ class ConfocalMainWindow(QMainWindow):
     def on_parameters_changed(self):
         """Handle parameter changes"""
         self.scan_points_manager._update_points_from_params()
+        self.update_scale_bar()
+        self.update_coordinate_labels()
     
     def on_image_click(self, event):
         """Handle mouse clicks on the image"""
         if event.button() == Qt.LeftButton:
-            pos = event.pos()
-            x_idx = int(pos.x())
-            y_idx = int(pos.y())
+            # Get the position in the image view coordinates (now in micrometers)
+            pos = self.image_view.getView().mapToView(event.pos())
+            x_um = pos.x()
+            y_um = pos.y()
             
-            params = self.scan_params_manager.get_params()
-            x_range = params['scan_range']['x']
-            y_range = params['scan_range']['y']
-            x_res = params['resolution']['x']
-            y_res = params['resolution']['y']
-            
-            # Convert to voltage
-            x_voltage = np.interp(x_idx, [0, x_res-1], [x_range[0], x_range[1]])
-            y_voltage = np.interp(y_idx, [0, y_res-1], [y_range[0], y_range[1]])
+            # Convert from micrometers back to voltage
+            from utils import MICRONS_PER_VOLT
+            x_voltage = x_um / MICRONS_PER_VOLT
+            y_voltage = y_um / MICRONS_PER_VOLT
             
             try:
                 if self.output_task:
                     self.output_task.write([x_voltage, y_voltage])
-                    self.show_message(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
+                    self.show_message(f"Moved scanner to: X={x_voltage:.3f}V ({x_um:.1f}μm), Y={y_voltage:.3f}V ({y_um:.1f}μm)")
                     
                     # Update single axis scan widget position tracking
                     if hasattr(self, 'single_axis_widget'):
@@ -816,6 +949,10 @@ class ConfocalMainWindow(QMainWindow):
         self.apply_zoom_btn.setEnabled(False)
         
         self.show_message(f"🔍 Zoomed to region: X={new_x_min:.3f}-{new_x_max:.3f}V, Y={new_y_min:.3f}-{new_y_max:.3f}V")
+        
+        # Update scale bar and coordinate labels for new zoom level
+        self.update_scale_bar()
+        self.update_coordinate_labels()
     
     def start_new_scan(self):
         """Start a new scan"""
@@ -889,6 +1026,10 @@ class ConfocalMainWindow(QMainWindow):
             self.zoom_manager.set_zoom_level(0)
             self.scan_history.clear()
             self.show_message("🔄 Zoom reset to original view")
+            
+            # Update scale bar and coordinate labels for original view
+            self.update_scale_bar()
+            self.update_coordinate_labels()
     
     def close_scanner(self):
         """Set scanner to zero position"""
@@ -935,14 +1076,57 @@ class ConfocalMainWindow(QMainWindow):
                 self.show_message(f"Error loading scan: {str(e)}")
     
     def update_image_display(self, image):
-        """Update the image display"""
+        """Update the image display with proper scaling"""
         self.current_image = image
-        self.image_view.setImage(image, autoLevels=True)
+        
+        # Get current parameters for scaling
+        params = self.scan_params_manager.get_params()
+        x_range = params['scan_range']['x']
+        y_range = params['scan_range']['y']
+        x_res = params['resolution']['x']
+        y_res = params['resolution']['y']
+        
+        # Calculate scale and position
+        scale_x = calculate_scale(x_range[0], x_range[1], x_res)
+        scale_y = calculate_scale(y_range[0], y_range[1], y_res)
+        
+        # Convert voltage ranges to micrometer positions
+        from utils import MICRONS_PER_VOLT
+        x_start_um = x_range[0] * MICRONS_PER_VOLT
+        y_start_um = y_range[0] * MICRONS_PER_VOLT
+        
+        # Update image with proper scale and position
+        self.image_view.setImage(image, 
+                                autoLevels=True,
+                                scale=(scale_x, scale_y),
+                                pos=(x_start_um, y_start_um))
+        
+        # Update scale bar and coordinate labels
+        self.update_scale_bar()
+        self.update_coordinate_labels()
     
     def on_scan_complete(self, image, x_points, y_points):
         """Handle scan completion"""
         self.current_image = image
-        self.image_view.setImage(image, autoLevels=True)
+        
+        # Calculate scale and position for final image
+        scale_x = calculate_scale(x_points[0], x_points[-1], len(x_points))
+        scale_y = calculate_scale(y_points[0], y_points[-1], len(y_points))
+        
+        # Convert voltage ranges to micrometer positions
+        from utils import MICRONS_PER_VOLT
+        x_start_um = x_points[0] * MICRONS_PER_VOLT
+        y_start_um = y_points[0] * MICRONS_PER_VOLT
+        
+        # Update image with proper scale and position
+        self.image_view.setImage(image, 
+                                autoLevels=True,
+                                scale=(scale_x, scale_y),
+                                pos=(x_start_um, y_start_um))
+        
+        # Update scale bar and coordinate labels
+        self.update_scale_bar()
+        self.update_coordinate_labels()
         
         # Save data
         params = self.scan_params_manager.get_params()
