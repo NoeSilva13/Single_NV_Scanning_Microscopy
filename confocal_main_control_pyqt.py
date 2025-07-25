@@ -522,18 +522,6 @@ class ConfocalMainWindow(QMainWindow):
         params_layout.addWidget(self.scan_params_widget)
         params_group.setLayout(params_layout)
         left_layout.addWidget(params_group)
-        
-        # Additional control widgets
-        additional_group = QGroupBox("Additional Controls")
-        additional_layout = QVBoxLayout()
-        
-        # Auto focus widget
-        self.auto_focus_widget = create_auto_focus_widget(self.counter, self.binwidth)
-        additional_layout.addWidget(self.auto_focus_widget)
-        
-        additional_group.setLayout(additional_layout)
-        left_layout.addWidget(additional_group)
-        
         left_layout.addStretch()
         
         top_layout.addWidget(left_panel)
@@ -635,6 +623,10 @@ class ConfocalMainWindow(QMainWindow):
             self.scan_params_manager, self.output_task, self.counter, self.binwidth
         )
         plot_tabs.addTab(self.single_axis_widget, "Single Axis")
+        
+        # Auto focus tab
+        self.auto_focus_widget = create_auto_focus_widget(self.counter, self.binwidth)
+        plot_tabs.addTab(self.auto_focus_widget, "Auto Focus")
         
         plots_layout.addWidget(plot_tabs)
         plots_group.setLayout(plots_layout)
