@@ -604,33 +604,35 @@ class ConfocalMainWindow(QMainWindow):
         right_layout.setContentsMargins(10, 10, 10, 10)
         right_panel.setLayout(right_layout)
         
-        # Plots in tabs
-        plots_group = QGroupBox("Analysis & Plots")
-        plots_layout = QVBoxLayout()
-        
-        plot_tabs = QTabWidget()
-        
-        # Live plot tab
+        # Live Signal Plot
+        live_signal_group = QGroupBox("Live Signal")
+        live_signal_layout = QVBoxLayout()
         self.live_plot = LivePlotWidget(
             measure_function=lambda: self.counter.getData()[0][0] / (self.binwidth / 1e12),
             histogram_range=100,
             update_interval=200
         )
-        plot_tabs.addTab(self.live_plot, "Live Signal")
+        live_signal_layout.addWidget(self.live_plot)
+        live_signal_group.setLayout(live_signal_layout)
+        right_layout.addWidget(live_signal_group)
         
-        # Single axis scan tab
+        # Auto Focus
+        auto_focus_group = QGroupBox("Auto Focus")
+        auto_focus_layout = QVBoxLayout()
+        self.auto_focus_widget = create_auto_focus_widget(self.counter, self.binwidth)
+        auto_focus_layout.addWidget(self.auto_focus_widget)
+        auto_focus_group.setLayout(auto_focus_layout)
+        right_layout.addWidget(auto_focus_group)
+        
+        # Single Axis Scan
+        single_axis_group = QGroupBox("Single Axis Scan")
+        single_axis_layout = QVBoxLayout()
         self.single_axis_widget = create_single_axis_scan_widget(
             self.scan_params_manager, self.output_task, self.counter, self.binwidth
         )
-        plot_tabs.addTab(self.single_axis_widget, "Single Axis")
-        
-        # Auto focus tab
-        self.auto_focus_widget = create_auto_focus_widget(self.counter, self.binwidth)
-        plot_tabs.addTab(self.auto_focus_widget, "Auto Focus")
-        
-        plots_layout.addWidget(plot_tabs)
-        plots_group.setLayout(plots_layout)
-        right_layout.addWidget(plots_group)
+        single_axis_layout.addWidget(self.single_axis_widget)
+        single_axis_group.setLayout(single_axis_layout)
+        right_layout.addWidget(single_axis_group)
         
         top_layout.addWidget(right_panel)
         
