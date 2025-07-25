@@ -455,27 +455,7 @@ load_scan_widget = create_load_scan(
 # Create ODMR control widgets
 launch_odmr_widget = create_launch_odmr_gui(tagger=tagger, counter=counter, binwidth=binwidth)
 
-# Store reference globally or in a persistent place
-_plot_profile_dock = None
 
-@magicgui(call_button="📈 Plot Profile")
-def _add_plot_profile():
-    global _plot_profile_dock
-
-    try:
-        if _plot_profile_dock is None or not isinstance(_plot_profile_dock, QWidget):
-            _plot_profile_dock, _ = viewer.window.add_plugin_dock_widget(
-                plugin_name='napari-plot-profile',
-            )
-            _plot_profile_dock.setFloating(True)
-        else:
-            # If already added once, just re-show it
-            _plot_profile_dock.show()
-            _plot_profile_dock.raise_()
-    except Exception as e:
-        show_info(f'❌ Could not add plot profile widget: {str(e)}')
-
-plot_profile_widget = _add_plot_profile
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
 zoom_in_progress = False
@@ -554,7 +534,7 @@ close_scanner_widget.native.setFixedSize(150, 50)
 auto_focus_widget.native.setFixedSize(150, 50)
 load_scan_widget.native.setFixedSize(150, 50)
 launch_odmr_widget.native.setFixedSize(150, 50)
-plot_profile_widget.native.setFixedSize(150, 50)
+
 
 # Add widgets to viewer
 viewer.window.add_dock_widget(new_scan_widget, area="bottom")
@@ -565,7 +545,6 @@ viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
 viewer.window.add_dock_widget(launch_odmr_widget, area="bottom")
-viewer.window.add_dock_widget(plot_profile_widget, area="bottom")
 update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
 camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
 viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
