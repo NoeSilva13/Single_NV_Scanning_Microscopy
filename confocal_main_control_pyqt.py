@@ -504,8 +504,8 @@ class ConfocalMainWindow(QMainWindow):
         central_widget.setLayout(main_layout)
         
         # Top area: Left params + Center image + Right plots
-        top_layout = QHBoxLayout()
-        top_layout.setSpacing(10)
+        self.top_layout = QHBoxLayout()
+        self.top_layout.setSpacing(10)
         
         # LEFT PANEL: Scan Parameters Only
         left_panel = QWidget()
@@ -524,14 +524,14 @@ class ConfocalMainWindow(QMainWindow):
         left_layout.addWidget(params_group)
         left_layout.addStretch()
         
-        top_layout.addWidget(left_panel)
+        self.top_layout.addWidget(left_panel)
         
         # CENTER PANEL: Main Image Display
-        center_panel = QWidget()
+        self.center_panel = QWidget()
         center_layout = QVBoxLayout()
         center_layout.setSpacing(5)
         center_layout.setContentsMargins(5, 5, 5, 5)
-        center_panel.setLayout(center_layout)
+        self.center_panel.setLayout(center_layout)
         
         # Image controls (zoom and colormap) - compact horizontal layout
         image_controls_layout = QHBoxLayout()
@@ -594,15 +594,14 @@ class ConfocalMainWindow(QMainWindow):
         
         center_layout.addWidget(self.image_view)
         
-        top_layout.addWidget(center_panel, 1)  # Give center panel stretch factor
+        self.top_layout.addWidget(self.center_panel, 2)  # Give center panel larger stretch factor
         
-        # RIGHT PANEL: Plots Only
-        right_panel = QWidget()
-        right_panel.setFixedWidth(350)
+        # RIGHT PANEL: Plots Only (1/3 of window width)
+        self.right_panel = QWidget()
         right_layout = QVBoxLayout()
         right_layout.setSpacing(10)
         right_layout.setContentsMargins(10, 10, 10, 10)
-        right_panel.setLayout(right_layout)
+        self.right_panel.setLayout(right_layout)
         
         # Live Signal Plot
         live_signal_group = QGroupBox("Live Signal")
@@ -634,10 +633,11 @@ class ConfocalMainWindow(QMainWindow):
         single_axis_group.setLayout(single_axis_layout)
         right_layout.addWidget(single_axis_group)
         
-        top_layout.addWidget(right_panel)
+        # Add right panel with stretch factor to make it approximately 1/3 of window width
+        self.top_layout.addWidget(self.right_panel, 1)
         
         # Add top layout to main layout
-        main_layout.addLayout(top_layout, 1)  # Give top area stretch factor
+        main_layout.addLayout(self.top_layout, 1)  # Give top area stretch factor
         
         # BOTTOM PANEL: Scan Controls
         bottom_panel = QWidget()
@@ -1591,6 +1591,38 @@ class ConfocalMainWindow(QMainWindow):
         print(message)  # Also print to console for debugging
         if hasattr(self, 'status_bar'):
             self.status_bar.showMessage(message, 3000)  # Show for 3 seconds
+    
+    def resizeEvent(self, event):
+        """Handle window resize to maintain right panel at 1/3 of window width"""
+        super().resizeEvent(event)
+        
+        # Calculate the desired proportions
+        if hasattr(self, 'top_layout'):
+            window_width = self.width()
+            left_panel_width = 300  # Fixed width
+            
+            # Right panel should be 1/3 of total window width
+            desired_right_width = window_width / 3
+            
+            # Available space for stretching (after fixed left panel)
+            available_width = window_width - left_panel_width
+            
+            # Calculate stretch factors to achieve desired proportions
+            if available_width > 0:
+                # Right panel gets its desired width out of available space
+                right_stretch = desired_right_width / available_width
+                # Center gets the remaining space
+                center_stretch = (available_width - desired_right_width) / available_width
+                
+                # Normalize to reasonable integer ratios
+                if right_stretch > 0 and center_stretch > 0:
+                    # Convert to integer ratio (multiply by 10 for precision)
+                    right_factor = max(1, int(right_stretch * 10))
+                    center_factor = max(1, int(center_stretch * 10))
+                    
+                    # Update stretch factors
+                    self.top_layout.setStretchFactor(self.center_panel, center_factor)
+                    self.top_layout.setStretchFactor(self.right_panel, right_factor)
     
     def closeEvent(self, event):
         """Handle application close"""
