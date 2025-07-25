@@ -757,7 +757,9 @@ class ConfocalMainWindow(QMainWindow):
         y_start_um = y_range[0] * MICRONS_PER_VOLT
         
         # Set image with proper scale and position
-        self.image_view.setImage(self.current_image, 
+        # Transpose the image because PyQtGraph's ImageView expects column-major (width, height) data,
+        # while our data is in row-major (height, width) format. This ensures correct coordinate mapping.
+        self.image_view.setImage(self.current_image.T, 
                                 autoLevels=True,
                                 scale=(scale_x, scale_y),
                                 pos=(x_start_um, y_start_um))
@@ -1335,22 +1337,45 @@ class ConfocalMainWindow(QMainWindow):
     def on_image_click(self, event):
         """Handle mouse clicks on the image"""
         if event.button() == Qt.LeftButton:
-            # Get the position in the image view coordinates (now in micrometers)
-            pos = self.image_view.getView().mapToView(event.pos())
-            x_um = pos.x()
-            y_um = pos.y()
+            # Get pixel coordinates from the click event.
+            pos = event.pos()
             
-            # Convert from micrometers back to voltage
+            # Retrieve the voltage points that correspond to the scan axes.
+            # We need the most recently used points, which are stored in the scan thread if it exists,
+            # otherwise we get them from the points manager.
+            if self.scan_thread and self.scan_thread.x_points is not None:
+                x_points = self.scan_thread.x_points
+                y_points = self.scan_thread.y_points
+            else:
+                x_points, y_points = self.scan_points_manager.get_points()
+
+            # The image data is transposed for display, so the event position corresponds to (x_pixel, y_pixel)
+            # in the non-transposed (width, height) coordinate system.
+            px = int(pos.x())
+            py = int(pos.y())
+
+            # Check if the click is within the valid pixel range.
+            if not (0 <= px < len(x_points) and 0 <= py < len(y_points)):
+                self.show_message("Clicked outside the valid scan area.")
+                return
+
+            # Map the pixel coordinate directly to the corresponding voltage.
+            x_voltage = x_points[px]
+            y_voltage = y_points[py]
+
+            # Convert to micrometers for display purposes
             from utils import MICRONS_PER_VOLT
-            x_voltage = x_um / MICRONS_PER_VOLT
-            y_voltage = y_um / MICRONS_PER_VOLT
+            x_um = x_voltage * MICRONS_PER_VOLT
+            y_um = y_voltage * MICRONS_PER_VOLT
             
+            # Debugging output
+            print(f"Click(pixel): px={px}, py={py} -> Voltage: x={x_voltage:.3f}, y={y_voltage:.3f}")
+
             try:
                 if self.output_task:
                     self.output_task.write([x_voltage, y_voltage])
                     self.show_message(f"Moved scanner to: X={x_voltage:.3f}V ({x_um:.1f}μm), Y={y_voltage:.3f}V ({y_um:.1f}μm)")
                     
-                    # Update single axis scan widget position tracking
                     if hasattr(self, 'single_axis_widget'):
                         self.single_axis_widget.update_current_position(x_voltage, y_voltage)
                 else:
@@ -1558,7 +1583,8 @@ class ConfocalMainWindow(QMainWindow):
                 image = data['image']
                 
                 self.current_image = image
-                self.image_view.setImage(image, autoLevels=True)
+                # Transpose the image because PyQtGraph's ImageView expects column-major (width, height) data.
+                self.image_view.setImage(image.T, autoLevels=True)
                 
                 # Update parameters if available
                 if 'x_range' in data and 'y_range' in data:
@@ -1598,7 +1624,8 @@ class ConfocalMainWindow(QMainWindow):
         y_start_um = y_range[0] * MICRONS_PER_VOLT
         
         # Update image with proper scale and position
-        self.image_view.setImage(image, 
+        # Transpose the image because PyQtGraph's ImageView expects column-major (width, height) data.
+        self.image_view.setImage(image.T, 
                                 autoLevels=True,
                                 scale=(scale_x, scale_y),
                                 pos=(x_start_um, y_start_um))
@@ -1629,7 +1656,8 @@ class ConfocalMainWindow(QMainWindow):
         y_start_um = y_points[0] * MICRONS_PER_VOLT
         
         # Update image with proper scale and position
-        self.image_view.setImage(image, 
+        # Transpose the image because PyQtGraph's ImageView expects column-major (width, height) data.
+        self.image_view.setImage(image.T, 
                                 autoLevels=True,
                                 scale=(scale_x, scale_y),
                                 pos=(x_start_um, y_start_um))
