@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) guidelines.
 
+## [1.1.0] - 2024-03-21
+### Added
+- Comprehensive spectrometer application documentation in main README
+- Detailed hardware requirements for spectrometer setup
+- Quick start guide for spectrometer operation
+
+### Changed
+- Simplified UI by removing redundant plot profile functionality
+- Improved performance by reducing widget overhead
+- Updated main README structure to include three main applications
+- Changed "both programs" to "all programs" in shared codebase description
+
+### Documentation
+- Integrated spectrometer documentation into main README
+- Added spectrometer-specific hardware requirements
+- Enhanced quick start guide with spectrometer section
+- Updated repository overview to better reflect all components
+
 ## [1.0.0] - 2025-06-30
 ### Added
 - Initial project-level `CHANGELOG.md`.
@@ -32,4 +50,5 @@ All notable changes to this project will be documented in this file following [K
 - None.
 
 
+[1.1.0]: https://github.com/NoeSilva13/Single_NV_Scannig_Microscopy/releases/tag/v1.1.0
 [1.0.0]: https://github.com/NoeSilva13/Single_NV_Scannig_Microscopy/releases/tag/v1.0.0 

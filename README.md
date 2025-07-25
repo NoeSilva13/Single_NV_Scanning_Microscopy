@@ -5,19 +5,20 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 A Python toolkit developed at the **[Burke Lab](https://www.burkelab.com/)** for high-precision optical, microwave and timing control of single Nitrogen–Vacancy (NV) centers in diamond.  
-It bundles two flagship graphical applications:
+It bundles three flagship graphical applications:
 
 1. **Confocal Scan GUI** (`confocal_main_control.py`) – real-time raster scanning, live photon counting and auto-focus based on a Napari viewer.
 2. **ODMR Control Center** (`odmr_gui_qt.py`) – a professional Qt interface for continuous-wave ODMR, Rabi and related pulse-sequence measurements.
+3. **Spectrometer Control** (`spectrometer_app.py`) – real-time spectral analysis using POA camera with wavelength calibration and data recording.
 
-Both programs share a common codebase and are designed to run out-of-the-box with our standard NV microscope (Thorlabs galvos, NI-DAQ, Swabian Time-Tagger, PulseStreamer, Rigol MW source and single-photon detectors).
+All programs share a common codebase and are designed to run out-of-the-box with our standard NV microscope (Thorlabs galvos, NI-DAQ, Swabian Time-Tagger, PulseStreamer, Rigol MW source and single-photon detectors).
 
 ---
 ## ✨ Key capabilities
 
 ### Confocal Scan GUI
 - Live **XY raster scanning** with dwell-time control.
-- **Napari** based viewer (zoom, pan, 2-D colormaps, profile plots).
+- **Napari** based viewer (zoom, pan, 2-D colormaps).
 - **Click-to-move** galvo positioning and ROI (**rectangle zoom**) with history.
 - Integrated **auto-focus** routine and **single-axis line scans**.
 - Real-time photon-count **histogram panel** driven by a Swabian TimeTagger.
@@ -29,6 +30,14 @@ Both programs share a common codebase and are designed to run out-of-the-box wit
 - Ethernet control of **Rigol DSG836** microwave generator (frequency / power / sweeps).
 - Progress bars, rich logging console and device-status widgets.
 - Save/Load parameter presets (pulse sequence) and measurement results (`.json`, `.csv`).
+
+### Spectrometer Control
+- Real-time **spectral analysis** with POA camera (1920x1080 resolution)
+- **Wavelength calibration** and dark frame correction
+- **Reference normalization** and ROI selection
+- Live spectrum display with adjustable parameters
+- Time series recording and CSV export
+- Automatic exposure and gain control
 
 ### Common infrastructure
 - Modular **hardware controller** classes (`galvo_controller.py`, `swabian_pulse_streamer.py`, etc.).
@@ -48,6 +57,10 @@ Additional for ODMR / advanced timing
 - **Swabian Pulse Streamer 8/2**
 - **Rigol DSG836** microwave source
 - **Acousto-Optic Modulator** (laser gating)
+
+Additional for Spectrometer
+- **POA camera** (Player One Astronomy) with USB3 connection
+- Spectrometer setup with horizontal line output (e.g., transmission grating)
 
 All instruments communicate via USB/Ethernet and require vendor drivers (see below).
 
@@ -90,6 +103,17 @@ Actions inside the Napari window:
 python odmr_gui_qt.py
 ```
 Select the **ODMR** or **Rabi** tab, fill in microwave / laser timing, hit **Start**.  Real-time plots update during acquisition, and raw data can be exported afterwards.
+
+### 3. Spectrometer Control
+```bash
+python spectrometer_app.py
+```
+Basic operation:
+- Connect camera and start live imaging
+- Adjust ROI to capture spectral line
+- Configure exposure and gain settings
+- Capture dark/reference frames if needed
+- Record and save spectral data
 
 ---
 ## ⚖️ Calibration Parameters
