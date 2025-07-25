@@ -52,43 +52,6 @@ class MainSignalBridge(QObject):
 
 
 # --------------------- PURE PYQT WIDGET CLASSES ---------------------
-class ScanControlWidget(QWidget):
-    """Pure PyQt scan control widget"""
-    
-    def __init__(self, main_window, parent=None):
-        super().__init__(parent)
-        self.main_window = main_window
-        self.init_ui()
-    
-    def init_ui(self):
-        layout = QVBoxLayout()
-        
-        # Scan buttons
-        self.new_scan_btn = QPushButton("🔬 New Scan")
-        self.stop_scan_btn = QPushButton("🛑 Stop Scan")
-        self.save_image_btn = QPushButton("📷 Save Image")
-        self.reset_zoom_btn = QPushButton("🔄 Reset Zoom")
-        self.close_scanner_btn = QPushButton("🎯 Set to Zero")
-        self.load_scan_btn = QPushButton("📁 Load Scan")
-        
-        # Connect signals
-        self.new_scan_btn.clicked.connect(self.main_window.start_new_scan)
-        self.stop_scan_btn.clicked.connect(self.main_window.stop_scan)
-        self.save_image_btn.clicked.connect(self.main_window.save_image)
-        self.reset_zoom_btn.clicked.connect(self.main_window.reset_zoom)
-        self.close_scanner_btn.clicked.connect(self.main_window.close_scanner)
-        self.load_scan_btn.clicked.connect(self.main_window.load_scan)
-        
-        # Style buttons
-        buttons = [self.new_scan_btn, self.stop_scan_btn, self.save_image_btn,
-                  self.reset_zoom_btn, self.close_scanner_btn, self.load_scan_btn]
-        
-        for btn in buttons:
-            btn.setFixedSize(150, 50)
-            layout.addWidget(btn)
-        
-        self.setLayout(layout)
-
 
 class ScanParametersWidget(QWidget):
     """Pure PyQt scan parameters widget"""
@@ -534,18 +497,23 @@ class ConfocalMainWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Main layout with professional spacing
-        main_layout = QHBoxLayout()
-        main_layout.setSpacing(15)  # Add spacing between panels
-        main_layout.setContentsMargins(5, 5, 5, 5)  # Add margins
+        # Create optimized layout structure
+        # Main layout: Top area + Bottom controls
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(10)
+        main_layout.setContentsMargins(5, 5, 5, 5)
         central_widget.setLayout(main_layout)
         
-        # Left panel for controls
+        # Top area: Left params + Center image + Right plots
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(10)
+        
+        # LEFT PANEL: Scan Parameters Only
         left_panel = QWidget()
-        left_panel.setFixedWidth(320)  # Slightly wider for better spacing
+        left_panel.setFixedWidth(300)
         left_layout = QVBoxLayout()
-        left_layout.setSpacing(10)  # Add consistent spacing
-        left_layout.setContentsMargins(10, 10, 10, 10)  # Add margins
+        left_layout.setSpacing(10)
+        left_layout.setContentsMargins(10, 10, 10, 10)
         left_panel.setLayout(left_layout)
         
         # Scan parameters widget
@@ -556,15 +524,7 @@ class ConfocalMainWindow(QMainWindow):
         params_group.setLayout(params_layout)
         left_layout.addWidget(params_group)
         
-        # Scan controls widget
-        controls_group = QGroupBox("Scan Controls")
-        controls_layout = QVBoxLayout()
-        self.scan_controls_widget = ScanControlWidget(self)
-        controls_layout.addWidget(self.scan_controls_widget)
-        controls_group.setLayout(controls_layout)
-        left_layout.addWidget(controls_group)
-        
-        # Additional control widgets
+        # Additional control widgets (Auto focus, ODMR)
         additional_group = QGroupBox("Additional Controls")
         additional_layout = QVBoxLayout()
         
@@ -581,14 +541,43 @@ class ConfocalMainWindow(QMainWindow):
         
         left_layout.addStretch()
         
-        # Right panel for image and plots
-        right_splitter = QSplitter(Qt.Vertical)
+        top_layout.addWidget(left_panel)
         
-        # Top right: Image and controls
-        image_controls_widget = QWidget()
+        # CENTER PANEL: Main Image Display
+        center_panel = QWidget()
+        center_layout = QVBoxLayout()
+        center_layout.setSpacing(5)
+        center_layout.setContentsMargins(5, 5, 5, 5)
+        center_panel.setLayout(center_layout)
+        
+        # Image controls (zoom and colormap) - compact horizontal layout
         image_controls_layout = QHBoxLayout()
+        image_controls_layout.setSpacing(10)
         
-        # Image view with dark theme and proper scaling
+        # Zoom controls
+        self.zoom_toggle_btn = QPushButton("🔍 Enable Zoom")
+        self.zoom_toggle_btn.clicked.connect(self.toggle_zoom_mode)
+        self.zoom_toggle_btn.setFixedSize(120, 35)
+        
+        self.apply_zoom_btn = QPushButton("⚡ Apply Zoom")
+        self.apply_zoom_btn.clicked.connect(self.apply_zoom)
+        self.apply_zoom_btn.setEnabled(False)
+        self.apply_zoom_btn.setFixedSize(120, 35)
+        
+        image_controls_layout.addWidget(self.zoom_toggle_btn)
+        image_controls_layout.addWidget(self.apply_zoom_btn)
+        
+        # Colormap selection
+        image_controls_layout.addWidget(QLabel("Colormap:"))
+        self.colormap_combo = QComboBox()
+        self.colormap_combo.setFixedWidth(150)
+        image_controls_layout.addWidget(self.colormap_combo)
+        
+        image_controls_layout.addStretch()  # Push controls to left
+        
+        center_layout.addLayout(image_controls_layout)
+        
+        # Main image view
         self.image_view = pg.ImageView()
         self.image_view.ui.roiBtn.hide()  # Hide ROI button initially
         self.image_view.ui.menuBtn.hide()  # Hide menu button
@@ -620,38 +609,23 @@ class ConfocalMainWindow(QMainWindow):
         self.scale_bar = self.create_scale_bar()
         self.image_view.getView().addItem(self.scale_bar)
         
-        # Add zoom toggle button
-        zoom_controls = QWidget()
-        zoom_controls.setFixedWidth(150)
-        zoom_layout = QVBoxLayout()
+        center_layout.addWidget(self.image_view)
         
-        self.zoom_toggle_btn = QPushButton("🔍 Enable Zoom")
-        self.zoom_toggle_btn.clicked.connect(self.toggle_zoom_mode)
-        self.apply_zoom_btn = QPushButton("⚡ Apply Zoom")
-        self.apply_zoom_btn.clicked.connect(self.apply_zoom)
-        self.apply_zoom_btn.setEnabled(False)
+        top_layout.addWidget(center_panel, 1)  # Give center panel stretch factor
         
-        zoom_layout.addWidget(self.zoom_toggle_btn)
-        zoom_layout.addWidget(self.apply_zoom_btn)
+        # RIGHT PANEL: Plots Only
+        right_panel = QWidget()
+        right_panel.setFixedWidth(350)
+        right_layout = QVBoxLayout()
+        right_layout.setSpacing(10)
+        right_layout.setContentsMargins(10, 10, 10, 10)
+        right_panel.setLayout(right_layout)
         
-        # Add colormap selection (setup_colormaps is called in init_display)
-        zoom_layout.addWidget(QLabel("Colormap:"))
-        self.colormap_combo = QComboBox()
-        # Will be populated after setup_colormaps is called
-        zoom_layout.addWidget(self.colormap_combo)
+        # Plots in tabs
+        plots_group = QGroupBox("Analysis & Plots")
+        plots_layout = QVBoxLayout()
         
-        zoom_layout.addStretch()
-        
-        zoom_controls.setLayout(zoom_layout)
-        
-        image_controls_layout.addWidget(self.image_view)
-        image_controls_layout.addWidget(zoom_controls)
-        image_controls_widget.setLayout(image_controls_layout)
-        
-        right_splitter.addWidget(image_controls_widget)
-        
-        # Bottom right: Tabs for different plots and controls
-        bottom_tabs = QTabWidget()
+        plot_tabs = QTabWidget()
         
         # Live plot tab
         self.live_plot = LivePlotWidget(
@@ -659,22 +633,74 @@ class ConfocalMainWindow(QMainWindow):
             histogram_range=100,
             update_interval=200
         )
-        bottom_tabs.addTab(self.live_plot, "Live Signal")
+        plot_tabs.addTab(self.live_plot, "Live Signal")
         
         # Single axis scan tab
         self.single_axis_widget = create_single_axis_scan_widget(
             self.scan_params_manager, self.output_task, self.counter, self.binwidth
         )
-        bottom_tabs.addTab(self.single_axis_widget, "Single Axis Scan")
+        plot_tabs.addTab(self.single_axis_widget, "Single Axis")
         
-        right_splitter.addWidget(bottom_tabs)
+        plots_layout.addWidget(plot_tabs)
+        plots_group.setLayout(plots_layout)
+        right_layout.addWidget(plots_group)
         
-        # Set splitter proportions
-        right_splitter.setSizes([500, 350])
+        top_layout.addWidget(right_panel)
         
-        # Add panels to main layout
-        main_layout.addWidget(left_panel)
-        main_layout.addWidget(right_splitter)
+        # Add top layout to main layout
+        main_layout.addLayout(top_layout, 1)  # Give top area stretch factor
+        
+        # BOTTOM PANEL: Scan Controls
+        bottom_panel = QWidget()
+        bottom_panel.setFixedHeight(120)
+        bottom_layout = QVBoxLayout()
+        bottom_layout.setSpacing(5)
+        bottom_layout.setContentsMargins(10, 10, 10, 10)
+        bottom_panel.setLayout(bottom_layout)
+        
+        # Scan controls in a horizontal layout
+        controls_group = QGroupBox("Scan Controls")
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(15)
+        
+        # Create individual control buttons (replace ScanControlWidget)
+        self.new_scan_btn = QPushButton("🔬 New Scan")
+        self.new_scan_btn.clicked.connect(self.start_new_scan)
+        self.new_scan_btn.setFixedSize(120, 50)
+        
+        self.stop_scan_btn = QPushButton("🛑 Stop Scan")
+        self.stop_scan_btn.clicked.connect(self.stop_scan)
+        self.stop_scan_btn.setFixedSize(120, 50)
+        
+        self.save_image_btn = QPushButton("📷 Save Image")
+        self.save_image_btn.clicked.connect(self.save_image)
+        self.save_image_btn.setFixedSize(120, 50)
+        
+        self.reset_zoom_btn = QPushButton("🔄 Reset Zoom")
+        self.reset_zoom_btn.clicked.connect(self.reset_zoom)
+        self.reset_zoom_btn.setFixedSize(120, 50)
+        
+        self.close_scanner_btn = QPushButton("🎯 Set to Zero")
+        self.close_scanner_btn.clicked.connect(self.close_scanner)
+        self.close_scanner_btn.setFixedSize(120, 50)
+        
+        self.load_scan_btn = QPushButton("📁 Load Scan")
+        self.load_scan_btn.clicked.connect(self.load_scan)
+        self.load_scan_btn.setFixedSize(120, 50)
+        
+        # Add buttons to layout
+        controls_layout.addWidget(self.new_scan_btn)
+        controls_layout.addWidget(self.stop_scan_btn)
+        controls_layout.addWidget(self.save_image_btn)
+        controls_layout.addWidget(self.reset_zoom_btn)
+        controls_layout.addWidget(self.close_scanner_btn)
+        controls_layout.addWidget(self.load_scan_btn)
+        controls_layout.addStretch()
+        
+        controls_group.setLayout(controls_layout)
+        bottom_layout.addWidget(controls_group)
+        
+        main_layout.addWidget(bottom_panel)
         
         # Initialize display
         self.init_display()
