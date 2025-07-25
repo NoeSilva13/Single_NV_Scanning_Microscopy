@@ -507,13 +507,12 @@ class ConfocalMainWindow(QMainWindow):
         self.top_layout = QHBoxLayout()
         self.top_layout.setSpacing(10)
         
-        # LEFT PANEL: Scan Parameters Only
-        left_panel = QWidget()
-        left_panel.setFixedWidth(300)
+        # LEFT PANEL: Scan Parameters Only (1/4 of window width)
+        self.left_panel = QWidget()
         left_layout = QVBoxLayout()
         left_layout.setSpacing(10)
         left_layout.setContentsMargins(10, 10, 10, 10)
-        left_panel.setLayout(left_layout)
+        self.left_panel.setLayout(left_layout)
         
         # Scan parameters widget
         params_group = QGroupBox("Scan Parameters")
@@ -524,7 +523,7 @@ class ConfocalMainWindow(QMainWindow):
         left_layout.addWidget(params_group)
         left_layout.addStretch()
         
-        self.top_layout.addWidget(left_panel)
+        self.top_layout.addWidget(self.left_panel)
         
         # CENTER PANEL: Main Image Display
         self.center_panel = QWidget()
@@ -594,7 +593,7 @@ class ConfocalMainWindow(QMainWindow):
         
         center_layout.addWidget(self.image_view)
         
-        self.top_layout.addWidget(self.center_panel, 2)  # Give center panel larger stretch factor
+        self.top_layout.addWidget(self.center_panel)  # Proportions handled by resizeEvent
         
         # RIGHT PANEL: Plots Only (1/3 of window width)
         self.right_panel = QWidget()
@@ -633,8 +632,8 @@ class ConfocalMainWindow(QMainWindow):
         single_axis_group.setLayout(single_axis_layout)
         right_layout.addWidget(single_axis_group)
         
-        # Add right panel with stretch factor to make it approximately 1/3 of window width
-        self.top_layout.addWidget(self.right_panel, 1)
+        # Add right panel - proportions handled by resizeEvent
+        self.top_layout.addWidget(self.right_panel)
         
         # Add top layout to main layout
         main_layout.addLayout(self.top_layout, 1)  # Give top area stretch factor
@@ -731,6 +730,55 @@ class ConfocalMainWindow(QMainWindow):
         # Update scale bar and coordinate labels for initial display
         self.update_scale_bar()
         self.update_coordinate_labels()
+        
+        # Set initial proportional layout
+        self.update_panel_proportions()
+    
+    def update_panel_proportions(self):
+        """Update panel proportions based on current window size"""
+        if hasattr(self, 'top_layout'):
+            window_width = self.width()
+            
+            # Define proportions:
+            # Left panel: 1/4 of window width (25%)
+            # Center panel: 5/12 of window width (~42%)  
+            # Right panel: 1/3 of window width (~33%)
+            
+            left_proportion = 0.25      # 1/4
+            center_proportion = 5/12    # 5/12 ≈ 0.417
+            right_proportion = 1/3      # 1/3 ≈ 0.333
+            
+            # Calculate desired widths
+            desired_left_width = window_width * left_proportion
+            desired_center_width = window_width * center_proportion
+            desired_right_width = window_width * right_proportion
+            
+            # Set minimum widths to prevent panels from becoming too small
+            min_left_width = 250
+            min_center_width = 400
+            min_right_width = 300
+            
+            # Apply minimum constraints
+            if desired_left_width < min_left_width:
+                desired_left_width = min_left_width
+            if desired_center_width < min_center_width:
+                desired_center_width = min_center_width
+            if desired_right_width < min_right_width:
+                desired_right_width = min_right_width
+            
+            # Calculate stretch factors (proportional to desired widths)
+            total_desired = desired_left_width + desired_center_width + desired_right_width
+            
+            if total_desired > 0:
+                # Convert to integer ratios for stretch factors
+                left_factor = max(1, int((desired_left_width / total_desired) * 100))
+                center_factor = max(1, int((desired_center_width / total_desired) * 100))
+                right_factor = max(1, int((desired_right_width / total_desired) * 100))
+                
+                # Update stretch factors for all panels
+                self.top_layout.setStretchFactor(self.left_panel, left_factor)
+                self.top_layout.setStretchFactor(self.center_panel, center_factor)
+                self.top_layout.setStretchFactor(self.right_panel, right_factor)
     
     def setup_colormaps(self):
         """Set up scientific colormaps for microscopy data"""
@@ -1593,36 +1641,9 @@ class ConfocalMainWindow(QMainWindow):
             self.status_bar.showMessage(message, 3000)  # Show for 3 seconds
     
     def resizeEvent(self, event):
-        """Handle window resize to maintain right panel at 1/3 of window width"""
+        """Handle window resize to maintain proportional panel sizing"""
         super().resizeEvent(event)
-        
-        # Calculate the desired proportions
-        if hasattr(self, 'top_layout'):
-            window_width = self.width()
-            left_panel_width = 300  # Fixed width
-            
-            # Right panel should be 1/3 of total window width
-            desired_right_width = window_width / 3
-            
-            # Available space for stretching (after fixed left panel)
-            available_width = window_width - left_panel_width
-            
-            # Calculate stretch factors to achieve desired proportions
-            if available_width > 0:
-                # Right panel gets its desired width out of available space
-                right_stretch = desired_right_width / available_width
-                # Center gets the remaining space
-                center_stretch = (available_width - desired_right_width) / available_width
-                
-                # Normalize to reasonable integer ratios
-                if right_stretch > 0 and center_stretch > 0:
-                    # Convert to integer ratio (multiply by 10 for precision)
-                    right_factor = max(1, int(right_stretch * 10))
-                    center_factor = max(1, int(center_stretch * 10))
-                    
-                    # Update stretch factors
-                    self.top_layout.setStretchFactor(self.center_panel, center_factor)
-                    self.top_layout.setStretchFactor(self.right_panel, right_factor)
+        self.update_panel_proportions()
     
     def closeEvent(self, event):
         """Handle application close"""
