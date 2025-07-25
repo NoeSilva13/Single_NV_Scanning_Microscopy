@@ -159,14 +159,23 @@ class SingleAxisScanWidget(QWidget):
         scan_group.setLayout(scan_layout)
         layout.addWidget(scan_group)
         
-        # Scan plot
+        # Scan plot with dark theme matching ODMR GUI
         self.plot_widget = pg.PlotWidget(title="Single Axis Scan")
-        self.plot_widget.setLabel('left', 'Counts/s')
-        self.plot_widget.setLabel('bottom', 'Position (V)')
-        self.plot_widget.showGrid(True)
+        self.plot_widget.setBackground('#262930')
+        self.plot_widget.setLabel('left', 'Counts/s', color='white', size='12pt')
+        self.plot_widget.setLabel('bottom', 'Position (V)', color='white', size='12pt')
+        self.plot_widget.showGrid(True, alpha=0.3)
         self.plot_widget.setFixedHeight(250)
         
-        self.scan_curve = self.plot_widget.plot(pen='b', symbol='o', symbolSize=5)
+        # Style the axes
+        self.plot_widget.getAxis('left').setPen('white')
+        self.plot_widget.getAxis('bottom').setPen('white')
+        self.plot_widget.getAxis('left').setTextPen('white')
+        self.plot_widget.getAxis('bottom').setTextPen('white')
+        
+        self.scan_curve = self.plot_widget.plot(pen=pg.mkPen('#00ff88', width=2), 
+                                               symbol='o', symbolBrush='#00d4aa',
+                                               symbolPen='#00ff88', symbolSize=5)
         layout.addWidget(self.plot_widget)
         
         self.setLayout(layout)

@@ -164,19 +164,26 @@ class LivePlotWidget(QWidget):
         self.measure_function = measure_function
         self.histogram_range = histogram_range
         
-        # Setup plot widget
+        # Setup plot widget with dark theme matching ODMR GUI
         self.plot_widget = pg.PlotWidget(title="Live Signal")
-        self.plot_widget.setLabel('left', 'Signal (counts/s)')
-        self.plot_widget.setLabel('bottom', 'Time (s)')
-        self.plot_widget.showGrid(True)
+        self.plot_widget.setBackground('#262930')
+        self.plot_widget.setLabel('left', 'Signal (counts/s)', color='white', size='12pt')
+        self.plot_widget.setLabel('bottom', 'Time (s)', color='white', size='12pt')
+        self.plot_widget.showGrid(True, alpha=0.3)
+        
+        # Style the plot to match ODMR GUI dark theme
+        self.plot_widget.getAxis('left').setPen('white')
+        self.plot_widget.getAxis('bottom').setPen('white')
+        self.plot_widget.getAxis('left').setTextPen('white')
+        self.plot_widget.getAxis('bottom').setTextPen('white')
         
         # Data storage
         self.x_data = []
         self.y_data = []
         self.t0 = time.time()
         
-        # Plot curve
-        self.curve = self.plot_widget.plot(pen='g')
+        # Plot curve with ODMR GUI green color
+        self.curve = self.plot_widget.plot(pen=pg.mkPen('#00ff88', width=2))
         
         # Layout
         layout = QVBoxLayout()
@@ -291,7 +298,7 @@ class ConfocalMainWindow(QMainWindow):
     
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("NV Scanning Microscopy - PyQt Version")
+        self.setWindowTitle("NV Scanning Microscopy Control Center - Burke Lab")
         
         # Initialize hardware and managers first
         self.init_hardware()
@@ -365,17 +372,180 @@ class ConfocalMainWindow(QMainWindow):
     
     def init_ui(self):
         """Initialize the user interface"""
+        # Apply dark theme style (napari-inspired, matching ODMR GUI)
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #262930;
+                color: #ffffff;
+            }
+            QWidget {
+                background-color: #262930;
+                color: #ffffff;
+            }
+            QPushButton {
+                background-color: #00d4aa;
+                color: #262930;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 10pt;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #00ffcc;
+            }
+            QPushButton:pressed {
+                background-color: #009980;
+            }
+            QPushButton:disabled {
+                background-color: #555555;
+                color: #999999;
+            }
+            QGroupBox {
+                color: #ffffff;
+                border: 2px solid #555555;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding-top: 10px;
+                font-weight: bold;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #00d4aa;
+            }
+            QLabel {
+                color: #ffffff;
+            }
+            QLineEdit {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 10pt;
+            }
+            QLineEdit:focus {
+                border: 2px solid #00d4aa;
+            }
+            QTextEdit {
+                background-color: #1e1e1e;
+                color: #00ff00;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 9pt;
+            }
+            QProgressBar {
+                border: 1px solid #555555;
+                border-radius: 4px;
+                background-color: #3c3c3c;
+                text-align: center;
+                color: #ffffff;
+            }
+            QProgressBar::chunk {
+                background-color: #00d4aa;
+                border-radius: 3px;
+            }
+            QScrollArea {
+                background-color: #262930;
+                border: none;
+            }
+            QTabWidget::pane {
+                border: 1px solid #555555;
+                background-color: #262930;
+            }
+            QTabWidget::tab-bar {
+                alignment: center;
+            }
+            QTabBar::tab {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                padding: 8px 16px;
+                margin-right: 2px;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:selected {
+                background-color: #00d4aa;
+                color: #262930;
+                font-weight: bold;
+            }
+            QTabBar::tab:hover {
+                background-color: #555555;
+            }
+            QComboBox {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 10pt;
+            }
+            QComboBox::drop-down {
+                border: none;
+                background-color: #555555;
+                border-top-right-radius: 4px;
+                border-bottom-right-radius: 4px;
+            }
+            QComboBox::down-arrow {
+                image: none;
+                border-left: 5px solid transparent;
+                border-right: 5px solid transparent;
+                border-top: 5px solid #ffffff;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                selection-background-color: #00d4aa;
+                selection-color: #262930;
+            }
+            QSpinBox, QDoubleSpinBox {
+                background-color: #3c3c3c;
+                color: #ffffff;
+                border: 1px solid #555555;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 10pt;
+            }
+            QSpinBox:focus, QDoubleSpinBox:focus {
+                border: 2px solid #00d4aa;
+            }
+            QStatusBar {
+                background-color: #1e1e1e;
+                color: #00ff00;
+                font-family: 'Consolas', 'Monaco', monospace;
+                font-size: 9pt;
+                border-top: 1px solid #555555;
+            }
+            QSplitter::handle {
+                background-color: #555555;
+                border: 1px solid #3c3c3c;
+            }
+            QSplitter::handle:horizontal {
+                width: 3px;
+            }
+            QSplitter::handle:vertical {
+                height: 3px;
+            }
+        """)
+        
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
-        # Main layout
+        # Main layout with professional spacing
         main_layout = QHBoxLayout()
+        main_layout.setSpacing(15)  # Add spacing between panels
+        main_layout.setContentsMargins(5, 5, 5, 5)  # Add margins
         central_widget.setLayout(main_layout)
         
         # Left panel for controls
         left_panel = QWidget()
-        left_panel.setFixedWidth(300)
+        left_panel.setFixedWidth(320)  # Slightly wider for better spacing
         left_layout = QVBoxLayout()
+        left_layout.setSpacing(10)  # Add consistent spacing
+        left_layout.setContentsMargins(10, 10, 10, 10)  # Add margins
         left_panel.setLayout(left_layout)
         
         # Scan parameters widget
@@ -418,10 +588,21 @@ class ConfocalMainWindow(QMainWindow):
         image_controls_widget = QWidget()
         image_controls_layout = QHBoxLayout()
         
-        # Image view
+        # Image view with dark theme
         self.image_view = pg.ImageView()
         self.image_view.ui.roiBtn.hide()  # Hide ROI button initially
         self.image_view.ui.menuBtn.hide()  # Hide menu button
+        
+        # Apply dark theme to image view
+        view_widget = self.image_view.getView()
+        view_widget.setBackgroundColor('#262930')
+        
+        # Set the ImageView widget background color to match theme
+        self.image_view.setStyleSheet("background-color: #262930; border: none;")
+        
+        # Style the histogram widget if it exists
+        if hasattr(self.image_view, 'ui') and hasattr(self.image_view.ui, 'histogram'):
+            self.image_view.ui.histogram.setBackground('#262930')
         
         # Connect mouse events
         self.image_view.getImageItem().mouseClickEvent = self.on_image_click
@@ -492,6 +673,9 @@ class ConfocalMainWindow(QMainWindow):
         
         # Create empty image
         self.current_image = np.zeros((y_res, x_res), dtype=np.float32)
+        
+        # Set colormap to match ODMR GUI viridis-inspired theme
+        self.image_view.setColorMap(pg.colormap.get('viridis'))
         self.image_view.setImage(self.current_image, autoLevels=True)
         
         # Set scale
@@ -938,9 +1122,11 @@ def main():
     """Main application entry point"""
     app = QApplication(sys.argv)
     
-    # Set application properties
-    app.setApplicationName("NV Scanning Microscopy")
-    app.setApplicationVersion("2.0 PyQt")
+    # Set application properties to match ODMR GUI style
+    app.setApplicationName("NV Scanning Microscopy Control Center")
+    app.setApplicationVersion("2.0")
+    app.setOrganizationName("Burke Lab - UC Irvine")
+    app.setOrganizationDomain("burkelab.uci.edu")
     
     # Create and show main window
     window = ConfocalMainWindow()

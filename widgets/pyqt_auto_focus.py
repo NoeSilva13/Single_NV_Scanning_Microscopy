@@ -97,14 +97,23 @@ class AutoFocusWidget(QWidget):
         self.status_label = QLabel("Ready for auto-focus")
         layout.addWidget(self.status_label)
         
-        # Focus plot
+        # Focus plot with dark theme matching ODMR GUI
         self.plot_widget = pg.PlotWidget(title="Focus Curve")
-        self.plot_widget.setLabel('left', 'Counts/s')
-        self.plot_widget.setLabel('bottom', 'Z Position (V)')
-        self.plot_widget.showGrid(True)
+        self.plot_widget.setBackground('#262930')
+        self.plot_widget.setLabel('left', 'Counts/s', color='white', size='12pt')
+        self.plot_widget.setLabel('bottom', 'Z Position (V)', color='white', size='12pt')
+        self.plot_widget.showGrid(True, alpha=0.3)
         self.plot_widget.setFixedHeight(200)
         
-        self.focus_curve = self.plot_widget.plot(pen='g', symbol='o')
+        # Style the axes
+        self.plot_widget.getAxis('left').setPen('white')
+        self.plot_widget.getAxis('bottom').setPen('white')
+        self.plot_widget.getAxis('left').setTextPen('white')
+        self.plot_widget.getAxis('bottom').setTextPen('white')
+        
+        self.focus_curve = self.plot_widget.plot(pen=pg.mkPen('#00ff88', width=2), 
+                                                symbol='o', symbolBrush='#00d4aa', 
+                                                symbolPen='#00ff88', symbolSize=6)
         layout.addWidget(self.plot_widget)
         
         self.setLayout(layout)
@@ -161,10 +170,11 @@ class AutoFocusWidget(QWidget):
         # Update plot with final data
         self.focus_curve.setData(positions, counts)
         
-        # Highlight best position
+        # Highlight best position with accent color
         best_count = counts[positions.index(best_position)]
         self.plot_widget.plot([best_position], [best_count], 
-                            pen=None, symbol='o', symbolBrush='r', symbolSize=10)
+                            pen=None, symbol='o', symbolBrush='#00d4aa', 
+                            symbolPen='#00ffcc', symbolSize=12)
     
     def on_focus_error(self, error_msg):
         """Handle focus error"""
