@@ -21,7 +21,7 @@ import pyqtgraph as pg
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
     QGridLayout, QSplitter, QTabWidget, QGroupBox, QPushButton,
-    QLabel, QMessageBox, QDesktopWidget
+    QLabel, QMessageBox, QDesktopWidget, QComboBox
 )
 from PyQt5.QtCore import QTimer, pyqtSignal, QObject, Qt, QThread
 from PyQt5.QtGui import QPixmap, QPainter
@@ -636,6 +636,13 @@ class ConfocalMainWindow(QMainWindow):
         
         zoom_layout.addWidget(self.zoom_toggle_btn)
         zoom_layout.addWidget(self.apply_zoom_btn)
+        
+        # Add colormap selection (setup_colormaps is called in init_display)
+        zoom_layout.addWidget(QLabel("Colormap:"))
+        self.colormap_combo = QComboBox()
+        # Will be populated after setup_colormaps is called
+        zoom_layout.addWidget(self.colormap_combo)
+        
         zoom_layout.addStretch()
         
         zoom_controls.setLayout(zoom_layout)
@@ -684,8 +691,9 @@ class ConfocalMainWindow(QMainWindow):
         # Create empty image
         self.current_image = np.zeros((y_res, x_res), dtype=np.float32)
         
-        # Set colormap to match ODMR GUI viridis-inspired theme
-        self.image_view.setColorMap(pg.colormap.get('viridis'))
+        # Set up colormap system with scientific colormaps
+        self.setup_colormaps()
+        self.apply_colormap('viridis')  # Default to viridis
         
         # Calculate scale and position for proper micrometer display
         x_range = params['scan_range']['x']
@@ -711,6 +719,161 @@ class ConfocalMainWindow(QMainWindow):
         # Update scale bar and coordinate labels for initial display
         self.update_scale_bar()
         self.update_coordinate_labels()
+    
+    def setup_colormaps(self):
+        """Set up scientific colormaps for microscopy data"""
+        # Define available scientific colormaps
+        self.available_colormaps = {
+            'viridis': 'Viridis (Default)',
+            'plasma': 'Plasma',
+            'inferno': 'Inferno', 
+            'magma': 'Magma',
+            'hot': 'Hot',
+            'jet': 'Jet',
+            'gray': 'Grayscale',
+            'bone': 'Bone',
+            'copper': 'Copper',
+            'cool': 'Cool',
+            'spring': 'Spring',
+            'summer': 'Summer',
+            'autumn': 'Autumn',
+            'winter': 'Winter'
+        }
+        
+        self.current_colormap = 'viridis'
+        
+        # Populate the colormap combo box if it exists
+        if hasattr(self, 'colormap_combo'):
+            self.colormap_combo.clear()
+            for key, name in self.available_colormaps.items():
+                self.colormap_combo.addItem(name, key)
+            self.colormap_combo.setCurrentText('Viridis (Default)')
+            self.colormap_combo.currentIndexChanged.connect(self.on_colormap_changed)
+    
+    def apply_colormap(self, colormap_name):
+        """Apply a colormap to the image display"""
+        try:
+            if colormap_name in self.available_colormaps:
+                # Get the colormap from PyQtGraph
+                colormap = None
+                
+                if colormap_name in ['viridis', 'plasma', 'inferno', 'magma']:
+                    # PyQtGraph built-in scientific colormaps
+                    colormap = pg.colormap.get(colormap_name)
+                else:
+                    # Create custom colormaps
+                    colormap = self.create_custom_colormap(colormap_name)
+                
+                if colormap is not None:
+                    self.image_view.setColorMap(colormap)
+                    self.current_colormap = colormap_name
+                    self.show_message(f"Applied colormap: {self.available_colormaps[colormap_name]}")
+                
+        except Exception as e:
+            self.show_message(f"Error applying colormap: {str(e)}")
+            # Fallback to default
+            try:
+                self.image_view.setColorMap(pg.colormap.get('viridis'))
+                self.current_colormap = 'viridis'
+            except:
+                                 pass
+    
+    def on_colormap_changed(self):
+        """Handle colormap selection change"""
+        if hasattr(self, 'colormap_combo'):
+            selected_data = self.colormap_combo.currentData()
+            if selected_data:
+                self.apply_colormap(selected_data)
+    
+    def create_custom_colormap(self, name):
+        """Create custom colormap definitions"""
+        import numpy as np
+        
+        if name == 'hot':
+            # Hot colormap (black -> red -> yellow -> white)
+            colors = np.array([
+                [0.0, 0.0, 0.0, 1.0],    # Black
+                [0.5, 0.0, 0.0, 1.0],    # Dark red
+                [1.0, 0.0, 0.0, 1.0],    # Red
+                [1.0, 0.5, 0.0, 1.0],    # Orange
+                [1.0, 1.0, 0.0, 1.0],    # Yellow
+                [1.0, 1.0, 1.0, 1.0]     # White
+            ])
+        elif name == 'jet':
+            # Jet colormap (blue -> cyan -> yellow -> red)
+            colors = np.array([
+                [0.0, 0.0, 0.5, 1.0],    # Dark blue
+                [0.0, 0.0, 1.0, 1.0],    # Blue
+                [0.0, 0.5, 1.0, 1.0],    # Light blue
+                [0.0, 1.0, 1.0, 1.0],    # Cyan
+                [0.5, 1.0, 0.5, 1.0],    # Light green
+                [1.0, 1.0, 0.0, 1.0],    # Yellow
+                [1.0, 0.5, 0.0, 1.0],    # Orange
+                [1.0, 0.0, 0.0, 1.0]     # Red
+            ])
+        elif name == 'gray':
+            # Grayscale colormap
+            colors = np.array([
+                [0.0, 0.0, 0.0, 1.0],    # Black
+                [1.0, 1.0, 1.0, 1.0]     # White
+            ])
+        elif name == 'bone':
+            # Bone colormap (black -> blue -> white)
+            colors = np.array([
+                [0.0, 0.0, 0.0, 1.0],     # Black
+                [0.2, 0.2, 0.3, 1.0],     # Dark blue-gray
+                [0.4, 0.4, 0.6, 1.0],     # Blue-gray
+                [0.6, 0.7, 0.8, 1.0],     # Light blue-gray
+                [1.0, 1.0, 1.0, 1.0]      # White
+            ])
+        elif name == 'copper':
+            # Copper colormap (black -> brown -> orange)
+            colors = np.array([
+                [0.0, 0.0, 0.0, 1.0],     # Black
+                [0.3, 0.2, 0.1, 1.0],     # Dark brown
+                [0.6, 0.4, 0.2, 1.0],     # Brown
+                [0.9, 0.6, 0.3, 1.0],     # Light brown
+                [1.0, 0.8, 0.5, 1.0]      # Copper
+            ])
+        elif name == 'cool':
+            # Cool colormap (cyan -> magenta)
+            colors = np.array([
+                [0.0, 1.0, 1.0, 1.0],     # Cyan
+                [1.0, 0.0, 1.0, 1.0]      # Magenta
+            ])
+        elif name == 'spring':
+            # Spring colormap (magenta -> yellow)
+            colors = np.array([
+                [1.0, 0.0, 1.0, 1.0],     # Magenta
+                [1.0, 1.0, 0.0, 1.0]      # Yellow
+            ])
+        elif name == 'summer':
+            # Summer colormap (green -> yellow)
+            colors = np.array([
+                [0.0, 0.5, 0.4, 1.0],     # Dark green
+                [1.0, 1.0, 0.4, 1.0]      # Yellow-green
+            ])
+        elif name == 'autumn':
+            # Autumn colormap (red -> yellow)
+            colors = np.array([
+                [1.0, 0.0, 0.0, 1.0],     # Red
+                [1.0, 1.0, 0.0, 1.0]      # Yellow
+            ])
+        elif name == 'winter':
+            # Winter colormap (blue -> green)
+            colors = np.array([
+                [0.0, 0.0, 1.0, 1.0],     # Blue
+                [0.0, 1.0, 0.5, 1.0]      # Blue-green
+            ])
+        else:
+            return None
+        
+        # Create positions for the colors
+        positions = np.linspace(0, 1, len(colors))
+        
+        # Create the colormap
+        colormap = pg.ColorMap(positions, colors)
+        return colormap
     
     def create_scale_bar(self):
         """Create a scale bar for the image display"""
@@ -1101,6 +1264,10 @@ class ConfocalMainWindow(QMainWindow):
                                 scale=(scale_x, scale_y),
                                 pos=(x_start_um, y_start_um))
         
+        # Reapply current colormap to ensure it's maintained
+        if hasattr(self, 'current_colormap'):
+            self.apply_colormap(self.current_colormap)
+        
         # Update scale bar and coordinate labels
         self.update_scale_bar()
         self.update_coordinate_labels()
@@ -1123,6 +1290,10 @@ class ConfocalMainWindow(QMainWindow):
                                 autoLevels=True,
                                 scale=(scale_x, scale_y),
                                 pos=(x_start_um, y_start_um))
+        
+        # Reapply current colormap to ensure it's maintained
+        if hasattr(self, 'current_colormap'):
+            self.apply_colormap(self.current_colormap)
         
         # Update scale bar and coordinate labels
         self.update_scale_bar()
