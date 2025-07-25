@@ -1407,69 +1407,65 @@ class ConfocalMainWindow(QMainWindow):
         if not self.zoom_roi.isVisible():
             return
         
-        # Get ROI bounds
+        # Get ROI bounds in pixel coordinates.
         roi_pos = self.zoom_roi.pos()
         roi_size = self.zoom_roi.size()
         
-        # Convert to image coordinates
-        min_x = int(roi_pos[0])
-        min_y = int(roi_pos[1])
-        max_x = int(roi_pos[0] + roi_size[0])
-        max_y = int(roi_pos[1] + roi_size[1])
-        
-        # Ensure bounds are within image
-        if self.current_image is not None:
-            height, width = self.current_image.shape
-            min_x = max(0, min(min_x, width-1))
-            max_x = max(min_x+1, min(max_x, width))
-            min_y = max(0, min(min_y, height-1))
-            max_y = max(min_y+1, min(max_y, height))
-        
+        # The ImageItem is transposed, so the ROI coordinates are already in the correct (width, height) pixel space.
+        min_px = int(roi_pos.x())
+        min_py = int(roi_pos.y())
+        max_px = int(roi_pos.x() + roi_size.x())
+        max_py = int(roi_pos.y() + roi_size.y())
+
+        # Retrieve the voltage points from the last scan.
+        if self.scan_thread and self.scan_thread.x_points is not None:
+            x_points = self.scan_thread.x_points
+            y_points = self.scan_thread.y_points
+        else:
+            x_points, y_points = self.scan_points_manager.get_points()
+
+        # Ensure bounds are within the valid pixel range of the last scan.
+        height, width = len(y_points), len(x_points)
+        min_px = max(0, min(min_px, width - 1))
+        max_px = max(min_px + 1, min(max_px, width))
+        min_py = max(0, min(min_py, height - 1))
+        max_py = max(min_py + 1, min(max_py, height))
+
         # Save current state for zoom history
-        current_x_points, current_y_points = self.scan_points_manager.get_points()
-        self.scan_history.append((current_x_points.copy(), current_y_points.copy()))
-        
-        # Calculate new scan region
+        self.scan_history.append((x_points.copy(), y_points.copy()))
+
+        # Map pixel coordinates directly to new voltage ranges.
+        new_x_min = x_points[min_px]
+        new_x_max = x_points[max_px - 1]
+        new_y_min = y_points[min_py]
+        new_y_max = y_points[max_py - 1]
+
+        # Update parameters with the new voltage ranges.
         current_params = self.scan_params_manager.get_params()
-        current_x_res = current_params['resolution']['x']
-        current_y_res = current_params['resolution']['y']
-        
-        # Map pixel coordinates to voltage coordinates
-        x_range = current_params['scan_range']['x']
-        y_range = current_params['scan_range']['y']
-        
-        new_x_min = np.interp(min_x, [0, current_x_res-1], x_range)
-        new_x_max = np.interp(max_x-1, [0, current_x_res-1], x_range)
-        new_y_min = np.interp(min_y, [0, current_y_res-1], y_range)
-        new_y_max = np.interp(max_y-1, [0, current_y_res-1], y_range)
-        
-        # Update parameters
         self.scan_params_manager.update_scan_parameters(
             x_range=[new_x_min, new_x_max],
             y_range=[new_y_min, new_y_max]
         )
         
-        # Update widget display
+        # Update widget display with the new ranges, keeping resolution the same.
         self.scan_params_widget.update_values(
             [new_x_min, new_x_max], [new_y_min, new_y_max],
-            current_x_res, current_y_res,
+            current_params['resolution']['x'], current_params['resolution']['y'],
             current_params['dwell_time']
         )
         
-        # Update scan points
+        # Update scan points for the next scan.
         self.scan_points_manager._update_points_from_params()
         
-        # Update zoom level
+        # Update zoom level and UI state.
         self.zoom_manager.set_zoom_level(self.zoom_manager.get_zoom_level() + 1)
-        
-        # Hide ROI
         self.zoom_roi.hide()
         self.zoom_toggle_btn.setText("🔍 Enable Zoom")
         self.apply_zoom_btn.setEnabled(False)
         
         self.show_message(f"🔍 Zoomed to region: X={new_x_min:.3f}-{new_x_max:.3f}V, Y={new_y_min:.3f}-{new_y_max:.3f}V")
         
-        # Update scale bar and coordinate labels for new zoom level
+        # Update scale bar and coordinate labels for new zoom level.
         self.update_scale_bar()
         self.update_coordinate_labels()
     
