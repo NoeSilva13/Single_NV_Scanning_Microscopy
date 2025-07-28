@@ -585,6 +585,7 @@ class ConfocalMainWindow(QMainWindow):
         self.scan_thread = None
         self.current_image = None
         self.data_path = None
+        self.single_axis_scan_thread = None
         
         # Status bar
         self.status_bar = self.statusBar()
@@ -940,6 +941,27 @@ class ConfocalMainWindow(QMainWindow):
         position_group.setLayout(position_layout)
         left_layout.addWidget(position_group, 0)  # No stretch - fixed size
         
+        # Single axis scan buttons - moved from right panel
+        scan_buttons_group = QGroupBox("Single Axis Scan")
+        scan_buttons_layout = QHBoxLayout()
+        scan_buttons_layout.setSpacing(8)
+        scan_buttons_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # X Scan button
+        self.x_scan_btn = QPushButton("📊 X Scan")
+        self.x_scan_btn.setFixedHeight(35)
+        self.x_scan_btn.clicked.connect(lambda: self.start_axis_scan('X'))
+        scan_buttons_layout.addWidget(self.x_scan_btn)
+        
+        # Y Scan button  
+        self.y_scan_btn = QPushButton("📈 Y Scan")
+        self.y_scan_btn.setFixedHeight(35)
+        self.y_scan_btn.clicked.connect(lambda: self.start_axis_scan('Y'))
+        scan_buttons_layout.addWidget(self.y_scan_btn)
+        
+        scan_buttons_group.setLayout(scan_buttons_layout)
+        left_layout.addWidget(scan_buttons_group, 0)  # No stretch - fixed size
+        
         # Scan parameters widget - gets majority of remaining space
         params_group = QGroupBox("Scan Parameters")
         params_layout = QVBoxLayout()
@@ -1056,7 +1078,7 @@ class ConfocalMainWindow(QMainWindow):
         right_layout.setContentsMargins(8, 8, 8, 8)
         self.right_panel.setLayout(right_layout)
         
-        # Live Signal Plot (40% of right panel height)
+        # Live Signal Plot (equal size)
         live_signal_group = QGroupBox("Live Signal")
         live_signal_layout = QVBoxLayout()
         live_signal_layout.setContentsMargins(5, 5, 5, 5)
@@ -1065,37 +1087,37 @@ class ConfocalMainWindow(QMainWindow):
             histogram_range=100,
             update_interval=200
         )
-        # Allow live plot to expand and use available space
-        self.live_plot.setMinimumHeight(200)  # Minimum readable size
+        # Set consistent minimum height for uniform appearance
+        self.live_plot.setMinimumHeight(150)
         live_signal_layout.addWidget(self.live_plot)
         live_signal_group.setLayout(live_signal_layout)
-        right_layout.addWidget(live_signal_group, 2)  # Stretch factor 2 (40% of space)
+        right_layout.addWidget(live_signal_group, 1)  # Equal stretch factor
         
-        # Auto Focus (30% of right panel height)
+        # Auto Focus (equal size)
         auto_focus_group = QGroupBox("Auto Focus")
         auto_focus_layout = QVBoxLayout()
         auto_focus_layout.setContentsMargins(5, 5, 5, 5)
         self.auto_focus_widget = create_auto_focus_widget(self.counter, self.binwidth)
-        # Allow auto focus to expand but set reasonable minimum
-        self.auto_focus_widget.setMinimumHeight(120)
+        # Set consistent minimum height for uniform appearance
+        self.auto_focus_widget.setMinimumHeight(150)
         auto_focus_layout.addWidget(self.auto_focus_widget)
         auto_focus_group.setLayout(auto_focus_layout)
-        right_layout.addWidget(auto_focus_group, 1)  # Stretch factor 1 (20% of space)
+        right_layout.addWidget(auto_focus_group, 1)  # Equal stretch factor
         
-        # Single Axis Scan (40% of right panel height)
-        single_axis_group = QGroupBox("Single Axis Scan")
+        # Single Axis Scan Plot (equal size) - buttons moved to left panel
+        single_axis_group = QGroupBox("Single Axis Scan Plot")
         single_axis_layout = QVBoxLayout()
         single_axis_layout.setContentsMargins(5, 5, 5, 5)
         self.single_axis_widget = create_single_axis_scan_widget(
             self.scan_params_manager, self.output_task, self.counter, self.binwidth
         )
-        # Allow single axis scan to expand and use available space
+        # Set consistent minimum height for uniform appearance
         self.single_axis_widget.setMinimumHeight(150)
         single_axis_layout.addWidget(self.single_axis_widget)
         single_axis_group.setLayout(single_axis_layout)
-        right_layout.addWidget(single_axis_group, 2)  # Stretch factor 2 (40% of space)
+        right_layout.addWidget(single_axis_group, 1)  # Equal stretch factor
         
-        # No stretch at bottom - let widgets fill all available space
+        # No stretch at bottom - let widgets fill all available space equally
         
         # Add left+center layout to the combined widget
         left_center_bottom_layout.addLayout(self.left_center_layout, 1)  # Give top area stretch factor
@@ -2359,6 +2381,101 @@ class ConfocalMainWindow(QMainWindow):
                 pass
         except Exception as e:
             print(f"Error updating gain: {e}")
+    
+    def start_axis_scan(self, axis):
+        """Start single axis scan for specified axis (X or Y)"""
+        try:
+            # Import the scan thread class
+            from widgets.pyqt_single_axis_scan import SingleAxisScanThread
+            
+            # Determine which button was pressed
+            if axis == 'X':
+                button = self.x_scan_btn
+                other_button = self.y_scan_btn
+            else:
+                button = self.y_scan_btn
+                other_button = self.x_scan_btn
+            
+            # Check if scan is currently running
+            if self.single_axis_scan_thread and self.single_axis_scan_thread.isRunning():
+                # Stop current scan
+                self.single_axis_scan_thread.stop()
+                self.x_scan_btn.setText("📊 X Scan")
+                self.y_scan_btn.setText("📈 Y Scan")
+                self.x_scan_btn.setEnabled(True)
+                self.y_scan_btn.setEnabled(True)
+                self.show_message(f"⏹ {axis} axis scan stopped")
+                return
+            
+            # Start new scan
+            button.setText(f"⏹ Stop {axis}")
+            other_button.setEnabled(False)  # Disable other button during scan
+            
+            # Clear the plot in the single axis widget
+            if hasattr(self, 'single_axis_widget'):
+                self.single_axis_widget.clear_plot()
+            
+            # Get current position for scan reference
+            current_pos = [0.0, 0.0]  # Default position
+            if hasattr(self, 'current_position_widget'):
+                current_pos = self.current_position_widget.current_position.copy()
+            
+            # Use default parameters for scan
+            start_pos = -1.0  # Default scan range from -1V to +1V
+            end_pos = 1.0
+            n_steps = 21      # Default 21 steps
+            dwell_time = 0.01 # Default 10ms dwell time
+            
+            # Start scan thread
+            self.single_axis_scan_thread = SingleAxisScanThread(
+                start_pos, end_pos, n_steps, axis, current_pos,
+                self.counter, self.binwidth, self.output_task, dwell_time
+            )
+            
+            # Connect signals - update the single axis widget plot if it exists
+            if hasattr(self, 'single_axis_widget'):
+                self.single_axis_scan_thread.position_update.connect(self.single_axis_widget.update_plot)
+                self.single_axis_scan_thread.scan_complete.connect(lambda pos, counts, msg: self.on_axis_scan_complete(pos, counts, msg, axis))
+                self.single_axis_scan_thread.error_occurred.connect(lambda error: self.on_axis_scan_error(error, axis))
+            
+            self.single_axis_scan_thread.start()
+            self.show_message(f"🔬 {axis} axis scan started")
+            
+        except Exception as e:
+            self.show_message(f"❌ Error starting {axis} axis scan: {str(e)}")
+            # Reset buttons on error
+            self.x_scan_btn.setText("📊 X Scan")
+            self.y_scan_btn.setText("📈 Y Scan")
+            self.x_scan_btn.setEnabled(True)
+            self.y_scan_btn.setEnabled(True)
+    
+    def on_axis_scan_complete(self, positions, counts, message, axis):
+        """Handle axis scan completion"""
+        # Reset both buttons to their default states
+        self.x_scan_btn.setText("📊 X Scan")
+        self.y_scan_btn.setText("📈 Y Scan")
+        self.x_scan_btn.setEnabled(True)
+        self.y_scan_btn.setEnabled(True)
+        
+        # Update the single axis widget with the results
+        if hasattr(self, 'single_axis_widget'):
+            self.single_axis_widget.on_scan_complete(positions, counts, message, axis)
+        
+        self.show_message(f"✅ {axis} axis scan completed")
+    
+    def on_axis_scan_error(self, error_msg, axis):
+        """Handle axis scan error"""
+        # Reset both buttons to their default states
+        self.x_scan_btn.setText("📊 X Scan")
+        self.y_scan_btn.setText("📈 Y Scan")
+        self.x_scan_btn.setEnabled(True)
+        self.y_scan_btn.setEnabled(True)
+        
+        # Update the single axis widget with the error
+        if hasattr(self, 'single_axis_widget'):
+            self.single_axis_widget.on_scan_error(error_msg, axis)
+        
+        self.show_message(f"❌ {axis} axis scan error: {error_msg}")
     
     def trigger_auto_focus(self):
         """Trigger auto focus from the scan controls"""

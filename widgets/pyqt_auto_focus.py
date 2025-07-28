@@ -87,8 +87,8 @@ class AutoFocusWidget(QWidget):
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
         
-        # Status label
-        self.status_label = QLabel("Ready for auto-focus")
+        # Status label (initially empty)
+        self.status_label = QLabel("")
         layout.addWidget(self.status_label)
         
         # Focus plot with dark theme matching ODMR GUI

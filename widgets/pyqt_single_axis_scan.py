@@ -100,28 +100,10 @@ class SingleAxisScanWidget(QWidget):
         self.init_ui()
     
     def init_ui(self):
-        """Initialize the simplified UI with only X and Y scan buttons"""
+        """Initialize the UI as plot-only widget (buttons moved to left panel)"""
         layout = QVBoxLayout()
-        layout.setSpacing(8)
-        layout.setContentsMargins(5, 5, 5, 5)
-        
-        # Simplified scan controls - just two buttons
-        scan_buttons_layout = QHBoxLayout()
-        scan_buttons_layout.setSpacing(8)
-        
-        # X Scan button
-        self.x_scan_button = QPushButton("📊 X Scan")
-        self.x_scan_button.setFixedHeight(40)
-        self.x_scan_button.clicked.connect(lambda: self.start_axis_scan('X'))
-        scan_buttons_layout.addWidget(self.x_scan_button)
-        
-        # Y Scan button  
-        self.y_scan_button = QPushButton("📈 Y Scan")
-        self.y_scan_button.setFixedHeight(40)
-        self.y_scan_button.clicked.connect(lambda: self.start_axis_scan('Y'))
-        scan_buttons_layout.addWidget(self.y_scan_button)
-        
-        layout.addLayout(scan_buttons_layout)
+        layout.setSpacing(5)
+        layout.setContentsMargins(0, 0, 0, 0)
         
         # Scan plot with dark theme matching ODMR GUI
         self.plot_widget = pg.PlotWidget(title="Single Axis Scan")
@@ -152,49 +134,10 @@ class SingleAxisScanWidget(QWidget):
         self.current_position = [x, y]
         # Note: Position labels removed - display is now in the left panel
     
-    def start_axis_scan(self, axis):
-        """Start single axis scan for specified axis (X or Y)"""
-        # Determine which button was pressed and handle stop functionality
-        if axis == 'X':
-            button = self.x_scan_button
-            other_button = self.y_scan_button
-        else:
-            button = self.y_scan_button
-            other_button = self.x_scan_button
-        
-        # Check if scan is currently running
-        if self.scan_thread and self.scan_thread.isRunning():
-            # Stop current scan
-            self.scan_thread.stop()
-            self.x_scan_button.setText("📊 X Scan")
-            self.y_scan_button.setText("📈 Y Scan")
-            self.x_scan_button.setEnabled(True)
-            self.y_scan_button.setEnabled(True)
-            return
-        
-        # Start new scan
-        button.setText(f"⏹ Stop {axis}")
-        other_button.setEnabled(False)  # Disable other button during scan
-        
-        # Clear plot
+    def clear_plot(self):
+        """Clear the scan plot (called from main window when starting new scan)"""
         self.scan_curve.setData([], [])
-        
-        # Use default parameters (can be made configurable later if needed)
-        start_pos = -1.0  # Default scan range from -1V to +1V
-        end_pos = 1.0
-        n_steps = 21      # Default 21 steps
-        dwell_time = 0.01 # Default 10ms dwell time
-        
-        # Start scan thread
-        self.scan_thread = SingleAxisScanThread(
-            start_pos, end_pos, n_steps, axis, self.current_position.copy(),
-            self.counter, self.binwidth, self.output_task, dwell_time
-        )
-        
-        self.scan_thread.position_update.connect(self.update_plot)
-        self.scan_thread.scan_complete.connect(lambda pos, counts, msg: self.on_scan_complete(pos, counts, msg, axis))
-        self.scan_thread.error_occurred.connect(lambda error: self.on_scan_error(error, axis))
-        self.scan_thread.start()
+        self.plot_widget.setTitle("Single Axis Scan")
     
     def update_plot(self, position, count):
         """Update the scan plot with new data point"""
@@ -215,13 +158,7 @@ class SingleAxisScanWidget(QWidget):
         self.scan_curve.setData(current_x, current_y)
     
     def on_scan_complete(self, positions, counts, message, axis):
-        """Handle scan completion"""
-        # Reset both buttons to their default states
-        self.x_scan_button.setText("📊 X Scan")
-        self.y_scan_button.setText("📈 Y Scan")
-        self.x_scan_button.setEnabled(True)
-        self.y_scan_button.setEnabled(True)
-        
+        """Handle scan completion (buttons are now in left panel)"""
         # Update plot with final data
         self.scan_curve.setData(positions, counts)
         
@@ -230,13 +167,7 @@ class SingleAxisScanWidget(QWidget):
         print(f"{axis} axis scan completed: {message}")
     
     def on_scan_error(self, error_msg, axis):
-        """Handle scan error"""
-        # Reset both buttons to their default states
-        self.x_scan_button.setText("📊 X Scan")
-        self.y_scan_button.setText("📈 Y Scan")
-        self.x_scan_button.setEnabled(True)
-        self.y_scan_button.setEnabled(True)
-        
+        """Handle scan error (buttons are now in left panel)"""
         print(f"{axis} axis scan error: {error_msg}")
 
 
