@@ -21,7 +21,7 @@ import pyqtgraph as pg
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
     QGridLayout, QSplitter, QTabWidget, QGroupBox, QPushButton,
-    QLabel, QMessageBox, QDesktopWidget, QComboBox
+    QLabel, QMessageBox, QDesktopWidget, QComboBox, QSlider
 )
 from PyQt5.QtCore import QTimer, pyqtSignal, QObject, Qt, QThread
 from PyQt5.QtGui import QPixmap, QPainter
@@ -129,7 +129,7 @@ class CurrentPositionWidget(QWidget):
 
 
 class CameraWidget(QWidget):
-    """Camera display and controls widget"""
+    """Camera display widget (controls moved to camera controls section)"""
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -138,7 +138,8 @@ class CameraWidget(QWidget):
     
     def init_ui(self):
         layout = QVBoxLayout()
-        layout.setSpacing(5)
+        layout.setSpacing(0)
+        layout.setContentsMargins(0, 0, 0, 0)
         
         # Camera image display - optimized for space
         self.camera_view = pg.ImageView()
@@ -149,31 +150,6 @@ class CameraWidget(QWidget):
         self.camera_view.setStyleSheet("background-color: #262930; border: 1px solid #555555;")
         
         layout.addWidget(self.camera_view)
-        
-        # Camera controls
-        controls_layout = QGridLayout()
-        controls_layout.setSpacing(5)
-        
-        # Exposure control
-        controls_layout.addWidget(QLabel("Exposure:"), 0, 0)
-        self.exposure_spin = pg.SpinBox(value=10, bounds=(1, 1000), int=True, suffix='ms')
-        self.exposure_spin.setFixedWidth(80)
-        controls_layout.addWidget(self.exposure_spin, 0, 1)
-        
-        # Gain control  
-        controls_layout.addWidget(QLabel("Gain:"), 1, 0)
-        self.gain_spin = pg.SpinBox(value=1, bounds=(1, 100), int=True)
-        self.gain_spin.setFixedWidth(80)
-        controls_layout.addWidget(self.gain_spin, 1, 1)
-        
-        # Live view toggle
-        self.live_view_btn = QPushButton("📹 Live View")
-        self.live_view_btn.setFixedSize(100, 30)
-        self.live_view_btn.setCheckable(True)
-        self.live_view_btn.clicked.connect(self.toggle_live_view)
-        controls_layout.addWidget(self.live_view_btn, 2, 0, 1, 2)
-        
-        layout.addLayout(controls_layout)
         self.setLayout(layout)
     
     def init_camera_simulation(self):
@@ -192,13 +168,13 @@ class CameraWidget(QWidget):
         self.update_timer.timeout.connect(self.update_camera_image)
         
     def toggle_live_view(self):
-        """Toggle live camera view"""
-        if self.live_view_btn.isChecked():
-            self.live_view_btn.setText("⏸️ Pause")
-            self.update_timer.start(100)  # Update every 100ms
-        else:
-            self.live_view_btn.setText("📹 Live View")
-            self.update_timer.stop()
+        """Toggle live camera view (controlled from camera controls section)"""
+        # This method will be called from the main window's live view control
+        if hasattr(self, 'update_timer'):
+            if self.update_timer.isActive():
+                self.update_timer.stop()
+            else:
+                self.update_timer.start(100)  # Update every 100ms
     
     def update_camera_image(self):
         """Update camera image with simulated data"""
@@ -890,12 +866,52 @@ class ConfocalMainWindow(QMainWindow):
         camera_group.setLayout(camera_layout)
         left_layout.addWidget(camera_group, 0)  # No stretch - fixed size
         
-        # Camera controls group - minimal space
+        # Camera controls group - enhanced with sliders
         camera_controls_group = QGroupBox("Camera Controls")
         camera_controls_layout = QVBoxLayout()
         camera_controls_layout.setContentsMargins(5, 5, 5, 5)
+        camera_controls_layout.setSpacing(8)
         
-        # Add basic camera control buttons
+        # Camera parameter controls with sliders
+        params_layout = QGridLayout()
+        params_layout.setSpacing(5)
+        
+        # Exposure control (slider)
+        params_layout.addWidget(QLabel("Exposure:"), 0, 0)
+        self.exposure_slider = QSlider(Qt.Horizontal)
+        self.exposure_slider.setRange(1, 1000)  # 1ms to 1000ms
+        self.exposure_slider.setValue(10)
+        self.exposure_slider.setFixedWidth(120)
+        self.exposure_label = QLabel("10 ms")
+        self.exposure_label.setFixedWidth(50)
+        self.exposure_label.setAlignment(Qt.AlignCenter)
+        self.exposure_slider.valueChanged.connect(self.on_exposure_changed)
+        params_layout.addWidget(self.exposure_slider, 0, 1)
+        params_layout.addWidget(self.exposure_label, 0, 2)
+        
+        # Gain control (slider)
+        params_layout.addWidget(QLabel("Gain:"), 1, 0)
+        self.gain_slider = QSlider(Qt.Horizontal)
+        self.gain_slider.setRange(1, 100)  # 1x to 100x gain
+        self.gain_slider.setValue(1)
+        self.gain_slider.setFixedWidth(120)
+        self.gain_label = QLabel("1x")
+        self.gain_label.setFixedWidth(50)
+        self.gain_label.setAlignment(Qt.AlignCenter)
+        self.gain_slider.valueChanged.connect(self.on_gain_changed)
+        params_layout.addWidget(self.gain_slider, 1, 1)
+        params_layout.addWidget(self.gain_label, 1, 2)
+        
+        camera_controls_layout.addLayout(params_layout)
+        
+        # Live view toggle
+        self.live_view_btn = QPushButton("📹 Live View")
+        self.live_view_btn.setFixedHeight(35)
+        self.live_view_btn.setCheckable(True)
+        self.live_view_btn.clicked.connect(self.toggle_camera_live_view)
+        camera_controls_layout.addWidget(self.live_view_btn)
+        
+        # Camera action buttons
         camera_buttons_layout = QHBoxLayout()
         camera_buttons_layout.setSpacing(5)
         
@@ -2302,6 +2318,47 @@ class ConfocalMainWindow(QMainWindow):
                     self.show_message("❌ No camera image to save")
         except Exception as e:
             self.show_message(f"❌ Error saving camera image: {str(e)}")
+    
+    def toggle_camera_live_view(self):
+        """Toggle camera live view from controls section"""
+        try:
+            if hasattr(self, 'camera_widget'):
+                # Toggle the camera's live view
+                self.camera_widget.toggle_live_view()
+                
+                # Update button text and styling
+                if self.live_view_btn.isChecked():
+                    self.live_view_btn.setText("⏸️ Pause View")
+                    self.show_message("📹 Camera live view started")
+                else:
+                    self.live_view_btn.setText("📹 Live View")
+                    self.show_message("⏸️ Camera live view paused")
+        except Exception as e:
+            self.show_message(f"❌ Error toggling live view: {str(e)}")
+    
+    def on_exposure_changed(self, value):
+        """Handle exposure slider changes"""
+        self.exposure_label.setText(f"{value} ms")
+        # In a real implementation, this would update the camera exposure
+        # For now, we just update the label and could affect the simulation
+        try:
+            if hasattr(self, 'camera_widget'):
+                # Could modify camera simulation parameters here
+                pass
+        except Exception as e:
+            print(f"Error updating exposure: {e}")
+    
+    def on_gain_changed(self, value):
+        """Handle gain slider changes"""
+        self.gain_label.setText(f"{value}x")
+        # In a real implementation, this would update the camera gain
+        # For now, we just update the label and could affect the simulation
+        try:
+            if hasattr(self, 'camera_widget'):
+                # Could modify camera simulation parameters here
+                pass
+        except Exception as e:
+            print(f"Error updating gain: {e}")
     
     def trigger_auto_focus(self):
         """Trigger auto focus from the scan controls"""
