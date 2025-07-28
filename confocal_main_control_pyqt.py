@@ -905,28 +905,29 @@ class ConfocalMainWindow(QMainWindow):
         
         camera_controls_layout.addLayout(params_layout)
         
-        # Live view toggle
+        # Camera action buttons - all in one row using full width
+        camera_buttons_layout = QHBoxLayout()
+        camera_buttons_layout.setSpacing(8)
+        camera_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Live view toggle button
         self.live_view_btn = QPushButton("📹 Live View")
         self.live_view_btn.setFixedHeight(35)
         self.live_view_btn.setCheckable(True)
         self.live_view_btn.clicked.connect(self.toggle_camera_live_view)
-        camera_controls_layout.addWidget(self.live_view_btn)
+        camera_buttons_layout.addWidget(self.live_view_btn, 1)  # Stretch factor 1
         
-        # Camera action buttons
-        camera_buttons_layout = QHBoxLayout()
-        camera_buttons_layout.setSpacing(5)
-        
+        # Capture button
         self.capture_btn = QPushButton("📸 Capture")
-        self.capture_btn.setFixedSize(80, 30)
+        self.capture_btn.setFixedHeight(35)
         self.capture_btn.clicked.connect(self.capture_image)
+        camera_buttons_layout.addWidget(self.capture_btn, 1)  # Stretch factor 1
         
+        # Save button
         self.save_camera_btn = QPushButton("💾 Save")
-        self.save_camera_btn.setFixedSize(80, 30)
+        self.save_camera_btn.setFixedHeight(35)
         self.save_camera_btn.clicked.connect(self.save_camera_image)
-        
-        camera_buttons_layout.addWidget(self.capture_btn)
-        camera_buttons_layout.addWidget(self.save_camera_btn)
-        camera_buttons_layout.addStretch()
+        camera_buttons_layout.addWidget(self.save_camera_btn, 1)  # Stretch factor 1
         
         camera_controls_layout.addLayout(camera_buttons_layout)
         camera_controls_group.setLayout(camera_controls_layout)
@@ -983,42 +984,49 @@ class ConfocalMainWindow(QMainWindow):
         center_layout.setContentsMargins(8, 8, 8, 8)
         self.center_panel.setLayout(center_layout)
         
-        # Image controls - more compact organization
+        # Image controls - optimized single row layout using full width
         image_controls_group = QGroupBox("Image Panel")
         image_controls_group_layout = QVBoxLayout()
         image_controls_group_layout.setContentsMargins(5, 5, 5, 5)
         image_controls_group_layout.setSpacing(5)
         
-        # First row: Zoom controls
-        zoom_controls_layout = QHBoxLayout()
-        zoom_controls_layout.setSpacing(8)
+        # Single row: All controls using full width
+        controls_layout = QHBoxLayout()
+        controls_layout.setSpacing(8)
+        controls_layout.setContentsMargins(0, 0, 0, 0)
         
+        # Zoom toggle button
         self.zoom_toggle_btn = QPushButton("🔍 Enable Zoom")
         self.zoom_toggle_btn.clicked.connect(self.toggle_zoom_mode)
-        self.zoom_toggle_btn.setFixedSize(110, 30)
+        self.zoom_toggle_btn.setFixedHeight(35)
+        controls_layout.addWidget(self.zoom_toggle_btn, 2)  # Stretch factor 2
         
+        # Apply zoom button
         self.apply_zoom_btn = QPushButton("⚡ Apply Zoom")
         self.apply_zoom_btn.clicked.connect(self.apply_zoom)
         self.apply_zoom_btn.setEnabled(False)
-        self.apply_zoom_btn.setFixedSize(110, 30)
+        self.apply_zoom_btn.setFixedHeight(35)
+        controls_layout.addWidget(self.apply_zoom_btn, 2)  # Stretch factor 2
         
-        zoom_controls_layout.addWidget(self.zoom_toggle_btn)
-        zoom_controls_layout.addWidget(self.apply_zoom_btn)
-        zoom_controls_layout.addStretch()
-        
-        # Second row: Colormap selection
+        # Colormap selection with label
+        colormap_container = QWidget()
         colormap_layout = QHBoxLayout()
-        colormap_layout.setSpacing(8)
+        colormap_layout.setContentsMargins(0, 0, 0, 0)
+        colormap_layout.setSpacing(5)
         
-        colormap_layout.addWidget(QLabel("Colormap:"))
+        colormap_label = QLabel("Colormap:")
+        colormap_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.colormap_combo = QComboBox()
-        self.colormap_combo.setFixedWidth(140)
-        colormap_layout.addWidget(self.colormap_combo)
-        colormap_layout.addStretch()
+        self.colormap_combo.setFixedHeight(35)
         
-        # Add both rows to the group
-        image_controls_group_layout.addLayout(zoom_controls_layout)
-        image_controls_group_layout.addLayout(colormap_layout)
+        colormap_layout.addWidget(colormap_label, 0)
+        colormap_layout.addWidget(self.colormap_combo, 1)
+        colormap_container.setLayout(colormap_layout)
+        
+        controls_layout.addWidget(colormap_container, 3)  # Stretch factor 3 (more space for combo)
+        
+        # Add single row to the group
+        image_controls_group_layout.addLayout(controls_layout)
         image_controls_group.setLayout(image_controls_group_layout)
         
         center_layout.addWidget(image_controls_group)
