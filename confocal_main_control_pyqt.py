@@ -900,6 +900,11 @@ class ConfocalMainWindow(QMainWindow):
         self.stop_scan_btn.setMinimumHeight(45)
         self.stop_scan_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
+        self.auto_focus_btn = QPushButton("🔍 Auto Focus")
+        self.auto_focus_btn.clicked.connect(self.trigger_auto_focus)
+        self.auto_focus_btn.setMinimumHeight(45)
+        self.auto_focus_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        
         self.save_image_btn = QPushButton("📷 Save Image")
         self.save_image_btn.clicked.connect(self.save_image)
         self.save_image_btn.setMinimumHeight(45)
@@ -923,6 +928,7 @@ class ConfocalMainWindow(QMainWindow):
         # Add buttons to layout with equal stretch factors
         controls_layout.addWidget(self.new_scan_btn, 1)     # Equal stretch
         controls_layout.addWidget(self.stop_scan_btn, 1)    # Equal stretch
+        controls_layout.addWidget(self.auto_focus_btn, 1)   # Equal stretch
         controls_layout.addWidget(self.save_image_btn, 1)   # Equal stretch
         controls_layout.addWidget(self.reset_zoom_btn, 1)   # Equal stretch
         controls_layout.addWidget(self.close_scanner_btn, 1) # Equal stretch
@@ -1933,6 +1939,21 @@ class ConfocalMainWindow(QMainWindow):
                     self.show_message("❌ No camera image to save")
         except Exception as e:
             self.show_message(f"❌ Error saving camera image: {str(e)}")
+    
+    def trigger_auto_focus(self):
+        """Trigger auto focus from the scan controls"""
+        try:
+            if hasattr(self, 'auto_focus_widget') and self.auto_focus_widget:
+                # Call the auto focus widget's start_auto_focus method
+                if hasattr(self.auto_focus_widget, 'start_auto_focus'):
+                    self.auto_focus_widget.start_auto_focus()
+                    self.show_message("🔍 Auto focus started from scan controls")
+                else:
+                    self.show_message("❌ Auto focus method not available")
+            else:
+                self.show_message("❌ Auto focus widget not available")
+        except Exception as e:
+            self.show_message(f"❌ Error triggering auto focus: {str(e)}")
 
     def show_message(self, message):
         """Display a message to the user"""
