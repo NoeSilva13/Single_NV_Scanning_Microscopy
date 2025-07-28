@@ -82,12 +82,6 @@ class AutoFocusWidget(QWidget):
         """Initialize the UI"""
         layout = QVBoxLayout()
         
-        # Auto focus button
-        self.focus_button = QPushButton("🔍 Auto Focus")
-        self.focus_button.setFixedSize(150, 50)
-        self.focus_button.clicked.connect(self.start_auto_focus)
-        layout.addWidget(self.focus_button)
-        
         # Progress bar
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
@@ -123,11 +117,9 @@ class AutoFocusWidget(QWidget):
         if self.focus_thread and self.focus_thread.isRunning():
             # Stop current focus
             self.focus_thread.stop()
-            self.focus_button.setText("🔍 Auto Focus")
             return
         
-        # Start new focus
-        self.focus_button.setText("⏹ Stop Focus")
+        # Start new focus - button control is now handled by scan controls
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
         self.status_label.setText("Auto-focus in progress...")
@@ -163,7 +155,6 @@ class AutoFocusWidget(QWidget):
     
     def on_focus_complete(self, best_position, positions, counts, message):
         """Handle focus completion"""
-        self.focus_button.setText("🔍 Auto Focus")
         self.progress_bar.setVisible(False)
         self.status_label.setText(message)
         
@@ -178,7 +169,6 @@ class AutoFocusWidget(QWidget):
     
     def on_focus_error(self, error_msg):
         """Handle focus error"""
-        self.focus_button.setText("🔍 Auto Focus")
         self.progress_bar.setVisible(False)
         self.status_label.setText(f"Error: {error_msg}")
 
