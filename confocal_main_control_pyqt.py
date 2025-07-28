@@ -294,7 +294,6 @@ class ScanParametersWidget(QWidget):
         
         # Apply Changes button
         self.apply_btn = QPushButton("Apply Changes")
-        self.apply_btn.setFixedHeight(35)
         self.apply_btn.clicked.connect(self.apply_changes)
         main_layout.addWidget(self.apply_btn)
         
