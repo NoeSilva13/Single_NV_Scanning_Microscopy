@@ -103,20 +103,7 @@ class SingleAxisScanWidget(QWidget):
         """Initialize the UI"""
         layout = QVBoxLayout()
         
-        # Position display group
-        pos_group = QGroupBox("Current Position")
-        pos_layout = QGridLayout()
-        
-        pos_layout.addWidget(QLabel("X Position:"), 0, 0)
-        self.x_pos_label = QLabel("0.000 V")
-        pos_layout.addWidget(self.x_pos_label, 0, 1)
-        
-        pos_layout.addWidget(QLabel("Y Position:"), 1, 0)
-        self.y_pos_label = QLabel("0.000 V")
-        pos_layout.addWidget(self.y_pos_label, 1, 1)
-        
-        pos_group.setLayout(pos_layout)
-        layout.addWidget(pos_group)
+        # Note: Current position display moved to left panel - removed from here for space optimization
         
         # Scan controls group
         scan_group = QGroupBox("Single Axis Scan")
@@ -181,10 +168,9 @@ class SingleAxisScanWidget(QWidget):
         self.setLayout(layout)
     
     def update_current_position(self, x, y):
-        """Update the current position display"""
+        """Update the current position (for internal tracking only - display moved to left panel)"""
         self.current_position = [x, y]
-        self.x_pos_label.setText(f"{x:.3f} V")
-        self.y_pos_label.setText(f"{y:.3f} V")
+        # Note: Position labels removed - display is now in the left panel
     
     def start_scan(self):
         """Start single axis scan"""

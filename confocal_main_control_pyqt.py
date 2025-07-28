@@ -52,6 +52,82 @@ class MainSignalBridge(QObject):
 
 # --------------------- PURE PYQT WIDGET CLASSES ---------------------
 
+class CurrentPositionWidget(QWidget):
+    """Widget to display current scanner position"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.current_position = [0.0, 0.0]  # [x, y] in volts
+        self.init_ui()
+    
+    def init_ui(self):
+        layout = QGridLayout()
+        layout.setSpacing(5)
+        layout.setContentsMargins(10, 10, 10, 10)
+        
+        # Headers
+        header_font = self.font()
+        header_font.setBold(True)
+        
+        axis_header = QLabel("Axis")
+        axis_header.setFont(header_font)
+        axis_header.setStyleSheet("color: #00d4aa;")
+        
+        voltage_header = QLabel("Voltage (V)")
+        voltage_header.setFont(header_font)
+        voltage_header.setStyleSheet("color: #00d4aa;")
+        voltage_header.setAlignment(Qt.AlignCenter)
+        
+        position_header = QLabel("Position (μm)")
+        position_header.setFont(header_font)
+        position_header.setStyleSheet("color: #00d4aa;")
+        position_header.setAlignment(Qt.AlignCenter)
+        
+        layout.addWidget(axis_header, 0, 0)
+        layout.addWidget(voltage_header, 0, 1)
+        layout.addWidget(position_header, 0, 2)
+        
+        # X Position
+        layout.addWidget(QLabel("X:"), 1, 0)
+        self.x_voltage_label = QLabel("0.000")
+        self.x_voltage_label.setAlignment(Qt.AlignCenter)
+        self.x_voltage_label.setStyleSheet("color: #ffffff; padding: 2px;")
+        self.x_position_label = QLabel("0.0")
+        self.x_position_label.setAlignment(Qt.AlignCenter)
+        self.x_position_label.setStyleSheet("color: #ffffff; padding: 2px;")
+        layout.addWidget(self.x_voltage_label, 1, 1)
+        layout.addWidget(self.x_position_label, 1, 2)
+        
+        # Y Position
+        layout.addWidget(QLabel("Y:"), 2, 0)
+        self.y_voltage_label = QLabel("0.000")
+        self.y_voltage_label.setAlignment(Qt.AlignCenter)
+        self.y_voltage_label.setStyleSheet("color: #ffffff; padding: 2px;")
+        self.y_position_label = QLabel("0.0")
+        self.y_position_label.setAlignment(Qt.AlignCenter)
+        self.y_position_label.setStyleSheet("color: #ffffff; padding: 2px;")
+        layout.addWidget(self.y_voltage_label, 2, 1)
+        layout.addWidget(self.y_position_label, 2, 2)
+        
+        self.setLayout(layout)
+    
+    def update_current_position(self, x_voltage, y_voltage):
+        """Update the current position display"""
+        self.current_position = [x_voltage, y_voltage]
+        
+        # Update voltage labels
+        self.x_voltage_label.setText(f"{x_voltage:.3f}")
+        self.y_voltage_label.setText(f"{y_voltage:.3f}")
+        
+        # Convert to micrometers and update position labels
+        from utils import MICRONS_PER_VOLT
+        x_um = x_voltage * MICRONS_PER_VOLT
+        y_um = y_voltage * MICRONS_PER_VOLT
+        
+        self.x_position_label.setText(f"{x_um:.1f}")
+        self.y_position_label.setText(f"{y_um:.1f}")
+
+
 class CameraWidget(QWidget):
     """Camera display and controls widget"""
     
@@ -838,6 +914,15 @@ class ConfocalMainWindow(QMainWindow):
         camera_controls_layout.addLayout(camera_buttons_layout)
         camera_controls_group.setLayout(camera_controls_layout)
         left_layout.addWidget(camera_controls_group, 0)  # No stretch - fixed size
+        
+        # Current position widget - moved from right panel
+        position_group = QGroupBox("Current Position")
+        position_layout = QVBoxLayout()
+        position_layout.setContentsMargins(5, 5, 5, 5)
+        self.current_position_widget = CurrentPositionWidget()
+        position_layout.addWidget(self.current_position_widget)
+        position_group.setLayout(position_layout)
+        left_layout.addWidget(position_group, 0)  # No stretch - fixed size
         
         # Scan parameters widget - gets majority of remaining space
         params_group = QGroupBox("Scan Parameters")
@@ -1751,7 +1836,12 @@ class ConfocalMainWindow(QMainWindow):
                     self.output_task.write([x_voltage, y_voltage])
                     self.show_message(f"Moved scanner to: X={x_voltage:.3f}V ({x_um:.1f}μm), Y={y_voltage:.3f}V ({y_um:.1f}μm)")
                     
-                    if hasattr(self, 'single_axis_widget'):
+                    # Update current position display in left panel
+                    if hasattr(self, 'current_position_widget'):
+                        self.current_position_widget.update_current_position(x_voltage, y_voltage)
+                    
+                    # Also update single axis widget if it needs the position for scanning
+                    if hasattr(self, 'single_axis_widget') and hasattr(self.single_axis_widget, 'update_current_position'):
                         self.single_axis_widget.update_current_position(x_voltage, y_voltage)
                 else:
                     self.show_message("❌ DAQ not initialized - cannot move scanner")
@@ -2014,6 +2104,15 @@ class ConfocalMainWindow(QMainWindow):
         try:
             if self.output_task:
                 self.output_task.write([0, 0])
+                
+                # Update current position display
+                if hasattr(self, 'current_position_widget'):
+                    self.current_position_widget.update_current_position(0.0, 0.0)
+                
+                # Also update single axis widget if it exists
+                if hasattr(self, 'single_axis_widget') and hasattr(self.single_axis_widget, 'update_current_position'):
+                    self.single_axis_widget.update_current_position(0.0, 0.0)
+                
                 self.show_message("🎯 Scanner set to zero")
             else:
                 self.show_message("❌ DAQ not initialized - cannot move scanner")
