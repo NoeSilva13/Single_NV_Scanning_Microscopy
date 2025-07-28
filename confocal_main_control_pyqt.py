@@ -786,7 +786,7 @@ class ConfocalMainWindow(QMainWindow):
         
         center_layout.addWidget(image_controls_group)
         
-        # Main image view
+        # Main image view with enhanced features
         self.image_view = pg.ImageView()
         self.image_view.ui.roiBtn.hide()  # Hide ROI button initially
         self.image_view.ui.menuBtn.hide()  # Hide menu button
@@ -798,15 +798,27 @@ class ConfocalMainWindow(QMainWindow):
         # Set the ImageView widget background color to match theme
         self.image_view.setStyleSheet("background-color: #262930; border: none;")
         
-        # Style the histogram widget if it exists
+        # Style the histogram widget and set proper units
         if hasattr(self.image_view, 'ui') and hasattr(self.image_view.ui, 'histogram'):
             self.image_view.ui.histogram.setBackground('#262930')
+            # Set histogram label to show counts/s
+            if hasattr(self.image_view.ui.histogram, 'axis'):
+                self.image_view.ui.histogram.axis.setLabel('Intensity', units='c/s')
         
         # Enable proper axes for the ImageView
         self.setup_image_axes()
         
+        # Add crosshair lines for cursor position
+        self.setup_crosshair_cursor()
+        
+        # Add position/intensity text overlay
+        self.setup_position_text()
+        
         # Connect mouse events
         self.image_view.getImageItem().mouseClickEvent = self.on_image_click
+        
+        # Connect mouse move events for cursor tracking
+        self.image_view.scene.sigMouseMoved.connect(self.on_mouse_move)
         
         # Set up ROI for zoom selection
         self.zoom_roi = pg.RectROI([10, 10], [30, 30], pen='r')
@@ -1209,11 +1221,44 @@ class ConfocalMainWindow(QMainWindow):
         labels.extend([self.x_label, self.y_label])
         return labels
     
+    def setup_crosshair_cursor(self):
+        """Set up crosshair cursor lines"""
+        view = self.image_view.getView()
+        
+        # Create crosshair lines
+        self.crosshair_v = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen('#00ff88', width=1))
+        self.crosshair_h = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen('#00ff88', width=1))
+        
+        # Initially hide crosshairs
+        self.crosshair_v.hide()
+        self.crosshair_h.hide()
+        
+        # Add to view
+        view.addItem(self.crosshair_v)
+        view.addItem(self.crosshair_h)
+    
+    def setup_position_text(self):
+        """Set up position and intensity text overlay"""
+        view = self.image_view.getView()
+        
+        # Create text item for cursor position and intensity
+        self.cursor_text = pg.TextItem(
+            text="", 
+            color='white', 
+            fill=pg.mkBrush(0, 0, 0, 100),  # Semi-transparent black background
+            anchor=(1, 0)  # Anchor to top-right
+        )
+        
+        # Position in top-right corner
+        view.addItem(self.cursor_text)
+        
+        # Initially hide the text
+        self.cursor_text.hide()
+    
     def setup_image_axes(self):
         """Set up proper X and Y axes for the ImageView"""
         try:
             # Access the ImageView's internal structure to enable axes
-            # ImageView contains a PlotItem that we can access
             if hasattr(self.image_view, 'view') and hasattr(self.image_view.view, 'vb'):
                 # Get the ViewBox
                 vb = self.image_view.view.vb
@@ -1434,6 +1479,25 @@ class ConfocalMainWindow(QMainWindow):
         view.addItem(y_title)
         self.axis_labels.append(y_title)
     
+    def update_histogram_units(self):
+        """Update histogram/color bar to show proper units"""
+        try:
+            if hasattr(self.image_view, 'ui') and hasattr(self.image_view.ui, 'histogram'):
+                histogram = self.image_view.ui.histogram
+                
+                # Try to set the label on the histogram axis
+                if hasattr(histogram, 'axis'):
+                    histogram.axis.setLabel('Intensity', units='c/s')
+                elif hasattr(histogram, 'gradient') and hasattr(histogram.gradient, 'axis'):
+                    histogram.gradient.axis.setLabel('Intensity', units='c/s')
+                
+                # Also try to set it on the gradient if available
+                if hasattr(histogram, 'gradient') and hasattr(histogram.gradient, 'setLabel'):
+                    histogram.gradient.setLabel('Intensity (c/s)')
+                    
+        except Exception as e:
+            print(f"Could not update histogram units: {e}")
+    
     def update_coordinate_labels(self):
         """Update coordinate labels and custom axes based on current scan parameters"""
         # Update built-in axes if they are available
@@ -1580,6 +1644,86 @@ class ConfocalMainWindow(QMainWindow):
                 
             except Exception as e:
                 self.show_message(f"Error moving scanner: {str(e)}")
+    
+    def on_mouse_move(self, pos):
+        """Handle mouse movement over the image for cursor tracking"""
+        try:
+            # Get the scene position
+            scene_pos = pos
+            
+            # Convert to view coordinates
+            view = self.image_view.getView()
+            if view.sceneBoundingRect().contains(scene_pos):
+                # Convert scene position to view coordinates
+                mouse_point = view.mapSceneToView(scene_pos)
+                x_pos = mouse_point.x()
+                y_pos = mouse_point.y()
+                
+                # Show crosshairs
+                self.crosshair_v.show()
+                self.crosshair_h.show()
+                
+                # Update crosshair positions
+                self.crosshair_v.setPos(x_pos)
+                self.crosshair_h.setPos(y_pos)
+                
+                # Get intensity value at cursor position
+                intensity_text = self.get_intensity_at_position(x_pos, y_pos)
+                
+                # Update text display
+                text_content = f"Cursor: ({x_pos:.2f} μm, {y_pos:.2f} μm)\n{intensity_text}"
+                self.cursor_text.setText(text_content)
+                
+                # Position text in top-right corner with some margin
+                view_range = view.viewRange()
+                text_x = view_range[0][1] - (view_range[0][1] - view_range[0][0]) * 0.02  # 2% margin from right
+                text_y = view_range[1][1] - (view_range[1][1] - view_range[1][0]) * 0.02  # 2% margin from top
+                self.cursor_text.setPos(text_x, text_y)
+                
+                # Show text
+                self.cursor_text.show()
+            else:
+                # Hide crosshairs and text when outside view
+                self.crosshair_v.hide()
+                self.crosshair_h.hide()
+                self.cursor_text.hide()
+                
+        except Exception as e:
+            # Silently handle errors to avoid disrupting mouse tracking
+            pass
+    
+    def get_intensity_at_position(self, x_um, y_um):
+        """Get intensity value at the given position"""
+        try:
+            if self.current_image is None:
+                return "Intensity: --"
+            
+            # Get current scan parameters to convert position to pixel coordinates
+            if hasattr(self, 'scan_thread') and self.scan_thread and hasattr(self.scan_thread, 'x_points'):
+                x_points = self.scan_thread.x_points
+                y_points = self.scan_thread.y_points
+            else:
+                x_points, y_points = self.scan_points_manager.get_points()
+            
+            # Convert micrometers back to voltage, then to pixel coordinates
+            from utils import MICRONS_PER_VOLT
+            x_voltage = x_um / MICRONS_PER_VOLT
+            y_voltage = y_um / MICRONS_PER_VOLT
+            
+            # Find nearest pixel coordinates
+            if len(x_points) > 0 and len(y_points) > 0:
+                x_pixel = np.argmin(np.abs(x_points - x_voltage))
+                y_pixel = np.argmin(np.abs(y_points - y_voltage))
+                
+                # Check bounds
+                if 0 <= x_pixel < self.current_image.shape[1] and 0 <= y_pixel < self.current_image.shape[0]:
+                    intensity = self.current_image[y_pixel, x_pixel]
+                    return f"Intensity: {intensity:.2f} c/s"
+            
+            return "Intensity: --"
+            
+        except Exception as e:
+            return "Intensity: --"
     
     def on_roi_changed(self):
         """Handle ROI changes for zoom functionality"""
@@ -1827,6 +1971,9 @@ class ConfocalMainWindow(QMainWindow):
         if hasattr(self, 'current_colormap'):
             self.apply_colormap(self.current_colormap)
         
+        # Update histogram/color bar units
+        self.update_histogram_units()
+        
         # Update scale bar and coordinate labels
         self.update_scale_bar()
         self.update_coordinate_labels()
@@ -1858,6 +2005,9 @@ class ConfocalMainWindow(QMainWindow):
         # Reapply current colormap to ensure it's maintained
         if hasattr(self, 'current_colormap'):
             self.apply_colormap(self.current_colormap)
+        
+        # Update histogram/color bar units
+        self.update_histogram_units()
         
         # Update scale bar and coordinate labels
         self.update_scale_bar()
