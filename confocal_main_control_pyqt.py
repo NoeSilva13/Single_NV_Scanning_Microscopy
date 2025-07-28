@@ -864,7 +864,7 @@ class ConfocalMainWindow(QMainWindow):
         self.camera_widget = CameraWidget()
         camera_layout.addWidget(self.camera_widget)
         camera_group.setLayout(camera_layout)
-        left_layout.addWidget(camera_group, 0)  # No stretch - fixed size
+        left_layout.addWidget(camera_group, 4)
         
         # Camera controls group - enhanced with sliders
         camera_controls_group = QGroupBox("Camera Controls")
@@ -930,7 +930,7 @@ class ConfocalMainWindow(QMainWindow):
         
         camera_controls_layout.addLayout(camera_buttons_layout)
         camera_controls_group.setLayout(camera_controls_layout)
-        left_layout.addWidget(camera_controls_group, 0)  # No stretch - fixed size
+        left_layout.addWidget(camera_controls_group, 2) 
         
         # Current position widget - moved from right panel
         position_group = QGroupBox("Current Position")
@@ -939,7 +939,7 @@ class ConfocalMainWindow(QMainWindow):
         self.current_position_widget = CurrentPositionWidget()
         position_layout.addWidget(self.current_position_widget)
         position_group.setLayout(position_layout)
-        left_layout.addWidget(position_group, 0)  # No stretch - fixed size
+        left_layout.addWidget(position_group, 2)  
         
         # Single axis scan buttons - moved from right panel
         scan_buttons_group = QGroupBox("Single Axis Scan")
@@ -960,7 +960,7 @@ class ConfocalMainWindow(QMainWindow):
         scan_buttons_layout.addWidget(self.y_scan_btn)
         
         scan_buttons_group.setLayout(scan_buttons_layout)
-        left_layout.addWidget(scan_buttons_group, 0)  # No stretch - fixed size
+        left_layout.addWidget(scan_buttons_group, 1)  
         
         # Scan parameters widget - gets majority of remaining space
         params_group = QGroupBox("Scan Parameters")
@@ -969,7 +969,7 @@ class ConfocalMainWindow(QMainWindow):
         self.scan_params_widget = ScanParametersWidget(self.scan_params_manager)
         params_layout.addWidget(self.scan_params_widget)
         params_group.setLayout(params_layout)
-        left_layout.addWidget(params_group, 1)  # Stretch factor 1 - expands to use available space
+        left_layout.addWidget(params_group, 4)  
         
         # Small stretch at bottom to prevent over-expansion
         left_layout.addStretch(0)
