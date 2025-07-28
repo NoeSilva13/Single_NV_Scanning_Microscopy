@@ -97,7 +97,7 @@ class AutoFocusWidget(QWidget):
         self.plot_widget.setLabel('left', 'Counts/s', color='white', size='12pt')
         self.plot_widget.setLabel('bottom', 'Z Position (V)', color='white', size='12pt')
         self.plot_widget.showGrid(True, alpha=0.3)
-        self.plot_widget.setFixedHeight(200)
+        
         
         # Style the axes
         self.plot_widget.getAxis('left').setPen('white')
