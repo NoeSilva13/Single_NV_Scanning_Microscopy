@@ -216,7 +216,7 @@ class ScanParametersWidget(QWidget):
 
 
 class LivePlotWidget(QWidget):
-    """PyQtGraph-based live plotting widget"""
+    """PyQtGraph-based live plotting widget - optimized for full height usage"""
     
     def __init__(self, measure_function, histogram_range=100, update_interval=200, parent=None):
         super().__init__(parent)
@@ -227,8 +227,8 @@ class LivePlotWidget(QWidget):
         # Setup plot widget with dark theme matching ODMR GUI
         self.plot_widget = pg.PlotWidget(title="Live Signal")
         self.plot_widget.setBackground('#262930')
-        self.plot_widget.setLabel('left', 'Signal (counts/s)', color='white', size='12pt')
-        self.plot_widget.setLabel('bottom', 'Time (s)', color='white', size='12pt')
+        self.plot_widget.setLabel('left', 'Signal (counts/s)', color='white', size='11pt')
+        self.plot_widget.setLabel('bottom', 'Time (s)', color='white', size='11pt')
         self.plot_widget.showGrid(True, alpha=0.3)
         
         # Style the plot to match ODMR GUI dark theme
@@ -236,6 +236,10 @@ class LivePlotWidget(QWidget):
         self.plot_widget.getAxis('bottom').setPen('white')
         self.plot_widget.getAxis('left').setTextPen('white')
         self.plot_widget.getAxis('bottom').setTextPen('white')
+        
+        # Set size policy to expand in both directions
+        from PyQt5.QtWidgets import QSizePolicy
+        self.plot_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Data storage
         self.x_data = []
@@ -245,10 +249,15 @@ class LivePlotWidget(QWidget):
         # Plot curve with ODMR GUI green color
         self.curve = self.plot_widget.plot(pen=pg.mkPen('#00ff88', width=2))
         
-        # Layout
+        # Layout with no margins to maximize space usage
         layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         layout.addWidget(self.plot_widget)
         self.setLayout(layout)
+        
+        # Set size policy for the widget itself
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Update timer
         self.timer = QTimer()
@@ -475,24 +484,24 @@ class ConfocalMainWindow(QMainWindow):
         ┌─────────────────────────────────────────────────────────────────┐
         │ Main Window (Proportions: [Left+Center+Bottom 75%] | [Right 25%])│
         ├─────────────┬─────────────────────────────┬─────────────────────┤
-        │ LEFT PANEL  │ CENTER PANEL                │                     │
-        │ (30%)       │ (45% - Dominant)            │                     │
+        │ LEFT PANEL  │ CENTER PANEL                │ RIGHT PANEL         │
+        │ (30%)       │ (45% - Dominant)            │ (25% - Full Height) │
         │             │                             │                     │
         │ ┌─────────┐ │ ┌─────────────────────────┐ │ ┌─────────────────┐ │
         │ │ Camera  │ │ │ Image Panel Controls    │ │ │ Live Signal     │ │
-        │ │ Image   │ │ │ (Zoom + Colormap)       │ │ │                 │ │
-        │ └─────────┘ │ └─────────────────────────┘ │ └─────────────────┘ │
-        │ ┌─────────┐ │ ┌─────────────────────────┐ │ │                 │ │
-        │ │ Camera  │ │ │                         │ │ │ Auto Focus      │ │
-        │ │Controls │ │ │    Main Image Display   │ │ │                 │ │
-        │ └─────────┘ │ │     (Confocal Scan)     │ │ └─────────────────┘ │
-        │ ┌─────────┐ │ │                         │ │ │ RIGHT PANEL     │ │
-        │ │  Scan   │ │ │                         │ │ │ (25%)           │ │
-        │ │Paramters│ │ │                         │ │ │ Single Axis     │ │
-        │ └─────────┘ │ └─────────────────────────┘ │ │ Scan            │ │
-        ├─────────────┴─────────────────────────────┤ │                 │ │
-        │ BOTTOM PANEL: Scan Controls + Status      │ │ (Full Height)   │ │
-        │ (Only under Left + Center)                │ │                 │ │
+        │ │ Image   │ │ │ (Zoom + Colormap)       │ │ │    (40%)        │ │
+        │ └─────────┘ │ └─────────────────────────┘ │ │                 │ │
+        │ ┌─────────┐ │ ┌─────────────────────────┐ │ │   Expandable    │ │
+        │ │ Camera  │ │ │                         │ │ │     Plot        │ │
+        │ │Controls │ │ │    Main Image Display   │ │ └─────────────────┘ │
+        │ └─────────┘ │ │     (Confocal Scan)     │ │ ┌─────────────────┐ │
+        │ ┌─────────┐ │ │                         │ │ │ Auto Focus      │ │
+        │ │  Scan   │ │ │                         │ │ │    (20%)        │ │
+        │ │Paramters│ │ │                         │ │ └─────────────────┘ │
+        │ └─────────┘ │ └─────────────────────────┘ │ ┌─────────────────┐ │
+        ├─────────────┴─────────────────────────────┤ │ Single Axis     │ │
+        │ BOTTOM PANEL: Scan Controls + Status      │ │ Scan (40%)      │ │
+        │ (Only under Left + Center)                │ │   Expandable    │ │
         └─────────────────────────────────────────────┴─────────────────────┘
         """
         # Apply dark theme style (napari-inspired, matching ODMR GUI)
@@ -813,14 +822,14 @@ class ConfocalMainWindow(QMainWindow):
         
         self.left_center_layout.addWidget(self.center_panel)  # Proportions handled by resizeEvent
         
-        # RIGHT PANEL: Analysis Tools (25% of window width)
+        # RIGHT PANEL: Analysis Tools (25% of window width, FULL HEIGHT)
         self.right_panel = QWidget()
         right_layout = QVBoxLayout()
         right_layout.setSpacing(8)
         right_layout.setContentsMargins(8, 8, 8, 8)
         self.right_panel.setLayout(right_layout)
         
-        # Live Signal Plot
+        # Live Signal Plot (40% of right panel height)
         live_signal_group = QGroupBox("Live Signal")
         live_signal_layout = QVBoxLayout()
         live_signal_layout.setContentsMargins(5, 5, 5, 5)
@@ -829,38 +838,37 @@ class ConfocalMainWindow(QMainWindow):
             histogram_range=100,
             update_interval=200
         )
-        # Set a maximum height for live plot to leave room for other widgets
-        self.live_plot.setMaximumHeight(200)
+        # Allow live plot to expand and use available space
+        self.live_plot.setMinimumHeight(200)  # Minimum readable size
         live_signal_layout.addWidget(self.live_plot)
         live_signal_group.setLayout(live_signal_layout)
-        right_layout.addWidget(live_signal_group)
+        right_layout.addWidget(live_signal_group, 2)  # Stretch factor 2 (40% of space)
         
-        # Auto Focus
+        # Auto Focus (30% of right panel height)
         auto_focus_group = QGroupBox("Auto Focus")
         auto_focus_layout = QVBoxLayout()
         auto_focus_layout.setContentsMargins(5, 5, 5, 5)
         self.auto_focus_widget = create_auto_focus_widget(self.counter, self.binwidth)
-        # Set a maximum height to keep widget compact
-        self.auto_focus_widget.setMaximumHeight(150)
+        # Allow auto focus to expand but set reasonable minimum
+        self.auto_focus_widget.setMinimumHeight(120)
         auto_focus_layout.addWidget(self.auto_focus_widget)
         auto_focus_group.setLayout(auto_focus_layout)
-        right_layout.addWidget(auto_focus_group)
+        right_layout.addWidget(auto_focus_group, 1)  # Stretch factor 1 (20% of space)
         
-        # Single Axis Scan
+        # Single Axis Scan (40% of right panel height)
         single_axis_group = QGroupBox("Single Axis Scan")
         single_axis_layout = QVBoxLayout()
         single_axis_layout.setContentsMargins(5, 5, 5, 5)
         self.single_axis_widget = create_single_axis_scan_widget(
             self.scan_params_manager, self.output_task, self.counter, self.binwidth
         )
-        # Set a maximum height to keep widget compact
-        self.single_axis_widget.setMaximumHeight(180)
+        # Allow single axis scan to expand and use available space
+        self.single_axis_widget.setMinimumHeight(150)
         single_axis_layout.addWidget(self.single_axis_widget)
         single_axis_group.setLayout(single_axis_layout)
-        right_layout.addWidget(single_axis_group)
+        right_layout.addWidget(single_axis_group, 2)  # Stretch factor 2 (40% of space)
         
-        # Add stretch to push widgets to top and prevent excessive expansion
-        right_layout.addStretch(1)
+        # No stretch at bottom - let widgets fill all available space
         
         # Add left+center layout to the combined widget
         left_center_bottom_layout.addLayout(self.left_center_layout, 1)  # Give top area stretch factor
@@ -873,44 +881,54 @@ class ConfocalMainWindow(QMainWindow):
         bottom_layout.setContentsMargins(8, 8, 8, 8)
         bottom_panel.setLayout(bottom_layout)
         
-        # Scan controls in a horizontal layout
+        # Scan controls optimized to use full width
         controls_group = QGroupBox("Scan Controls")
         controls_layout = QHBoxLayout()
-        controls_layout.setSpacing(15)
+        controls_layout.setSpacing(8)  # Reduced spacing for better space utilization
+        controls_layout.setContentsMargins(10, 10, 10, 10)
         
-        # Create individual control buttons (replace ScanControlWidget)
+        # Create individual control buttons with optimized sizing
+        from PyQt5.QtWidgets import QSizePolicy
+        
         self.new_scan_btn = QPushButton("🔬 New Scan")
         self.new_scan_btn.clicked.connect(self.start_new_scan)
-        self.new_scan_btn.setFixedSize(120, 50)
+        self.new_scan_btn.setMinimumHeight(45)  # Consistent height
+        self.new_scan_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
         self.stop_scan_btn = QPushButton("🛑 Stop Scan")
         self.stop_scan_btn.clicked.connect(self.stop_scan)
-        self.stop_scan_btn.setFixedSize(120, 50)
+        self.stop_scan_btn.setMinimumHeight(45)
+        self.stop_scan_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
         self.save_image_btn = QPushButton("📷 Save Image")
         self.save_image_btn.clicked.connect(self.save_image)
-        self.save_image_btn.setFixedSize(120, 50)
+        self.save_image_btn.setMinimumHeight(45)
+        self.save_image_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
         self.reset_zoom_btn = QPushButton("🔄 Reset Zoom")
         self.reset_zoom_btn.clicked.connect(self.reset_zoom)
-        self.reset_zoom_btn.setFixedSize(120, 50)
+        self.reset_zoom_btn.setMinimumHeight(45)
+        self.reset_zoom_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
         self.close_scanner_btn = QPushButton("🎯 Set to Zero")
         self.close_scanner_btn.clicked.connect(self.close_scanner)
-        self.close_scanner_btn.setFixedSize(120, 50)
+        self.close_scanner_btn.setMinimumHeight(45)
+        self.close_scanner_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
         self.load_scan_btn = QPushButton("📁 Load Scan")
         self.load_scan_btn.clicked.connect(self.load_scan)
-        self.load_scan_btn.setFixedSize(120, 50)
+        self.load_scan_btn.setMinimumHeight(45)
+        self.load_scan_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
-        # Add buttons to layout
-        controls_layout.addWidget(self.new_scan_btn)
-        controls_layout.addWidget(self.stop_scan_btn)
-        controls_layout.addWidget(self.save_image_btn)
-        controls_layout.addWidget(self.reset_zoom_btn)
-        controls_layout.addWidget(self.close_scanner_btn)
-        controls_layout.addWidget(self.load_scan_btn)
-        controls_layout.addStretch()
+        # Add buttons to layout with equal stretch factors
+        controls_layout.addWidget(self.new_scan_btn, 1)     # Equal stretch
+        controls_layout.addWidget(self.stop_scan_btn, 1)    # Equal stretch
+        controls_layout.addWidget(self.save_image_btn, 1)   # Equal stretch
+        controls_layout.addWidget(self.reset_zoom_btn, 1)   # Equal stretch
+        controls_layout.addWidget(self.close_scanner_btn, 1) # Equal stretch
+        controls_layout.addWidget(self.load_scan_btn, 1)    # Equal stretch
+        
+        # No addStretch() - let buttons fill all available space
         
         controls_group.setLayout(controls_layout)
         bottom_layout.addWidget(controls_group)
