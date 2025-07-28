@@ -649,10 +649,10 @@ class ConfocalMainWindow(QMainWindow):
         
         Layout Structure:
         ┌─────────────────────────────────────────────────────────────────┐
-        │ Main Window (Proportions: [Left+Center+Bottom 75%] | [Right 25%])│
+        │ Main Window (Proportions: [Left+Center+Bottom 70%] | [Right 30%])│
         ├─────────────┬─────────────────────────────┬─────────────────────┤
         │ LEFT PANEL  │ CENTER PANEL                │ RIGHT PANEL         │
-        │ (30%)       │ (45% - Dominant)            │ (25% - Full Height) │
+        │ (25%)       │ (45% - Dominant)            │ (30% - Full Height) │
         │             │                             │                     │
         │ ┌─────────┐ │ ┌─────────────────────────┐ │ ┌─────────────────┐ │
         │ │ Camera  │ │ │ Image Panel Controls    │ │ │ Live Signal     │ │
@@ -1192,8 +1192,8 @@ class ConfocalMainWindow(QMainWindow):
         left_center_bottom_layout.addWidget(bottom_panel)
         
         # Add the left+center+bottom widget and right panel to main layout
-        main_layout.addWidget(left_center_bottom_widget, 3)  # 75% width (left 30% + center 45%)
-        main_layout.addWidget(self.right_panel, 1)  # 25% width
+        main_layout.addWidget(left_center_bottom_widget, 7)  # 70% width (left 25% + center 45%)
+        main_layout.addWidget(self.right_panel, 3)  # 30% width
         
         # Initialize display
         self.init_display()
@@ -1245,19 +1245,19 @@ class ConfocalMainWindow(QMainWindow):
         """Update panel proportions based on current window size
         
         New layout structure:
-        - Main layout (horizontal): [Left+Center+Bottom 75%] | [Right 25%]
-        - Within Left+Center area: [Left 40%] | [Center 60%]
+        - Main layout (horizontal): [Left+Center+Bottom 70%] | [Right 30%]
+        - Within Left+Center area: [Left 36%] | [Center 64%]
         """
         if hasattr(self, 'left_center_layout'):
-            # The main horizontal layout proportions are set by stretch factors (3:1 = 75%:25%)
+            # The main horizontal layout proportions are set by stretch factors (7:3 = 70%:30%)
             # We only need to manage proportions within the left+center area
             
-            # Within the left+center area (which is 75% of total width):
-            # Left should be 30%/75% = 40% of left+center area
-            # Center should be 45%/75% = 60% of left+center area
+            # Within the left+center area (which is 70% of total width):
+            # Left should be 25%/70% = 36% of left+center area  
+            # Center should be 45%/70% = 64% of left+center area
             
-            left_proportion_in_area = 0.40   # 40% of left+center area
-            center_proportion_in_area = 0.60  # 60% of left+center area
+            left_proportion_in_area = 0.36   # 36% of left+center area (25% of total)
+            center_proportion_in_area = 0.64  # 64% of left+center area (45% of total)
             
             # Calculate stretch factors for left+center layout
             left_factor = int(left_proportion_in_area * 100)
@@ -2491,7 +2491,7 @@ class ConfocalMainWindow(QMainWindow):
                 self.show_message("❌ Auto focus widget not available")
         except Exception as e:
             self.show_message(f"❌ Error triggering auto focus: {str(e)}")
-
+    
     def show_message(self, message):
         """Display a message to the user"""
         print(message)  # Also print to console for debugging
