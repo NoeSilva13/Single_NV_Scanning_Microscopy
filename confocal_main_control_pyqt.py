@@ -64,10 +64,10 @@ class CameraWidget(QWidget):
         layout = QVBoxLayout()
         layout.setSpacing(5)
         
-        # Camera image display
+        # Camera image display - optimized for space
         self.camera_view = pg.ImageView()
-        self.camera_view.setMinimumSize(200, 150)
-        self.camera_view.setMaximumSize(300, 225)
+        self.camera_view.setMinimumSize(200, 120)
+        self.camera_view.setMaximumSize(280, 180)  # Reduced max size for better space distribution
         self.camera_view.ui.roiBtn.hide()
         self.camera_view.ui.menuBtn.hide()
         self.camera_view.setStyleSheet("background-color: #262930; border: 1px solid #555555;")
@@ -142,7 +142,7 @@ class CameraWidget(QWidget):
 
 
 class ScanParametersWidget(QWidget):
-    """Pure PyQt scan parameters widget"""
+    """Professional scan parameters widget with table layout"""
     
     def __init__(self, scan_params_manager, parent=None):
         super().__init__(parent)
@@ -150,45 +150,159 @@ class ScanParametersWidget(QWidget):
         self.init_ui()
     
     def init_ui(self):
-        layout = QGridLayout()
-        layout.setSpacing(3)
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(5, 5, 5, 5)
         
-        # X Range
-        layout.addWidget(QLabel("X Range (V):"), 0, 0)
-        self.x_min_spin = pg.SpinBox(value=-1.0, bounds=(-10, 10), decimals=3, step=0.1)
-        self.x_max_spin = pg.SpinBox(value=1.0, bounds=(-10, 10), decimals=3, step=0.1)
-        self.x_min_spin.setFixedWidth(70)
-        self.x_max_spin.setFixedWidth(70)
-        layout.addWidget(self.x_min_spin, 0, 1)
-        layout.addWidget(self.x_max_spin, 0, 2)
+        # Create table-like layout for parameters
+        params_layout = QGridLayout()
+        params_layout.setSpacing(3)
+        params_layout.setHorizontalSpacing(8)
         
-        # Y Range  
-        layout.addWidget(QLabel("Y Range (V):"), 1, 0)
-        self.y_min_spin = pg.SpinBox(value=-1.0, bounds=(-10, 10), decimals=3, step=0.1)
-        self.y_max_spin = pg.SpinBox(value=1.0, bounds=(-10, 10), decimals=3, step=0.1)
-        self.y_min_spin.setFixedWidth(70)
-        self.y_max_spin.setFixedWidth(70)
-        layout.addWidget(self.y_min_spin, 1, 1)
-        layout.addWidget(self.y_max_spin, 1, 2)
+        # Headers
+        header_font = self.font()
+        header_font.setBold(True)
         
-        # Resolution
-        layout.addWidget(QLabel("X Resolution:"), 2, 0)
-        self.x_res_spin = pg.SpinBox(value=50, bounds=(1, 1000), int=True)
-        self.x_res_spin.setFixedWidth(70)
-        layout.addWidget(self.x_res_spin, 2, 1, 1, 2)
+        param_header = QLabel("Parameter")
+        param_header.setFont(header_font)
+        param_header.setStyleSheet("color: #00d4aa;")
         
-        layout.addWidget(QLabel("Y Resolution:"), 3, 0)
-        self.y_res_spin = pg.SpinBox(value=50, bounds=(1, 1000), int=True)
-        self.y_res_spin.setFixedWidth(70)
-        layout.addWidget(self.y_res_spin, 3, 1, 1, 2)
+        voltage_header = QLabel("Voltage (V)")
+        voltage_header.setFont(header_font)
+        voltage_header.setStyleSheet("color: #00d4aa;")
+        voltage_header.setAlignment(Qt.AlignCenter)
         
-        # Dwell Time
-        layout.addWidget(QLabel("Dwell Time (s):"), 4, 0)
-        self.dwell_spin = pg.SpinBox(value=0.002, bounds=(0.001, 1), decimals=4, step=0.001)
-        self.dwell_spin.setFixedWidth(70)
-        layout.addWidget(self.dwell_spin, 4, 1, 1, 2)
+        distance_header = QLabel("Distance (μm)")  
+        distance_header.setFont(header_font)
+        distance_header.setStyleSheet("color: #00d4aa;")
+        distance_header.setAlignment(Qt.AlignCenter)
         
-        self.setLayout(layout)
+        params_layout.addWidget(param_header, 0, 0, 1, 1)
+        params_layout.addWidget(voltage_header, 0, 1, 1, 2)
+        params_layout.addWidget(distance_header, 0, 3, 1, 1)
+        
+        # X Min row
+        params_layout.addWidget(QLabel("X Min:"), 1, 0)
+        self.x_min_spin = pg.SpinBox(value=-1.0, bounds=(-10, 10), decimals=2, step=0.1)
+        self.x_min_spin.setFixedWidth(60)
+        self.x_min_distance = QLabel("-86.0")
+        self.x_min_distance.setAlignment(Qt.AlignCenter)
+        self.x_min_distance.setStyleSheet("color: #ffffff; padding: 2px;")
+        params_layout.addWidget(self.x_min_spin, 1, 1)
+        params_layout.addWidget(self.x_min_distance, 1, 3)
+        
+        # X Max row
+        params_layout.addWidget(QLabel("X Max:"), 2, 0)
+        self.x_max_spin = pg.SpinBox(value=1.0, bounds=(-10, 10), decimals=2, step=0.1)
+        self.x_max_spin.setFixedWidth(60)
+        self.x_max_distance = QLabel("86.0")
+        self.x_max_distance.setAlignment(Qt.AlignCenter)
+        self.x_max_distance.setStyleSheet("color: #ffffff; padding: 2px;")
+        params_layout.addWidget(self.x_max_spin, 2, 1)
+        params_layout.addWidget(self.x_max_distance, 2, 3)
+        
+        # Y Min row
+        params_layout.addWidget(QLabel("Y Min:"), 3, 0)
+        self.y_min_spin = pg.SpinBox(value=-1.0, bounds=(-10, 10), decimals=2, step=0.1)
+        self.y_min_spin.setFixedWidth(60)
+        self.y_min_distance = QLabel("-86.0")
+        self.y_min_distance.setAlignment(Qt.AlignCenter)
+        self.y_min_distance.setStyleSheet("color: #ffffff; padding: 2px;")
+        params_layout.addWidget(self.y_min_spin, 3, 1)
+        params_layout.addWidget(self.y_min_distance, 3, 3)
+        
+        # Y Max row
+        params_layout.addWidget(QLabel("Y Max:"), 4, 0)
+        self.y_max_spin = pg.SpinBox(value=1.0, bounds=(-10, 10), decimals=2, step=0.1)
+        self.y_max_spin.setFixedWidth(60)
+        self.y_max_distance = QLabel("86.0")
+        self.y_max_distance.setAlignment(Qt.AlignCenter)
+        self.y_max_distance.setStyleSheet("color: #ffffff; padding: 2px;")
+        params_layout.addWidget(self.y_max_spin, 4, 1)
+        params_layout.addWidget(self.y_max_distance, 4, 3)
+        
+        # Resolution rows
+        params_layout.addWidget(QLabel("X Resolution:"), 5, 0)
+        self.x_res_spin = pg.SpinBox(value=50, bounds=(1, 1000), int=True, suffix=' px')
+        self.x_res_spin.setFixedWidth(80)
+        params_layout.addWidget(self.x_res_spin, 5, 1, 1, 2)
+        
+        params_layout.addWidget(QLabel("Y Resolution:"), 6, 0)
+        self.y_res_spin = pg.SpinBox(value=50, bounds=(1, 1000), int=True, suffix=' px')
+        self.y_res_spin.setFixedWidth(80)
+        params_layout.addWidget(self.y_res_spin, 6, 1, 1, 2)
+        
+        # Dwell Time row
+        params_layout.addWidget(QLabel("Dwell Time:"), 7, 0)
+        self.dwell_spin = pg.SpinBox(value=0.008, bounds=(0.001, 1), decimals=3, step=0.001, suffix=' s')
+        self.dwell_spin.setFixedWidth(80)
+        params_layout.addWidget(self.dwell_spin, 7, 1, 1, 2)
+        
+        main_layout.addLayout(params_layout)
+        
+        # Apply Changes button
+        self.apply_btn = QPushButton("Apply Changes")
+        self.apply_btn.setFixedHeight(35)
+        self.apply_btn.clicked.connect(self.apply_changes)
+        main_layout.addWidget(self.apply_btn)
+        
+        self.setLayout(main_layout)
+        
+        # Connect spinbox changes to update distance labels
+        self.x_min_spin.valueChanged.connect(self.update_distance_labels)
+        self.x_max_spin.valueChanged.connect(self.update_distance_labels)
+        self.y_min_spin.valueChanged.connect(self.update_distance_labels)
+        self.y_max_spin.valueChanged.connect(self.update_distance_labels)
+        
+        # Initial distance update
+        self.update_distance_labels()
+    
+    def update_distance_labels(self):
+        """Update distance labels when voltage values change"""
+        try:
+            from utils import MICRONS_PER_VOLT
+            
+            # Update distance labels
+            self.x_min_distance.setText(f"{self.x_min_spin.value() * MICRONS_PER_VOLT:.1f}")
+            self.x_max_distance.setText(f"{self.x_max_spin.value() * MICRONS_PER_VOLT:.1f}")
+            self.y_min_distance.setText(f"{self.y_min_spin.value() * MICRONS_PER_VOLT:.1f}")
+            self.y_max_distance.setText(f"{self.y_max_spin.value() * MICRONS_PER_VOLT:.1f}")
+        except:
+            pass
+    
+    def apply_changes(self):
+        """Apply parameter changes and update the system"""
+        try:
+            # Update the scan points manager with new parameters
+            if self.scan_params_manager and hasattr(self.scan_params_manager, 'update_scan_parameters'):
+                params = self.get_parameters()
+                x_range = params['scan_range']['x']
+                y_range = params['scan_range']['y']
+                x_res = params['resolution']['x']
+                y_res = params['resolution']['y']
+                dwell_time = params['dwell_time']
+                
+                self.scan_params_manager.update_scan_parameters(
+                    x_range=x_range, y_range=y_range,
+                    x_res=x_res, y_res=y_res,
+                    dwell_time=dwell_time
+                )
+            
+            # Visual feedback that changes were applied
+            original_text = self.apply_btn.text()
+            self.apply_btn.setText("✓ Applied")
+            self.apply_btn.setStyleSheet("background-color: #00aa00;")
+            
+            # Reset button after 1 second
+            QTimer.singleShot(1000, lambda: [
+                self.apply_btn.setText(original_text),
+                self.apply_btn.setStyleSheet("")
+            ])
+            
+        except Exception as e:
+            print(f"Error applying changes: {e}")
+            self.apply_btn.setText("❌ Error")
+            QTimer.singleShot(1000, lambda: self.apply_btn.setText("Apply Changes"))
     
     def get_parameters(self):
         """Get current parameters from the widget"""
@@ -691,16 +805,16 @@ class ConfocalMainWindow(QMainWindow):
         left_layout.setContentsMargins(8, 8, 8, 8)
         self.left_panel.setLayout(left_layout)
         
-        # Camera section
+        # Camera section - compact space allocation
         camera_group = QGroupBox("Camera Image")
         camera_layout = QVBoxLayout()
         camera_layout.setContentsMargins(5, 5, 5, 5)
         self.camera_widget = CameraWidget()
         camera_layout.addWidget(self.camera_widget)
         camera_group.setLayout(camera_layout)
-        left_layout.addWidget(camera_group)
+        left_layout.addWidget(camera_group, 0)  # No stretch - fixed size
         
-        # Camera controls group
+        # Camera controls group - minimal space
         camera_controls_group = QGroupBox("Camera Controls")
         camera_controls_layout = QVBoxLayout()
         camera_controls_layout.setContentsMargins(5, 5, 5, 5)
@@ -723,19 +837,19 @@ class ConfocalMainWindow(QMainWindow):
         
         camera_controls_layout.addLayout(camera_buttons_layout)
         camera_controls_group.setLayout(camera_controls_layout)
-        left_layout.addWidget(camera_controls_group)
+        left_layout.addWidget(camera_controls_group, 0)  # No stretch - fixed size
         
-        # Scan parameters widget
+        # Scan parameters widget - gets majority of remaining space
         params_group = QGroupBox("Scan Parameters")
         params_layout = QVBoxLayout()
         params_layout.setContentsMargins(5, 5, 5, 5)
         self.scan_params_widget = ScanParametersWidget(self.scan_params_manager)
         params_layout.addWidget(self.scan_params_widget)
         params_group.setLayout(params_layout)
-        left_layout.addWidget(params_group)
+        left_layout.addWidget(params_group, 1)  # Stretch factor 1 - expands to use available space
         
-        # Add some stretch to push everything to top if needed
-        left_layout.addStretch(1)
+        # Small stretch at bottom to prevent over-expansion
+        left_layout.addStretch(0)
         
         self.left_center_layout.addWidget(self.left_panel)
         
