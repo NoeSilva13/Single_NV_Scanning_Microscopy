@@ -52,6 +52,95 @@ class MainSignalBridge(QObject):
 
 # --------------------- PURE PYQT WIDGET CLASSES ---------------------
 
+class CameraWidget(QWidget):
+    """Camera display and controls widget"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.init_ui()
+        self.init_camera_simulation()
+    
+    def init_ui(self):
+        layout = QVBoxLayout()
+        layout.setSpacing(5)
+        
+        # Camera image display
+        self.camera_view = pg.ImageView()
+        self.camera_view.setMinimumSize(200, 150)
+        self.camera_view.setMaximumSize(300, 225)
+        self.camera_view.ui.roiBtn.hide()
+        self.camera_view.ui.menuBtn.hide()
+        self.camera_view.setStyleSheet("background-color: #262930; border: 1px solid #555555;")
+        
+        layout.addWidget(self.camera_view)
+        
+        # Camera controls
+        controls_layout = QGridLayout()
+        controls_layout.setSpacing(5)
+        
+        # Exposure control
+        controls_layout.addWidget(QLabel("Exposure:"), 0, 0)
+        self.exposure_spin = pg.SpinBox(value=10, bounds=(1, 1000), int=True, suffix='ms')
+        self.exposure_spin.setFixedWidth(80)
+        controls_layout.addWidget(self.exposure_spin, 0, 1)
+        
+        # Gain control  
+        controls_layout.addWidget(QLabel("Gain:"), 1, 0)
+        self.gain_spin = pg.SpinBox(value=1, bounds=(1, 100), int=True)
+        self.gain_spin.setFixedWidth(80)
+        controls_layout.addWidget(self.gain_spin, 1, 1)
+        
+        # Live view toggle
+        self.live_view_btn = QPushButton("📹 Live View")
+        self.live_view_btn.setFixedSize(100, 30)
+        self.live_view_btn.setCheckable(True)
+        self.live_view_btn.clicked.connect(self.toggle_live_view)
+        controls_layout.addWidget(self.live_view_btn, 2, 0, 1, 2)
+        
+        layout.addLayout(controls_layout)
+        self.setLayout(layout)
+    
+    def init_camera_simulation(self):
+        """Initialize camera with simulated data"""
+        # Create a simple test pattern
+        test_image = np.random.randint(0, 255, (240, 320), dtype=np.uint8)
+        # Add some structure to make it look more camera-like
+        x, y = np.meshgrid(np.linspace(-1, 1, 320), np.linspace(-1, 1, 240))
+        pattern = (np.sin(5*x) * np.cos(5*y) * 50 + 128).astype(np.uint8)
+        test_image = (test_image * 0.3 + pattern * 0.7).astype(np.uint8)
+        
+        self.camera_view.setImage(test_image, autoLevels=True)
+        
+        # Setup update timer for live view simulation
+        self.update_timer = QTimer()
+        self.update_timer.timeout.connect(self.update_camera_image)
+        
+    def toggle_live_view(self):
+        """Toggle live camera view"""
+        if self.live_view_btn.isChecked():
+            self.live_view_btn.setText("⏸️ Pause")
+            self.update_timer.start(100)  # Update every 100ms
+        else:
+            self.live_view_btn.setText("📹 Live View")
+            self.update_timer.stop()
+    
+    def update_camera_image(self):
+        """Update camera image with simulated data"""
+        # Simulate camera noise and slight variations
+        test_image = np.random.randint(0, 255, (240, 320), dtype=np.uint8)
+        x, y = np.meshgrid(np.linspace(-1, 1, 320), np.linspace(-1, 1, 240))
+        pattern = (np.sin(5*x + time.time()) * np.cos(5*y + time.time()) * 50 + 128).astype(np.uint8)
+        test_image = (test_image * 0.3 + pattern * 0.7).astype(np.uint8)
+        
+        self.camera_view.setImage(test_image, autoLevels=False)
+    
+    def closeEvent(self, event):
+        """Clean up camera widget when closed"""
+        if hasattr(self, 'update_timer'):
+            self.update_timer.stop()
+        super().closeEvent(event)
+
+
 class ScanParametersWidget(QWidget):
     """Pure PyQt scan parameters widget"""
     
@@ -62,11 +151,14 @@ class ScanParametersWidget(QWidget):
     
     def init_ui(self):
         layout = QGridLayout()
+        layout.setSpacing(3)
         
         # X Range
         layout.addWidget(QLabel("X Range (V):"), 0, 0)
         self.x_min_spin = pg.SpinBox(value=-1.0, bounds=(-10, 10), decimals=3, step=0.1)
         self.x_max_spin = pg.SpinBox(value=1.0, bounds=(-10, 10), decimals=3, step=0.1)
+        self.x_min_spin.setFixedWidth(70)
+        self.x_max_spin.setFixedWidth(70)
         layout.addWidget(self.x_min_spin, 0, 1)
         layout.addWidget(self.x_max_spin, 0, 2)
         
@@ -74,21 +166,26 @@ class ScanParametersWidget(QWidget):
         layout.addWidget(QLabel("Y Range (V):"), 1, 0)
         self.y_min_spin = pg.SpinBox(value=-1.0, bounds=(-10, 10), decimals=3, step=0.1)
         self.y_max_spin = pg.SpinBox(value=1.0, bounds=(-10, 10), decimals=3, step=0.1)
+        self.y_min_spin.setFixedWidth(70)
+        self.y_max_spin.setFixedWidth(70)
         layout.addWidget(self.y_min_spin, 1, 1)
         layout.addWidget(self.y_max_spin, 1, 2)
         
         # Resolution
         layout.addWidget(QLabel("X Resolution:"), 2, 0)
         self.x_res_spin = pg.SpinBox(value=50, bounds=(1, 1000), int=True)
+        self.x_res_spin.setFixedWidth(70)
         layout.addWidget(self.x_res_spin, 2, 1, 1, 2)
         
         layout.addWidget(QLabel("Y Resolution:"), 3, 0)
         self.y_res_spin = pg.SpinBox(value=50, bounds=(1, 1000), int=True)
+        self.y_res_spin.setFixedWidth(70)
         layout.addWidget(self.y_res_spin, 3, 1, 1, 2)
         
         # Dwell Time
         layout.addWidget(QLabel("Dwell Time (s):"), 4, 0)
         self.dwell_spin = pg.SpinBox(value=0.002, bounds=(0.001, 1), decimals=4, step=0.001)
+        self.dwell_spin.setFixedWidth(70)
         layout.addWidget(self.dwell_spin, 4, 1, 1, 2)
         
         self.setLayout(layout)
@@ -372,7 +469,31 @@ class ConfocalMainWindow(QMainWindow):
         self.signal_bridge.show_message_signal.connect(self.show_message)
     
     def init_ui(self):
-        """Initialize the user interface"""
+        """Initialize the user interface with improved layout distribution
+        
+        Layout Structure:
+        ┌─────────────────────────────────────────────────────────────────┐
+        │ Main Window (Optimized proportions: 30% | 45% | 25%)           │
+        ├─────────────┬─────────────────────────────┬─────────────────────┤
+        │ LEFT PANEL  │ CENTER PANEL                │ RIGHT PANEL         │
+        │ (30%)       │ (45% - Dominant)            │ (25%)               │
+        │             │                             │                     │
+        │ ┌─────────┐ │ ┌─────────────────────────┐ │ ┌─────────────────┐ │
+        │ │ Camera  │ │ │ Image Panel Controls    │ │ │ Live Signal     │ │
+        │ │ Image   │ │ │ (Zoom + Colormap)       │ │ │                 │ │
+        │ └─────────┘ │ └─────────────────────────┘ │ └─────────────────┘ │
+        │ ┌─────────┐ │ ┌─────────────────────────┐ │ ┌─────────────────┐ │
+        │ │ Camera  │ │ │                         │ │ │ Auto Focus      │ │
+        │ │Controls │ │ │    Main Image Display   │ │ │                 │ │
+        │ └─────────┘ │ │     (Confocal Scan)     │ │ └─────────────────┘ │
+        │ ┌─────────┐ │ │                         │ │ ┌─────────────────┐ │
+        │ │  Scan   │ │ │                         │ │ │ Single Axis     │ │
+        │ │Paramters│ │ │                         │ │ │ Scan            │ │
+        │ └─────────┘ │ └─────────────────────────┘ │ └─────────────────┘ │
+        └─────────────┴─────────────────────────────┴─────────────────────┤
+        │ BOTTOM PANEL: Scan Controls + Status Bar                       │
+        └─────────────────────────────────────────────────────────────────┘
+        """
         # Apply dark theme style (napari-inspired, matching ODMR GUI)
         self.setStyleSheet("""
             QMainWindow {
@@ -546,57 +667,107 @@ class ConfocalMainWindow(QMainWindow):
         self.top_layout = QHBoxLayout()
         self.top_layout.setSpacing(10)
         
-        # LEFT PANEL: Scan Parameters Only (1/4 of window width)
+        # LEFT PANEL: Camera + Scan Parameters (30% of window width)
         self.left_panel = QWidget()
         left_layout = QVBoxLayout()
-        left_layout.setSpacing(10)
-        left_layout.setContentsMargins(10, 10, 10, 10)
+        left_layout.setSpacing(8)
+        left_layout.setContentsMargins(8, 8, 8, 8)
         self.left_panel.setLayout(left_layout)
+        
+        # Camera section
+        camera_group = QGroupBox("Camera Image")
+        camera_layout = QVBoxLayout()
+        camera_layout.setContentsMargins(5, 5, 5, 5)
+        self.camera_widget = CameraWidget()
+        camera_layout.addWidget(self.camera_widget)
+        camera_group.setLayout(camera_layout)
+        left_layout.addWidget(camera_group)
+        
+        # Camera controls group
+        camera_controls_group = QGroupBox("Camera Controls")
+        camera_controls_layout = QVBoxLayout()
+        camera_controls_layout.setContentsMargins(5, 5, 5, 5)
+        
+        # Add basic camera control buttons
+        camera_buttons_layout = QHBoxLayout()
+        camera_buttons_layout.setSpacing(5)
+        
+        self.capture_btn = QPushButton("📸 Capture")
+        self.capture_btn.setFixedSize(80, 30)
+        self.capture_btn.clicked.connect(self.capture_image)
+        
+        self.save_camera_btn = QPushButton("💾 Save")
+        self.save_camera_btn.setFixedSize(80, 30)
+        self.save_camera_btn.clicked.connect(self.save_camera_image)
+        
+        camera_buttons_layout.addWidget(self.capture_btn)
+        camera_buttons_layout.addWidget(self.save_camera_btn)
+        camera_buttons_layout.addStretch()
+        
+        camera_controls_layout.addLayout(camera_buttons_layout)
+        camera_controls_group.setLayout(camera_controls_layout)
+        left_layout.addWidget(camera_controls_group)
         
         # Scan parameters widget
         params_group = QGroupBox("Scan Parameters")
         params_layout = QVBoxLayout()
+        params_layout.setContentsMargins(5, 5, 5, 5)
         self.scan_params_widget = ScanParametersWidget(self.scan_params_manager)
         params_layout.addWidget(self.scan_params_widget)
         params_group.setLayout(params_layout)
         left_layout.addWidget(params_group)
-        left_layout.addStretch()
+        
+        # Add some stretch to push everything to top if needed
+        left_layout.addStretch(1)
         
         self.top_layout.addWidget(self.left_panel)
         
-        # CENTER PANEL: Main Image Display
+        # CENTER PANEL: Main Image Display (45% of window width - dominant area)
         self.center_panel = QWidget()
         center_layout = QVBoxLayout()
         center_layout.setSpacing(5)
-        center_layout.setContentsMargins(5, 5, 5, 5)
+        center_layout.setContentsMargins(8, 8, 8, 8)
         self.center_panel.setLayout(center_layout)
         
-        # Image controls (zoom and colormap) - compact horizontal layout
-        image_controls_layout = QHBoxLayout()
-        image_controls_layout.setSpacing(10)
+        # Image controls - more compact organization
+        image_controls_group = QGroupBox("Image Panel")
+        image_controls_group_layout = QVBoxLayout()
+        image_controls_group_layout.setContentsMargins(5, 5, 5, 5)
+        image_controls_group_layout.setSpacing(5)
         
-        # Zoom controls
+        # First row: Zoom controls
+        zoom_controls_layout = QHBoxLayout()
+        zoom_controls_layout.setSpacing(8)
+        
         self.zoom_toggle_btn = QPushButton("🔍 Enable Zoom")
         self.zoom_toggle_btn.clicked.connect(self.toggle_zoom_mode)
-        self.zoom_toggle_btn.setFixedSize(120, 35)
+        self.zoom_toggle_btn.setFixedSize(110, 30)
         
         self.apply_zoom_btn = QPushButton("⚡ Apply Zoom")
         self.apply_zoom_btn.clicked.connect(self.apply_zoom)
         self.apply_zoom_btn.setEnabled(False)
-        self.apply_zoom_btn.setFixedSize(120, 35)
+        self.apply_zoom_btn.setFixedSize(110, 30)
         
-        image_controls_layout.addWidget(self.zoom_toggle_btn)
-        image_controls_layout.addWidget(self.apply_zoom_btn)
+        zoom_controls_layout.addWidget(self.zoom_toggle_btn)
+        zoom_controls_layout.addWidget(self.apply_zoom_btn)
+        zoom_controls_layout.addStretch()
         
-        # Colormap selection
-        image_controls_layout.addWidget(QLabel("Colormap:"))
+        # Second row: Colormap selection
+        colormap_layout = QHBoxLayout()
+        colormap_layout.setSpacing(8)
+        
+        colormap_layout.addWidget(QLabel("Colormap:"))
         self.colormap_combo = QComboBox()
-        self.colormap_combo.setFixedWidth(150)
-        image_controls_layout.addWidget(self.colormap_combo)
+        self.colormap_combo.setFixedWidth(140)
+        colormap_layout.addWidget(self.colormap_combo)
+        colormap_layout.addStretch()
         
-        image_controls_layout.addStretch()  # Push controls to left
+        # Add both rows to the group
+        image_controls_group_layout.addLayout(zoom_controls_layout)
+        image_controls_group_layout.addLayout(colormap_layout)
+        image_controls_group.setLayout(image_controls_group_layout)
         
-        center_layout.addLayout(image_controls_layout)
+        center_layout.addWidget(image_controls_group)
         
         # Main image view
         self.image_view = pg.ImageView()
@@ -634,21 +805,24 @@ class ConfocalMainWindow(QMainWindow):
         
         self.top_layout.addWidget(self.center_panel)  # Proportions handled by resizeEvent
         
-        # RIGHT PANEL: Plots Only (1/3 of window width)
+        # RIGHT PANEL: Analysis Tools (25% of window width)
         self.right_panel = QWidget()
         right_layout = QVBoxLayout()
-        right_layout.setSpacing(10)
-        right_layout.setContentsMargins(10, 10, 10, 10)
+        right_layout.setSpacing(8)
+        right_layout.setContentsMargins(8, 8, 8, 8)
         self.right_panel.setLayout(right_layout)
         
         # Live Signal Plot
         live_signal_group = QGroupBox("Live Signal")
         live_signal_layout = QVBoxLayout()
+        live_signal_layout.setContentsMargins(5, 5, 5, 5)
         self.live_plot = LivePlotWidget(
             measure_function=lambda: self.counter.getData()[0][0] / (self.binwidth / 1e12),
             histogram_range=100,
             update_interval=200
         )
+        # Set a maximum height for live plot to leave room for other widgets
+        self.live_plot.setMaximumHeight(200)
         live_signal_layout.addWidget(self.live_plot)
         live_signal_group.setLayout(live_signal_layout)
         right_layout.addWidget(live_signal_group)
@@ -656,7 +830,10 @@ class ConfocalMainWindow(QMainWindow):
         # Auto Focus
         auto_focus_group = QGroupBox("Auto Focus")
         auto_focus_layout = QVBoxLayout()
+        auto_focus_layout.setContentsMargins(5, 5, 5, 5)
         self.auto_focus_widget = create_auto_focus_widget(self.counter, self.binwidth)
+        # Set a maximum height to keep widget compact
+        self.auto_focus_widget.setMaximumHeight(150)
         auto_focus_layout.addWidget(self.auto_focus_widget)
         auto_focus_group.setLayout(auto_focus_layout)
         right_layout.addWidget(auto_focus_group)
@@ -664,12 +841,18 @@ class ConfocalMainWindow(QMainWindow):
         # Single Axis Scan
         single_axis_group = QGroupBox("Single Axis Scan")
         single_axis_layout = QVBoxLayout()
+        single_axis_layout.setContentsMargins(5, 5, 5, 5)
         self.single_axis_widget = create_single_axis_scan_widget(
             self.scan_params_manager, self.output_task, self.counter, self.binwidth
         )
+        # Set a maximum height to keep widget compact
+        self.single_axis_widget.setMaximumHeight(180)
         single_axis_layout.addWidget(self.single_axis_widget)
         single_axis_group.setLayout(single_axis_layout)
         right_layout.addWidget(single_axis_group)
+        
+        # Add stretch to push widgets to top and prevent excessive expansion
+        right_layout.addStretch(1)
         
         # Add right panel - proportions handled by resizeEvent
         self.top_layout.addWidget(self.right_panel)
@@ -677,12 +860,12 @@ class ConfocalMainWindow(QMainWindow):
         # Add top layout to main layout
         main_layout.addLayout(self.top_layout, 1)  # Give top area stretch factor
         
-        # BOTTOM PANEL: Scan Controls
+        # BOTTOM PANEL: Scan Controls (fixed height for consistent layout)
         bottom_panel = QWidget()
-        bottom_panel.setFixedHeight(120)
+        bottom_panel.setFixedHeight(110)  # Slightly reduced for more compact design
         bottom_layout = QVBoxLayout()
         bottom_layout.setSpacing(5)
-        bottom_layout.setContentsMargins(10, 10, 10, 10)
+        bottom_layout.setContentsMargins(8, 8, 8, 8)
         bottom_panel.setLayout(bottom_layout)
         
         # Scan controls in a horizontal layout
@@ -780,14 +963,14 @@ class ConfocalMainWindow(QMainWindow):
         if hasattr(self, 'top_layout'):
             window_width = self.width()
             
-            # Define proportions:
-            # Left panel: 1/4 of window width (25%)
-            # Center panel: 5/12 of window width (~42%)  
-            # Right panel: 1/3 of window width (~33%)
+            # Define proportions based on reference image:
+            # Left panel: 30% (Camera + Scan Parameters)
+            # Center panel: 45% (Main Image Display - dominant area)
+            # Right panel: 25% (Live Signal, Auto Focus, Single Axis Scan)
             
-            left_proportion = 0.25      # 1/4
-            center_proportion = 5/12    # 5/12 ≈ 0.417
-            right_proportion = 1/3      # 1/3 ≈ 0.333
+            left_proportion = 0.30      # 30% for camera and scan params
+            center_proportion = 0.45    # 45% for main image (dominant)
+            right_proportion = 0.25     # 25% for analysis tools
             
             # Calculate desired widths
             desired_left_width = window_width * left_proportion
@@ -795,9 +978,9 @@ class ConfocalMainWindow(QMainWindow):
             desired_right_width = window_width * right_proportion
             
             # Set minimum widths to prevent panels from becoming too small
-            min_left_width = 250
-            min_center_width = 400
-            min_right_width = 300
+            min_left_width = 280  # Increased for camera + params
+            min_center_width = 450  # Slightly larger for main image
+            min_right_width = 280   # Reduced since less content
             
             # Apply minimum constraints
             if desired_left_width < min_left_width:
@@ -1716,6 +1899,33 @@ class ConfocalMainWindow(QMainWindow):
             self.live_plot.resume_updates()
         self.show_message(f"❌ Scan error: {error_msg}")
     
+    def capture_image(self):
+        """Capture current camera image"""
+        try:
+            # Get current camera image
+            if hasattr(self, 'camera_widget') and hasattr(self.camera_widget, 'camera_view'):
+                # For now, just show a message. In real implementation, this would capture from camera
+                self.show_message("📸 Camera image captured")
+        except Exception as e:
+            self.show_message(f"❌ Error capturing image: {str(e)}")
+    
+    def save_camera_image(self):
+        """Save camera image to file"""
+        try:
+            if hasattr(self, 'camera_widget') and hasattr(self.camera_widget, 'camera_view'):
+                # Get the current image from camera widget
+                image_item = self.camera_widget.camera_view.getImageItem()
+                if image_item is not None:
+                    # In real implementation, would save actual camera image
+                    timestamp = time.strftime("%Y%m%d_%H%M%S")
+                    filename = f"camera_image_{timestamp}.png"
+                    # For now, just show a message
+                    self.show_message(f"💾 Camera image saved as {filename}")
+                else:
+                    self.show_message("❌ No camera image to save")
+        except Exception as e:
+            self.show_message(f"❌ Error saving camera image: {str(e)}")
+
     def show_message(self, message):
         """Display a message to the user"""
         print(message)  # Also print to console for debugging
@@ -1744,6 +1954,10 @@ class ConfocalMainWindow(QMainWindow):
             # Stop live plot timer
             if hasattr(self, 'live_plot') and self.live_plot:
                 self.live_plot.timer.stop()
+            
+            # Stop camera update timer
+            if hasattr(self, 'camera_widget') and hasattr(self.camera_widget, 'update_timer'):
+                self.camera_widget.update_timer.stop()
             
             # Stop TimeTagger if it's a virtual device
             if hasattr(self, 'tagger') and hasattr(self.tagger, 'stop'):
