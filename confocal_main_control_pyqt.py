@@ -473,26 +473,27 @@ class ConfocalMainWindow(QMainWindow):
         
         Layout Structure:
         ┌─────────────────────────────────────────────────────────────────┐
-        │ Main Window (Optimized proportions: 30% | 45% | 25%)           │
+        │ Main Window (Proportions: [Left+Center+Bottom 75%] | [Right 25%])│
         ├─────────────┬─────────────────────────────┬─────────────────────┤
-        │ LEFT PANEL  │ CENTER PANEL                │ RIGHT PANEL         │
-        │ (30%)       │ (45% - Dominant)            │ (25%)               │
+        │ LEFT PANEL  │ CENTER PANEL                │                     │
+        │ (30%)       │ (45% - Dominant)            │                     │
         │             │                             │                     │
         │ ┌─────────┐ │ ┌─────────────────────────┐ │ ┌─────────────────┐ │
         │ │ Camera  │ │ │ Image Panel Controls    │ │ │ Live Signal     │ │
         │ │ Image   │ │ │ (Zoom + Colormap)       │ │ │                 │ │
         │ └─────────┘ │ └─────────────────────────┘ │ └─────────────────┘ │
-        │ ┌─────────┐ │ ┌─────────────────────────┐ │ ┌─────────────────┐ │
+        │ ┌─────────┐ │ ┌─────────────────────────┐ │ │                 │ │
         │ │ Camera  │ │ │                         │ │ │ Auto Focus      │ │
         │ │Controls │ │ │    Main Image Display   │ │ │                 │ │
         │ └─────────┘ │ │     (Confocal Scan)     │ │ └─────────────────┘ │
-        │ ┌─────────┐ │ │                         │ │ ┌─────────────────┐ │
-        │ │  Scan   │ │ │                         │ │ │ Single Axis     │ │
-        │ │Paramters│ │ │                         │ │ │ Scan            │ │
-        │ └─────────┘ │ └─────────────────────────┘ │ └─────────────────┘ │
-        └─────────────┴─────────────────────────────┴─────────────────────┤
-        │ BOTTOM PANEL: Scan Controls + Status Bar                       │
-        └─────────────────────────────────────────────────────────────────┘
+        │ ┌─────────┐ │ │                         │ │ │ RIGHT PANEL     │ │
+        │ │  Scan   │ │ │                         │ │ │ (25%)           │ │
+        │ │Paramters│ │ │                         │ │ │ Single Axis     │ │
+        │ └─────────┘ │ └─────────────────────────┘ │ │ Scan            │ │
+        ├─────────────┴─────────────────────────────┤ │                 │ │
+        │ BOTTOM PANEL: Scan Controls + Status      │ │ (Full Height)   │ │
+        │ (Only under Left + Center)                │ │                 │ │
+        └─────────────────────────────────────────────┴─────────────────────┘
         """
         # Apply dark theme style (napari-inspired, matching ODMR GUI)
         self.setStyleSheet("""
@@ -657,15 +658,22 @@ class ConfocalMainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         
         # Create optimized layout structure
-        # Main layout: Top area + Bottom controls
-        main_layout = QVBoxLayout()
+        # Main layout: (Left+Center+Bottom Area) + Right Panel
+        main_layout = QHBoxLayout()
         main_layout.setSpacing(10)
         main_layout.setContentsMargins(5, 5, 5, 5)
         central_widget.setLayout(main_layout)
         
-        # Top area: Left params + Center image + Right plots
-        self.top_layout = QHBoxLayout()
-        self.top_layout.setSpacing(10)
+        # Left+Center+Bottom combined area
+        left_center_bottom_widget = QWidget()
+        left_center_bottom_layout = QVBoxLayout()
+        left_center_bottom_layout.setSpacing(10)
+        left_center_bottom_layout.setContentsMargins(0, 0, 0, 0)
+        left_center_bottom_widget.setLayout(left_center_bottom_layout)
+        
+        # Top area for left and center panels only
+        self.left_center_layout = QHBoxLayout()
+        self.left_center_layout.setSpacing(10)
         
         # LEFT PANEL: Camera + Scan Parameters (30% of window width)
         self.left_panel = QWidget()
@@ -720,7 +728,7 @@ class ConfocalMainWindow(QMainWindow):
         # Add some stretch to push everything to top if needed
         left_layout.addStretch(1)
         
-        self.top_layout.addWidget(self.left_panel)
+        self.left_center_layout.addWidget(self.left_panel)
         
         # CENTER PANEL: Main Image Display (45% of window width - dominant area)
         self.center_panel = QWidget()
@@ -803,7 +811,7 @@ class ConfocalMainWindow(QMainWindow):
         
         center_layout.addWidget(self.image_view)
         
-        self.top_layout.addWidget(self.center_panel)  # Proportions handled by resizeEvent
+        self.left_center_layout.addWidget(self.center_panel)  # Proportions handled by resizeEvent
         
         # RIGHT PANEL: Analysis Tools (25% of window width)
         self.right_panel = QWidget()
@@ -854,11 +862,8 @@ class ConfocalMainWindow(QMainWindow):
         # Add stretch to push widgets to top and prevent excessive expansion
         right_layout.addStretch(1)
         
-        # Add right panel - proportions handled by resizeEvent
-        self.top_layout.addWidget(self.right_panel)
-        
-        # Add top layout to main layout
-        main_layout.addLayout(self.top_layout, 1)  # Give top area stretch factor
+        # Add left+center layout to the combined widget
+        left_center_bottom_layout.addLayout(self.left_center_layout, 1)  # Give top area stretch factor
         
         # BOTTOM PANEL: Scan Controls (fixed height for consistent layout)
         bottom_panel = QWidget()
@@ -910,7 +915,12 @@ class ConfocalMainWindow(QMainWindow):
         controls_group.setLayout(controls_layout)
         bottom_layout.addWidget(controls_group)
         
-        main_layout.addWidget(bottom_panel)
+        # Add bottom panel to left+center area only
+        left_center_bottom_layout.addWidget(bottom_panel)
+        
+        # Add the left+center+bottom widget and right panel to main layout
+        main_layout.addWidget(left_center_bottom_widget, 3)  # 75% width (left 30% + center 45%)
+        main_layout.addWidget(self.right_panel, 1)  # 25% width
         
         # Initialize display
         self.init_display()
@@ -959,50 +969,30 @@ class ConfocalMainWindow(QMainWindow):
         self.update_panel_proportions()
     
     def update_panel_proportions(self):
-        """Update panel proportions based on current window size"""
-        if hasattr(self, 'top_layout'):
-            window_width = self.width()
+        """Update panel proportions based on current window size
+        
+        New layout structure:
+        - Main layout (horizontal): [Left+Center+Bottom 75%] | [Right 25%]
+        - Within Left+Center area: [Left 40%] | [Center 60%]
+        """
+        if hasattr(self, 'left_center_layout'):
+            # The main horizontal layout proportions are set by stretch factors (3:1 = 75%:25%)
+            # We only need to manage proportions within the left+center area
             
-            # Define proportions based on reference image:
-            # Left panel: 30% (Camera + Scan Parameters)
-            # Center panel: 45% (Main Image Display - dominant area)
-            # Right panel: 25% (Live Signal, Auto Focus, Single Axis Scan)
+            # Within the left+center area (which is 75% of total width):
+            # Left should be 30%/75% = 40% of left+center area
+            # Center should be 45%/75% = 60% of left+center area
             
-            left_proportion = 0.30      # 30% for camera and scan params
-            center_proportion = 0.45    # 45% for main image (dominant)
-            right_proportion = 0.25     # 25% for analysis tools
+            left_proportion_in_area = 0.40   # 40% of left+center area
+            center_proportion_in_area = 0.60  # 60% of left+center area
             
-            # Calculate desired widths
-            desired_left_width = window_width * left_proportion
-            desired_center_width = window_width * center_proportion
-            desired_right_width = window_width * right_proportion
+            # Calculate stretch factors for left+center layout
+            left_factor = int(left_proportion_in_area * 100)
+            center_factor = int(center_proportion_in_area * 100)
             
-            # Set minimum widths to prevent panels from becoming too small
-            min_left_width = 280  # Increased for camera + params
-            min_center_width = 450  # Slightly larger for main image
-            min_right_width = 280   # Reduced since less content
-            
-            # Apply minimum constraints
-            if desired_left_width < min_left_width:
-                desired_left_width = min_left_width
-            if desired_center_width < min_center_width:
-                desired_center_width = min_center_width
-            if desired_right_width < min_right_width:
-                desired_right_width = min_right_width
-            
-            # Calculate stretch factors (proportional to desired widths)
-            total_desired = desired_left_width + desired_center_width + desired_right_width
-            
-            if total_desired > 0:
-                # Convert to integer ratios for stretch factors
-                left_factor = max(1, int((desired_left_width / total_desired) * 100))
-                center_factor = max(1, int((desired_center_width / total_desired) * 100))
-                right_factor = max(1, int((desired_right_width / total_desired) * 100))
-                
-                # Update stretch factors for all panels
-                self.top_layout.setStretchFactor(self.left_panel, left_factor)
-                self.top_layout.setStretchFactor(self.center_panel, center_factor)
-                self.top_layout.setStretchFactor(self.right_panel, right_factor)
+            # Update stretch factors within left+center layout
+            self.left_center_layout.setStretchFactor(self.left_panel, left_factor)
+            self.left_center_layout.setStretchFactor(self.center_panel, center_factor)
     
     def setup_colormaps(self):
         """Set up scientific colormaps for microscopy data"""
