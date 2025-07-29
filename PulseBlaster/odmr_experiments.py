@@ -18,7 +18,7 @@ from .swabian_pulse_streamer import SwabianPulseController
 from .rigol_dsg836 import RigolDSG836Controller
 
 # TimeTagger imports for real data acquisition
-from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual, CountBetweenMarkers, Countrate
+import TimeTagger
 
 class ODMRExperiments:
     """
@@ -26,34 +26,36 @@ class ODMRExperiments:
     """
     
     def __init__(self, pulse_controller: SwabianPulseController, 
-                 mw_generator: Optional[RigolDSG836Controller] = None,
-                 tagger=None):
+                 mw_generator: Optional[RigolDSG836Controller] = None):
         """
         Initialize ODMR experiments with a pulse controller and optional MW generator.
         
         Args:
             pulse_controller: Instance of SwabianPulseController
             mw_generator: Optional instance of RigolDSG836Controller for MW control
-            tagger: Optional existing TimeTagger instance. If None, will create new one.
         """
         self.pulse_controller = pulse_controller
         self.mw_generator = mw_generator
         self.results = {}
         
-        # Use provided TimeTagger instance or create new one
-        if tagger is not None:
-            self.tagger = tagger
-            print("✅ Using existing TimeTagger instance")
-        else:
-            # Initialize TimeTagger for real data acquisition
+        # Initialize TimeTagger for real data acquisition
+        try:
+            self.tagger = TimeTagger.createTimeTaggerNetwork("localhost")
+            print("✅ Connected to Network TimeTagger device")
+        except Exception as e:
+            print(f"⚠️ Network TimeTagger not detected: {str(e)}")
+
+        if self.tagger is None:
             try:
-                self.tagger = createTimeTagger()
-                self.tagger.reset()
-                print("✅ Connected to real TimeTagger device")
+                self.tagger = TimeTagger.createTimeTagger()
+                if self.tagger is not None:
+                    self.tagger.reset()
+                    print("✅ Connected to real TimeTagger device")
             except Exception as e:
-                print("⚠️ Real TimeTagger not detected, using virtual device")
-                self.tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+                print(f"⚠️ Real TimeTagger not detected: {str(e)}")
+                self.tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
                 self.tagger.run()
+                print("✅ Virtual TimeTagger started")
         
         # Set bin width to 5 ns and initialize counter
         #self.binwidth = int(5e9)  # 5 ns in ps
@@ -118,7 +120,7 @@ class ODMRExperiments:
             repetitions=repetitions
             )
         #self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
-        self.counter = Countrate(tagger=self.tagger, channels=[1])
+        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
         if self.mw_generator:
             self.mw_generator.set_rf_output(True)
         for freq in mw_frequencies:
@@ -180,7 +182,7 @@ class ODMRExperiments:
         
         durations = []
         count_rates = []
-        self.counter = Countrate(tagger=self.tagger, channels=[1])
+        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
         # Set MW frequency and power for Rabi oscillation
         if self.mw_generator:
             self.mw_generator.set_odmr_frequency(mw_frequency / 1e9)  # Convert Hz to GHz
@@ -463,7 +465,7 @@ class ODMRExperiments:
         
         delays = []
         count_rates = []
-        self.counter = Countrate(tagger=self.tagger, channels=[1])
+        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
         
         for delay_time in delay_times:
             print(f"⏱️ Delay time: {delay_time} ns")

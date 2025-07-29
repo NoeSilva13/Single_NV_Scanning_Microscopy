@@ -19,7 +19,7 @@ import napari
 import nidaqmx
 from napari.utils.notifications import show_info
 from PyQt5.QtWidgets import QDesktopWidget
-from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual
+import TimeTagger
 from magicgui import magicgui
 
 # Local imports
@@ -54,7 +54,6 @@ from widgets.auto_focus import (
 )
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan as create_load_scan
-from widgets.odmr_controls import launch_odmr_gui as create_launch_odmr_gui
 
 # --------------------- SCAN PARAMETERS MANAGER CLASS ---------------------
 class ScanParametersManager:
@@ -210,18 +209,23 @@ layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 
 # --------------------- TIMETAGGER SETUP ---------------------
 try:
-    tagger = createTimeTagger()
+    tagger = TimeTagger.createTimeTagger()
     tagger.reset()
     show_info("✅ Connected to real TimeTagger device")
+    tagger.startServer(access_mode = TimeTagger.AccessMode.Control,port=41101) 
+    # Start the Server. TimeTagger.AccessMode sets the access rights for clients. Port defines the network port to be used
+    # The server keeps running until the command tagger.stopServer() is called or until the program is terminated
+    show_info("✅ TimeTagger server started")
 except Exception as e:
     show_info("⚠️ Real TimeTagger not detected, using virtual device")
-    tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+    tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
     tagger.run()
+    show_info("✅ Virtual TimeTagger started")
 
 # Set bin width 
 binwidth = BINWIDTH
 n_values = 1
-counter = Counter(tagger, [1], binwidth, n_values)
+counter = TimeTagger.Counter(tagger, [1], binwidth, n_values)
 
 # --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
 def on_mouse_click(layer, event):
@@ -425,8 +429,6 @@ load_scan_widget = create_load_scan(
     update_widget_func=update_widget_func
 )
 
-# Create ODMR control widgets
-launch_odmr_widget = create_launch_odmr_gui(tagger=tagger, counter=counter, binwidth=binwidth)
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
 zoom_in_progress = False
@@ -504,7 +506,6 @@ reset_zoom_widget.native.setFixedSize(150, 50)
 close_scanner_widget.native.setFixedSize(150, 50)
 auto_focus_widget.native.setFixedSize(150, 50)
 load_scan_widget.native.setFixedSize(150, 50)
-launch_odmr_widget.native.setFixedSize(150, 50)
 
 # Add widgets to viewer
 viewer.window.add_dock_widget(new_scan_widget, area="bottom")
@@ -514,7 +515,6 @@ viewer.window.add_dock_widget(reset_zoom_widget, area="bottom")
 viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
-viewer.window.add_dock_widget(launch_odmr_widget, area="bottom")
 update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
 camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
 viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")

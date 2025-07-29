@@ -1,0 +1,31 @@
+flowchart TD
+    %% Main TimeTagger Initialization Flow
+    A[ODMRExperiments.__init__] --> B[Try Network TimeTagger]
+    B -->|Success| C[Initialize Network Connection]
+    C --> D[Set up Counter]
+    
+    B -->|Failure| E[Try Local TimeTagger]
+    E -->|Success| F[Reset and Initialize]
+    F --> D
+    
+    E -->|Failure| G[Create Virtual TimeTagger]
+    G --> H[Load from time_tags_test.ttbin]
+    H --> I[Start Virtual Device]
+    I --> D
+    
+    D --> J[Ready for ODMR Experiments]
+    
+    %% Cleanup
+    J --> K["cleanup() called"]
+    K --> L[Reset TimeTagger]
+    L --> M[Release Resources]
+    
+    %% Styling
+    classDef success fill:#9f9,stroke:#090,stroke-width:2px
+    classDef warning fill:#ff9,stroke:#990,stroke-width:2px
+    classDef danger fill:#f99,stroke:#900,stroke-width:2px
+    classDef info fill:#9cf,stroke:#009,stroke-width:2px
+    
+    class A info
+    class B,C,D,E,F,J,K,L,M success
+    class G,H,I warning
