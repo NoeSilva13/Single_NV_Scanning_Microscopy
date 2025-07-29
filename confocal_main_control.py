@@ -19,7 +19,7 @@ import napari
 import nidaqmx
 from napari.utils.notifications import show_info
 from PyQt5.QtWidgets import QDesktopWidget
-from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual
+import TimeTagger
 from magicgui import magicgui
 
 # Local imports
@@ -209,18 +209,23 @@ layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 
 # --------------------- TIMETAGGER SETUP ---------------------
 try:
-    tagger = createTimeTagger()
+    tagger = TimeTagger.createTimeTagger()
     tagger.reset()
     show_info("✅ Connected to real TimeTagger device")
+    tagger.startServer(access_mode = TimeTagger.AccessMode.Control,port=41101) 
+    # Start the Server. TimeTagger.AccessMode sets the access rights for clients. Port defines the network port to be used
+    # The server keeps running until the command tagger.stopServer() is called or until the program is terminated
+    show_info("✅ TimeTagger server started")
 except Exception as e:
     show_info("⚠️ Real TimeTagger not detected, using virtual device")
-    tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+    tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
     tagger.run()
+    show_info("✅ Virtual TimeTagger started")
 
 # Set bin width 
 binwidth = BINWIDTH
 n_values = 1
-counter = Counter(tagger, [1], binwidth, n_values)
+counter = TimeTagger.Counter(tagger, [1], binwidth, n_values)
 
 # --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
 def on_mouse_click(layer, event):
