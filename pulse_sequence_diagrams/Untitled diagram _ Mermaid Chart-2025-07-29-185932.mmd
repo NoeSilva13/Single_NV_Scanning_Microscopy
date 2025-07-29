@@ -1,0 +1,30 @@
+flowchart TD
+    %% Main TimeTagger Initialization Flow
+    A[Start] --> B[Import TimeTagger]
+    B --> C[Try to create TimeTagger]
+    C -->|Success| D[Reset TimeTagger]
+    D --> E[Start TimeTagger Server\non port 41101\nwith Control access]
+    E --> F[Initialize Counter\nwith binwidth and n_values]
+    F --> G[Ready for Scanning]
+    
+    %% Fallback Path
+    C -->|Failure| H[Create Virtual TimeTagger\nfrom time_tags_test.ttbin]
+    H --> I[Start Virtual TimeTagger]
+    I --> F
+    
+    %% Network Client Connection
+    E -->|Other Applications| J[Connect to\nTimeTagger Server\nlocalhost:41101]
+    J --> K[Use Counter/Measurements]
+    
+    %% Cleanup
+    G --> L[Cleanup on Exit]
+    K --> L
+    
+    %% Styling
+    classDef success fill:#9f9,stroke:#090,stroke-width:2px
+    classDef warning fill:#ff9,stroke:#990,stroke-width:2px
+    classDef info fill:#9cf,stroke:#009,stroke-width:2px
+    
+    class A,B,D,E,F,J,K,L success
+    class H,I warning
+    class C info
