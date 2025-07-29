@@ -40,21 +40,22 @@ class ODMRExperiments:
         
         # Initialize TimeTagger for real data acquisition
         try:
-            self.tagger = TimeTagger.TimeTaggerNetwork()
+            self.tagger = TimeTagger.createTimeTaggerNetwork("localhost")
             print("✅ Connected to Network TimeTagger device")
         except Exception as e:
             print(f"⚠️ Network TimeTagger not detected: {str(e)}")
 
-        try:
-            self.tagger = TimeTagger.createTimeTagger()
-            if self.tagger is not None:
-                self.tagger.reset()
-                print("✅ Connected to real TimeTagger device")
-        except Exception as e:
-            print(f"⚠️ Real TimeTagger not detected: {str(e)}")
-            self.tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
-            self.tagger.run()
-            print("✅ Virtual TimeTagger started")
+        if self.tagger is None:
+            try:
+                self.tagger = TimeTagger.createTimeTagger()
+                if self.tagger is not None:
+                    self.tagger.reset()
+                    print("✅ Connected to real TimeTagger device")
+            except Exception as e:
+                print(f"⚠️ Real TimeTagger not detected: {str(e)}")
+                self.tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+                self.tagger.run()
+                print("✅ Virtual TimeTagger started")
         
         # Set bin width to 5 ns and initialize counter
         #self.binwidth = int(5e9)  # 5 ns in ps
