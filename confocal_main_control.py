@@ -426,7 +426,7 @@ load_scan_widget = create_load_scan(
 )
 
 # Create ODMR control widgets
-launch_odmr_widget = create_launch_odmr_gui(tagger=tagger, counter=counter, binwidth=binwidth)
+launch_odmr_widget = create_launch_odmr_gui()
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
 zoom_in_progress = False
