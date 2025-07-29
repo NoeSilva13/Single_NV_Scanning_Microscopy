@@ -292,7 +292,6 @@ def scan_pattern(x_points, y_points):
         layer.data = image
         layer.contrast_limits = contrast_limits
         
-        pixel_count = 0  # Counter for pixels scanned
         start_time = time.time()
         for y_idx, y in enumerate(y_points):
             for x_idx, x in enumerate(x_points):
@@ -313,10 +312,8 @@ def scan_pattern(x_points, y_points):
                 print(f"{counts}")
                 image[y_idx, x_idx] = counts
                 
-                # Update layer only every n pixels for faster display
-                pixel_count += 1
-                if pixel_count % 10 == 0:
-                    layer.data = image
+                if x_idx == len(x_points) - 1: # Update layer every row
+                    layer.refresh()
                     update_contrast_limits(layer, image)
                     
         # Final update to ensure last pixels are displayed
