@@ -263,7 +263,8 @@ def get_count_with_overflow():
     data = counter.getData()
     count_rate = data[0][0]/(binwidth/1e12)
     # Check if any bins are in overflow mode
-    overflow = counter.getOverflow().any() if hasattr(counter, 'getOverflow') else False
+    counter_data = counter.getDataObject()
+    overflow = counter_data.overflow  # Access as attribute, not as a method
     return count_rate, overflow
 
 # Add a live plot widget to display count rate with overflow detection
