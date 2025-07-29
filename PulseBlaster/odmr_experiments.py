@@ -18,7 +18,7 @@ from .swabian_pulse_streamer import SwabianPulseController
 from .rigol_dsg836 import RigolDSG836Controller
 
 # TimeTagger imports for real data acquisition
-from TimeTagger import createTimeTagger, Counter, createTimeTaggerVirtual, CountBetweenMarkers, Countrate
+import TimeTagger
 
 class ODMRExperiments:
     """
@@ -40,12 +40,17 @@ class ODMRExperiments:
         
         # Initialize TimeTagger for real data acquisition
         try:
-            self.tagger = createTimeTagger()
-            self.tagger.reset()
-            print("✅ Connected to real TimeTagger device")
+            self.tagger = TimeTagger.TimeTaggerNetwork("localhost")
+            if self.tagger is not None:
+                print("✅ Connected to Network TimeTagger device")
+                return
+            else:                
+                self.tagger = TimeTagger.createTimeTagger()
+                self.tagger.reset()
+                print("✅ Connected to real TimeTagger device")
         except Exception as e:
             print("⚠️ Real TimeTagger not detected, using virtual device")
-            self.tagger = createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+            self.tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
             self.tagger.run()
         
         # Set bin width to 5 ns and initialize counter
@@ -111,7 +116,7 @@ class ODMRExperiments:
             repetitions=repetitions
             )
         #self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
-        self.counter = Countrate(tagger=self.tagger, channels=[1])
+        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
         if self.mw_generator:
             self.mw_generator.set_rf_output(True)
         for freq in mw_frequencies:
@@ -173,7 +178,7 @@ class ODMRExperiments:
         
         durations = []
         count_rates = []
-        self.counter = Countrate(tagger=self.tagger, channels=[1])
+        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
         # Set MW frequency and power for Rabi oscillation
         if self.mw_generator:
             self.mw_generator.set_odmr_frequency(mw_frequency / 1e9)  # Convert Hz to GHz
@@ -456,7 +461,7 @@ class ODMRExperiments:
         
         delays = []
         count_rates = []
-        self.counter = Countrate(tagger=self.tagger, channels=[1])
+        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
         
         for delay_time in delay_times:
             print(f"⏱️ Delay time: {delay_time} ns")
