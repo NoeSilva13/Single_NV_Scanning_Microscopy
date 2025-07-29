@@ -194,132 +194,126 @@ class CameraWidget(QWidget):
 
 
 class ScanParametersWidget(QWidget):
-    """Professional scan parameters widget with table layout"""
+    """Optimized scan parameters widget with distance labels"""
     
     def __init__(self, scan_params_manager, parent=None):
         super().__init__(parent)
         self.scan_params_manager = scan_params_manager
+        
+        # Cache the conversion factor to avoid repeated imports
+        try:
+            from utils import MICRONS_PER_VOLT
+            self.microns_per_volt = MICRONS_PER_VOLT
+        except:
+            self.microns_per_volt = 86.0  # Default fallback
+        
         self.init_ui()
     
     def init_ui(self):
-        main_layout = QVBoxLayout()
-        main_layout.setSpacing(8)
-        main_layout.setContentsMargins(5, 5, 5, 5)
+        layout = QGridLayout()
+        layout.setSpacing(3)
         
-        # Create table-like layout for parameters
-        params_layout = QGridLayout()
-        params_layout.setSpacing(3)
-        params_layout.setHorizontalSpacing(8)
+        # X Range
+        layout.addWidget(QLabel("X Range (V):"), 0, 0)
+        self.x_min_spin = pg.SpinBox(value=-1.0, bounds=(-10, 10), decimals=3, step=0.1)
+        self.x_max_spin = pg.SpinBox(value=1.0, bounds=(-10, 10), decimals=3, step=0.1)
+        self.x_min_spin.setFixedWidth(70)
+        self.x_max_spin.setFixedWidth(70)
+        layout.addWidget(self.x_min_spin, 0, 1)
+        layout.addWidget(self.x_max_spin, 0, 2)
         
-        # Headers
-        header_font = self.font()
-        header_font.setBold(True)
+        # X Distance labels (simple, no styling overhead)
+        self.x_min_distance = QLabel("-86.0 μm")
+        self.x_max_distance = QLabel("86.0 μm")
+        layout.addWidget(self.x_min_distance, 0, 3)
+        layout.addWidget(self.x_max_distance, 0, 4)
         
-        param_header = QLabel("Parameter")
-        param_header.setFont(header_font)
-        param_header.setStyleSheet("color: #00d4aa;")
+        # Y Range  
+        layout.addWidget(QLabel("Y Range (V):"), 1, 0)
+        self.y_min_spin = pg.SpinBox(value=-1.0, bounds=(-10, 10), decimals=3, step=0.1)
+        self.y_max_spin = pg.SpinBox(value=1.0, bounds=(-10, 10), decimals=3, step=0.1)
+        self.y_min_spin.setFixedWidth(70)
+        self.y_max_spin.setFixedWidth(70)
+        layout.addWidget(self.y_min_spin, 1, 1)
+        layout.addWidget(self.y_max_spin, 1, 2)
         
-        voltage_header = QLabel("Voltage (V)")
-        voltage_header.setFont(header_font)
-        voltage_header.setStyleSheet("color: #00d4aa;")
-        voltage_header.setAlignment(Qt.AlignCenter)
+        # Y Distance labels
+        self.y_min_distance = QLabel("-86.0 μm")
+        self.y_max_distance = QLabel("86.0 μm")
+        layout.addWidget(self.y_min_distance, 1, 3)
+        layout.addWidget(self.y_max_distance, 1, 4)
         
-        distance_header = QLabel("Distance (μm)")  
-        distance_header.setFont(header_font)
-        distance_header.setStyleSheet("color: #00d4aa;")
-        distance_header.setAlignment(Qt.AlignCenter)
+        # Resolution
+        layout.addWidget(QLabel("X Resolution:"), 2, 0)
+        self.x_res_spin = pg.SpinBox(value=50, bounds=(1, 1000), int=True)
+        self.x_res_spin.setFixedWidth(70)
+        layout.addWidget(self.x_res_spin, 2, 1, 1, 2)
         
-        params_layout.addWidget(param_header, 0, 0, 1, 1)
-        params_layout.addWidget(voltage_header, 0, 1, 1, 2)
-        params_layout.addWidget(distance_header, 0, 3, 1, 1)
+        layout.addWidget(QLabel("Y Resolution:"), 3, 0)
+        self.y_res_spin = pg.SpinBox(value=50, bounds=(1, 1000), int=True)
+        self.y_res_spin.setFixedWidth(70)
+        layout.addWidget(self.y_res_spin, 3, 1, 1, 2)
         
-        # X Min row
-        params_layout.addWidget(QLabel("X Min:"), 1, 0)
-        self.x_min_spin = pg.SpinBox(value=-1.0, bounds=(-10, 10), decimals=2, step=0.1)
-        self.x_min_spin.setFixedWidth(60)
-        self.x_min_distance = QLabel("-86.0")
-        self.x_min_distance.setAlignment(Qt.AlignCenter)
-        self.x_min_distance.setStyleSheet("color: #ffffff; padding: 2px;")
-        params_layout.addWidget(self.x_min_spin, 1, 1)
-        params_layout.addWidget(self.x_min_distance, 1, 3)
+        # Dwell Time
+        layout.addWidget(QLabel("Dwell Time (s):"), 4, 0)
+        self.dwell_spin = pg.SpinBox(value=0.002, bounds=(0.001, 1), decimals=4, step=0.001)
+        self.dwell_spin.setFixedWidth(70)
+        layout.addWidget(self.dwell_spin, 4, 1, 1, 2)
         
-        # X Max row
-        params_layout.addWidget(QLabel("X Max:"), 2, 0)
-        self.x_max_spin = pg.SpinBox(value=1.0, bounds=(-10, 10), decimals=2, step=0.1)
-        self.x_max_spin.setFixedWidth(60)
-        self.x_max_distance = QLabel("86.0")
-        self.x_max_distance.setAlignment(Qt.AlignCenter)
-        self.x_max_distance.setStyleSheet("color: #ffffff; padding: 2px;")
-        params_layout.addWidget(self.x_max_spin, 2, 1)
-        params_layout.addWidget(self.x_max_distance, 2, 3)
+        self.setLayout(layout)
         
-        # Y Min row
-        params_layout.addWidget(QLabel("Y Min:"), 3, 0)
-        self.y_min_spin = pg.SpinBox(value=-1.0, bounds=(-10, 10), decimals=2, step=0.1)
-        self.y_min_spin.setFixedWidth(60)
-        self.y_min_distance = QLabel("-86.0")
-        self.y_min_distance.setAlignment(Qt.AlignCenter)
-        self.y_min_distance.setStyleSheet("color: #ffffff; padding: 2px;")
-        params_layout.addWidget(self.y_min_spin, 3, 1)
-        params_layout.addWidget(self.y_min_distance, 3, 3)
+        # Use debounced updates to avoid performance issues
+        self.update_timer = QTimer()
+        self.update_timer.setSingleShot(True)
+        self.update_timer.timeout.connect(self.update_distance_labels)
         
-        # Y Max row
-        params_layout.addWidget(QLabel("Y Max:"), 4, 0)
-        self.y_max_spin = pg.SpinBox(value=1.0, bounds=(-10, 10), decimals=2, step=0.1)
-        self.y_max_spin.setFixedWidth(60)
-        self.y_max_distance = QLabel("86.0")
-        self.y_max_distance.setAlignment(Qt.AlignCenter)
-        self.y_max_distance.setStyleSheet("color: #ffffff; padding: 2px;")
-        params_layout.addWidget(self.y_max_spin, 4, 1)
-        params_layout.addWidget(self.y_max_distance, 4, 3)
-        
-        # Resolution rows
-        params_layout.addWidget(QLabel("X Resolution:"), 5, 0)
-        self.x_res_spin = pg.SpinBox(value=50, bounds=(1, 1000), int=True, suffix=' px')
-        self.x_res_spin.setFixedWidth(80)
-        params_layout.addWidget(self.x_res_spin, 5, 1, 1, 2)
-        
-        params_layout.addWidget(QLabel("Y Resolution:"), 6, 0)
-        self.y_res_spin = pg.SpinBox(value=50, bounds=(1, 1000), int=True, suffix=' px')
-        self.y_res_spin.setFixedWidth(80)
-        params_layout.addWidget(self.y_res_spin, 6, 1, 1, 2)
-        
-        # Dwell Time row
-        params_layout.addWidget(QLabel("Dwell Time:"), 7, 0)
-        self.dwell_spin = pg.SpinBox(value=0.008, bounds=(0.001, 1), decimals=3, step=0.001, suffix=' s')
-        self.dwell_spin.setFixedWidth(80)
-        params_layout.addWidget(self.dwell_spin, 7, 1, 1, 2)
-        
-        main_layout.addLayout(params_layout)
-        
-        # Apply Changes button
-        self.apply_btn = QPushButton("Apply Changes")
-        self.apply_btn.clicked.connect(self.apply_changes)
-        main_layout.addWidget(self.apply_btn)
-        
-        self.setLayout(main_layout)
-        
-        # Connect spinbox changes to update distance labels
-        self.x_min_spin.valueChanged.connect(self.update_distance_labels)
-        self.x_max_spin.valueChanged.connect(self.update_distance_labels)
-        self.y_min_spin.valueChanged.connect(self.update_distance_labels)
-        self.y_max_spin.valueChanged.connect(self.update_distance_labels)
+        # Connect to debounced update (only updates 100ms after user stops changing)
+        self.x_min_spin.valueChanged.connect(self.schedule_distance_update)
+        self.x_max_spin.valueChanged.connect(self.schedule_distance_update)
+        self.y_min_spin.valueChanged.connect(self.schedule_distance_update)
+        self.y_max_spin.valueChanged.connect(self.schedule_distance_update)
         
         # Initial distance update
         self.update_distance_labels()
     
+    def schedule_distance_update(self):
+        """Schedule a debounced distance label update"""
+        self.update_timer.start(100)  # Update 100ms after last change
+    
     def update_distance_labels(self):
         """Update distance labels when voltage values change"""
         try:
-            from utils import MICRONS_PER_VOLT
-            
-            # Update distance labels
-            self.x_min_distance.setText(f"{self.x_min_spin.value() * MICRONS_PER_VOLT:.1f}")
-            self.x_max_distance.setText(f"{self.x_max_spin.value() * MICRONS_PER_VOLT:.1f}")
-            self.y_min_distance.setText(f"{self.y_min_spin.value() * MICRONS_PER_VOLT:.1f}")
-            self.y_max_distance.setText(f"{self.y_max_spin.value() * MICRONS_PER_VOLT:.1f}")
+            # Use cached conversion factor - no import overhead
+            self.x_min_distance.setText(f"{self.x_min_spin.value() * self.microns_per_volt:.1f} μm")
+            self.x_max_distance.setText(f"{self.x_max_spin.value() * self.microns_per_volt:.1f} μm")
+            self.y_min_distance.setText(f"{self.y_min_spin.value() * self.microns_per_volt:.1f} μm")
+            self.y_max_distance.setText(f"{self.y_max_spin.value() * self.microns_per_volt:.1f} μm")
         except:
             pass
+    
+    def get_parameters(self):
+        """Get current parameters from the widget"""
+        return {
+            "scan_range": {
+                "x": [self.x_min_spin.value(), self.x_max_spin.value()],
+                "y": [self.y_min_spin.value(), self.y_max_spin.value()]
+            },
+            "resolution": {
+                "x": int(self.x_res_spin.value()),
+                "y": int(self.y_res_spin.value())
+            },
+            "dwell_time": self.dwell_spin.value()
+        }
+    
+    def update_values(self, x_range, y_range, x_res, y_res, dwell_time):
+        """Update widget values"""
+        self.x_min_spin.setValue(x_range[0])
+        self.x_max_spin.setValue(x_range[1])
+        self.y_min_spin.setValue(y_range[0])
+        self.y_max_spin.setValue(y_range[1])
+        self.x_res_spin.setValue(x_res)
+        self.y_res_spin.setValue(y_res)
+        self.dwell_spin.setValue(dwell_time)
     
     def apply_changes(self):
         """Apply parameter changes and update the system"""
