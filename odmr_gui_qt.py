@@ -1,7 +1,7 @@
 """
-ODMR Control Center - Qt GUI Application
+ODMR Control - Qt GUI Application
 ----------------------------------------
-Professional GUI for controlling continuous wave ODMR experiments.
+Professional GUI for controlling ODMR experiments.
 Designed with the same visual style and organization as the NV scanning microscopy software.
 
 Author: Javier Noé Ramos Silva
