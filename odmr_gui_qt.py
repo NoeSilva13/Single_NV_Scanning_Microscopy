@@ -39,6 +39,9 @@ from PulseBlaster.swabian_pulse_streamer import SwabianPulseController
 from PulseBlaster.rigol_dsg836 import RigolDSG836Controller
 from PulseBlaster.odmr_experiments import ODMRExperiments
 
+# Import plot widgets
+from plot_widgets import PulsePatternVisualizer
+
 
 class ODMRWorker(QThread):
     """Worker thread for running ODMR measurements"""
@@ -594,6 +597,41 @@ class ODMRControlCenter(QMainWindow):
         self.repetitions = seq_group.add_parameter("Repetitions:", "100", "Number of sequence repetitions")
         scroll_layout.addWidget(seq_group)
         
+        # Connect parameter changes to pulse pattern updates
+        self.connect_parameter_signals()
+        
+        # Pulse Pattern Visualization
+        pattern_group = QGroupBox("🎯 Pulse Pattern Visualization")
+        pattern_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #00d4aa;
+                border-radius: 5px;
+                margin-top: 1ex;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #00d4aa;
+            }
+        """)
+        pattern_layout = QVBoxLayout()
+        
+        # Add pulse pattern visualizer
+        self.pulse_pattern_widget = PulsePatternVisualizer(widget_height=250)
+        pattern_layout.addWidget(self.pulse_pattern_widget)
+        
+        # Add update button
+        update_pattern_btn = QPushButton("🔄 Update Pulse Pattern")
+        update_pattern_btn.setFixedHeight(35)
+        update_pattern_btn.clicked.connect(self.update_pulse_pattern)
+        pattern_layout.addWidget(update_pattern_btn)
+        
+        pattern_group.setLayout(pattern_layout)
+        scroll_layout.addWidget(pattern_group)
+        
         # MW power parameter
         power_group = ParameterGroupBox("Microwave Settings")
         self.mw_power_advanced = power_group.add_parameter("MW Power (dBm):", "-10.0", "Microwave power level")
@@ -653,6 +691,9 @@ class ODMRControlCenter(QMainWindow):
         
         # Add to tab widget
         self.tab_widget.addTab(control_widget, "🔬 ODMR Control")
+        
+        # Initialize pulse pattern visualization with default parameters
+        QTimer.singleShot(100, self.update_pulse_pattern)
     
     def create_rabi_control_tab(self):
         """Create the Rabi Oscillations Control tab"""
@@ -695,6 +736,41 @@ class ODMRControlCenter(QMainWindow):
         self.rabi_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "10000", "Time between sequence repetitions")
         self.rabi_repetitions = seq_group.add_parameter("Repetitions:", "1000", "Number of sequence repetitions")
         scroll_layout.addWidget(seq_group)
+        
+        # Pulse Pattern Visualization for Rabi
+        rabi_pattern_group = QGroupBox("🎯 Rabi Pulse Pattern")
+        rabi_pattern_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #ff9800;
+                border-radius: 5px;
+                margin-top: 1ex;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #ff9800;
+            }
+        """)
+        rabi_pattern_layout = QVBoxLayout()
+        
+        # Add pulse pattern visualizer for Rabi
+        self.rabi_pulse_pattern_widget = PulsePatternVisualizer(widget_height=250)
+        rabi_pattern_layout.addWidget(self.rabi_pulse_pattern_widget)
+        
+        # Add update button
+        update_rabi_pattern_btn = QPushButton("🔄 Update Rabi Pattern")
+        update_rabi_pattern_btn.setFixedHeight(35)
+        update_rabi_pattern_btn.clicked.connect(self.update_rabi_pulse_pattern)
+        rabi_pattern_layout.addWidget(update_rabi_pattern_btn)
+        
+        rabi_pattern_group.setLayout(rabi_pattern_layout)
+        scroll_layout.addWidget(rabi_pattern_group)
+        
+        # Connect Rabi parameter changes to pulse pattern updates
+        self.connect_rabi_parameter_signals()
         
         # Control buttons
         button_group = QGroupBox("Measurement Control")
@@ -750,6 +826,9 @@ class ODMRControlCenter(QMainWindow):
         
         # Add to tab widget
         self.tab_widget.addTab(control_widget, "📈 Rabi Control")
+        
+        # Initialize Rabi pulse pattern visualization with default parameters
+        QTimer.singleShot(100, self.update_rabi_pulse_pattern)
     
     def create_t1_control_tab(self):
         """Create the T1 Decay Control tab"""
@@ -1029,6 +1108,81 @@ class ODMRControlCenter(QMainWindow):
         except ValueError as e:
             QMessageBox.warning(self, "Parameter Error", f"Invalid parameter value: {e}")
             return None
+    
+    def update_pulse_pattern(self):
+        """Update the pulse pattern visualization based on current parameters"""
+        try:
+            # Get timing parameters from GUI
+            parameters = {
+                'laser_duration': int(self.laser_duration.text()),
+                'mw_duration': int(self.mw_duration.text()),
+                'detection_duration': int(self.detection_duration.text()),
+                'laser_delay': int(self.laser_delay.text()),
+                'mw_delay': int(self.mw_delay.text()),
+                'detection_delay': int(self.detection_delay.text()),
+                'sequence_interval': int(self.sequence_interval.text())
+            }
+            
+            # Update the pulse pattern visualization
+            self.pulse_pattern_widget.update_pulse_pattern(parameters)
+            self.log_message("✅ Pulse pattern updated")
+            
+        except ValueError as e:
+            QMessageBox.warning(self, "Parameter Error", f"Invalid parameter value: {e}")
+        except Exception as e:
+            QMessageBox.warning(self, "Visualization Error", f"Failed to update pulse pattern: {e}")
+    
+    def connect_parameter_signals(self):
+        """Connect parameter input fields to automatic pulse pattern updates"""
+        # Connect timing parameters
+        self.laser_duration.textChanged.connect(self.update_pulse_pattern)
+        self.mw_duration.textChanged.connect(self.update_pulse_pattern)
+        self.detection_duration.textChanged.connect(self.update_pulse_pattern)
+        
+        # Connect delay parameters
+        self.laser_delay.textChanged.connect(self.update_pulse_pattern)
+        self.mw_delay.textChanged.connect(self.update_pulse_pattern)
+        self.detection_delay.textChanged.connect(self.update_pulse_pattern)
+        
+        # Connect sequence parameters
+        self.sequence_interval.textChanged.connect(self.update_pulse_pattern)
+    
+    def update_rabi_pulse_pattern(self):
+        """Update the Rabi pulse pattern visualization based on current parameters"""
+        try:
+            # Get timing parameters from GUI
+            parameters = {
+                'laser_duration': int(self.rabi_laser_duration.text()),
+                'mw_duration': 100,  # Use a default MW duration for visualization
+                'detection_duration': int(self.rabi_detection_duration.text()),
+                'laser_delay': int(self.rabi_laser_delay.text()),
+                'mw_delay': int(self.rabi_mw_delay.text()),
+                'detection_delay': int(self.rabi_detection_delay.text()),
+                'sequence_interval': int(self.rabi_sequence_interval.text())
+            }
+            
+            # Update the pulse pattern visualization
+            self.rabi_pulse_pattern_widget.update_pulse_pattern(parameters)
+            self.log_message("✅ Rabi pulse pattern updated")
+            
+        except ValueError as e:
+            QMessageBox.warning(self, "Parameter Error", f"Invalid parameter value: {e}")
+        except Exception as e:
+            QMessageBox.warning(self, "Visualization Error", f"Failed to update Rabi pulse pattern: {e}")
+    
+    def connect_rabi_parameter_signals(self):
+        """Connect Rabi parameter input fields to automatic pulse pattern updates"""
+        # Connect timing parameters
+        self.rabi_laser_duration.textChanged.connect(self.update_rabi_pulse_pattern)
+        self.rabi_detection_duration.textChanged.connect(self.update_rabi_pulse_pattern)
+        
+        # Connect delay parameters
+        self.rabi_laser_delay.textChanged.connect(self.update_rabi_pulse_pattern)
+        self.rabi_mw_delay.textChanged.connect(self.update_rabi_pulse_pattern)
+        self.rabi_detection_delay.textChanged.connect(self.update_rabi_pulse_pattern)
+        
+        # Connect sequence parameters
+        self.rabi_sequence_interval.textChanged.connect(self.update_rabi_pulse_pattern)
     
     def start_measurement(self):
         """Start ODMR measurement"""
