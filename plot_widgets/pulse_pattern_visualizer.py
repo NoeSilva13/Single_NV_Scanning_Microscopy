@@ -61,12 +61,15 @@ class PulsePatternVisualizer(QWidget):
             - mw_delay: Delay before microwave pulse (ns)
             - detection_delay: Delay before detection window (ns)
             - sequence_interval: Time between two complete sequences (ns)
+            - repetitions: Number of sequence repetitions (if > 1, shows two sequences)
             
         Notes
         -----
         The sequence length is calculated as max(laser_delay + laser_duration, 
         mw_delay + mw_duration, detection_delay + detection_duration).
         The sequence_interval represents the time between consecutive sequences.
+        When repetitions > 1, the second sequence starts at sequence_length + sequence_interval,
+        and the total display length is sequence_length + sequence_interval + sequence_length.
         """
         # Clear previous plot
         self.ax.clear()
@@ -79,6 +82,7 @@ class PulsePatternVisualizer(QWidget):
         mw_delay = float(parameters.get('mw_delay', 0))
         detection_delay = float(parameters.get('detection_delay', 0))
         sequence_interval = float(parameters.get('sequence_interval', 10000))
+        repetitions = int(parameters.get('repetitions', 1))
         
         # Calculate timing
         laser_start = laser_delay
@@ -93,8 +97,16 @@ class PulsePatternVisualizer(QWidget):
         # Calculate sequence length as max of all pulse end times
         sequence_length = max(laser_end, mw_end, detection_end)
         
-        # Set up the plot - show the full sequence length
-        self.ax.set_xlim(0, sequence_length)
+        # Determine x-axis range based on repetitions
+        if repetitions > 1:
+            # Show two complete sequences: sequence_length + sequence_interval + sequence_length
+            x_max = sequence_length + sequence_interval + sequence_length
+        else:
+            # Show just one sequence
+            x_max = sequence_length
+        
+        # Set up the plot
+        self.ax.set_xlim(0, x_max)
         self.ax.set_ylim(0, 4)
         
         # Plot laser pulse
@@ -115,12 +127,44 @@ class PulsePatternVisualizer(QWidget):
         self.ax.text((detection_start + detection_end) / 2, 2.5, 'DETECT', 
                     ha='center', va='center', color='white', fontweight='bold', fontsize=10)
         
+        # If repetitions > 1, plot second sequence
+        if repetitions > 1:
+            # Second sequence timing - starts after sequence_interval
+            laser_start_2 = sequence_length + sequence_interval
+            laser_end_2 = laser_start_2 + laser_duration
+            mw_start_2 = laser_start_2 + mw_delay
+            mw_end_2 = mw_start_2 + mw_duration
+            detection_start_2 = laser_start_2 + detection_delay
+            detection_end_2 = detection_start_2 + detection_duration
+            
+            # Plot second laser pulse (slightly transparent)
+            self.ax.fill_between([laser_start_2, laser_end_2], 0, 1, 
+                               color='#4caf50', alpha=0.4)
+            self.ax.text((laser_start_2 + laser_end_2) / 2, 0.5, 'LASER', 
+                        ha='center', va='center', color='white', fontweight='bold', fontsize=8)
+            
+            # Plot second microwave pulse (slightly transparent)
+            self.ax.fill_between([mw_start_2, mw_end_2], 1, 2, 
+                               color='#2196f3', alpha=0.4)
+            self.ax.text((mw_start_2 + mw_end_2) / 2, 1.5, 'MW', 
+                        ha='center', va='center', color='white', fontweight='bold', fontsize=8)
+            
+            # Plot second detection window (slightly transparent)
+            self.ax.fill_between([detection_start_2, detection_end_2], 2, 3, 
+                               color='#f44336', alpha=0.4)
+            self.ax.text((detection_start_2 + detection_end_2) / 2, 2.5, 'DETECT', 
+                        ha='center', va='center', color='white', fontweight='bold', fontsize=8)
+        
         # Add timeline markers
         time_points = [0, laser_start, laser_end, mw_start, mw_end, detection_start, detection_end, sequence_length]
+        if repetitions > 1:
+            time_points.extend([sequence_interval, sequence_length + sequence_interval, 
+                              laser_start_2, laser_end_2, mw_start_2, mw_end_2, 
+                              detection_start_2, detection_end_2])
         time_points = sorted(list(set(time_points)))  # Remove duplicates and sort
         
         for t in time_points:
-            if t <= sequence_length:
+            if t <= x_max:
                 self.ax.axvline(x=t, color='#666666', linestyle='--', alpha=0.5, linewidth=0.5)
                 self.ax.text(t, 3.5, f'{int(t)}', ha='center', va='bottom', 
                            color='#cccccc', fontsize=8, rotation=45)
@@ -138,8 +182,8 @@ class PulsePatternVisualizer(QWidget):
         # Add grid
         self.ax.grid(True, alpha=0.2, color='#666666')
         
-        # Add sequence interval indicator if it's greater than sequence length
-        if sequence_interval > sequence_length:
+        # Add sequence interval indicator if it's greater than sequence length (only for single sequence)
+        if sequence_interval > sequence_length and repetitions == 1:
             # Draw a gap to show the interval
             self.ax.axvspan(sequence_length, sequence_interval, alpha=0.1, color='#666666', 
                            label=f'Interval ({int(sequence_interval - sequence_length)} ns)')
@@ -154,6 +198,9 @@ class PulsePatternVisualizer(QWidget):
         info_text = f'Sequence Length: {int(sequence_length)} ns'
         if sequence_interval > sequence_length:
             info_text += f'\nInterval: {int(sequence_interval)} ns'
+        if repetitions > 1:
+            info_text += f'\nRepetitions: {repetitions}'
+            info_text += f'\nTotal Length: {int(sequence_length + sequence_interval + sequence_length)} ns'
         self.ax.text(0.02, 0.98, info_text, transform=self.ax.transAxes, 
                     fontsize=9, color='#cccccc', verticalalignment='top',
                     bbox=dict(boxstyle='round,pad=0.3', facecolor=self.bg_color, alpha=0.8))

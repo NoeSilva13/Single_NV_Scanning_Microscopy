@@ -1120,7 +1120,8 @@ class ODMRControlCenter(QMainWindow):
                 'laser_delay': int(self.laser_delay.text()),
                 'mw_delay': int(self.mw_delay.text()),
                 'detection_delay': int(self.detection_delay.text()),
-                'sequence_interval': int(self.sequence_interval.text())
+                'sequence_interval': int(self.sequence_interval.text()),
+                'repetitions': int(self.repetitions.text())
             }
             
             # Update the pulse pattern visualization
@@ -1146,6 +1147,7 @@ class ODMRControlCenter(QMainWindow):
         
         # Connect sequence parameters
         self.sequence_interval.textChanged.connect(self.update_pulse_pattern)
+        self.repetitions.textChanged.connect(self.update_pulse_pattern)
     
     def update_rabi_pulse_pattern(self):
         """Update the Rabi pulse pattern visualization based on current parameters"""
@@ -1158,7 +1160,8 @@ class ODMRControlCenter(QMainWindow):
                 'laser_delay': int(self.rabi_laser_delay.text()),
                 'mw_delay': int(self.rabi_mw_delay.text()),
                 'detection_delay': int(self.rabi_detection_delay.text()),
-                'sequence_interval': int(self.rabi_sequence_interval.text())
+                'sequence_interval': int(self.rabi_sequence_interval.text()),
+                'repetitions': int(self.rabi_repetitions.text())
             }
             
             # Update the pulse pattern visualization
@@ -1183,6 +1186,7 @@ class ODMRControlCenter(QMainWindow):
         
         # Connect sequence parameters
         self.rabi_sequence_interval.textChanged.connect(self.update_rabi_pulse_pattern)
+        self.rabi_repetitions.textChanged.connect(self.update_rabi_pulse_pattern)
     
     def start_measurement(self):
         """Start ODMR measurement"""

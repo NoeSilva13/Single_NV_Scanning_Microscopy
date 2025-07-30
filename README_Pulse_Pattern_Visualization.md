@@ -10,6 +10,7 @@ A new pulse pattern visualization feature has been added to the ODMR Control GUI
 - **Live Updates**: The pulse pattern updates automatically when parameters are changed
 - **Visual Clarity**: Clear color-coded representation of different pulse channels
 - **Timeline Markers**: Precise timing indicators showing pulse durations and delays
+- **Multi-Sequence Display**: When repetitions > 1, shows two complete sequences. The second sequence starts at sequence_length + sequence_interval, with total display length of sequence_length + sequence_interval + sequence_length.
 
 ### 📊 Multi-Experiment Support
 - **ODMR Experiments**: Full pulse sequence visualization for ODMR measurements
@@ -56,7 +57,8 @@ Updates the visualization based on provided parameters:
 - `laser_delay`: Delay before laser pulse (ns)
 - `mw_delay`: Delay before microwave pulse (ns)
 - `detection_delay`: Delay before detection window (ns)
-- `sequence_interval`: Time between sequence repetitions (ns)
+- `sequence_interval`: Time between two complete sequences (ns)
+- `repetitions`: Number of sequence repetitions (if > 1, shows two sequences)
 
 #### `connect_parameter_signals()`
 Automatically connects parameter input fields to trigger visualization updates when values change.
@@ -91,7 +93,7 @@ Automatically connects parameter input fields to trigger visualization updates w
 #### Sequence Parameters
 - **Sequence Length**: Calculated as max(laser_delay + laser_duration, mw_delay + mw_duration, detection_delay + detection_duration)
 - **Sequence Interval**: Time between two complete sequences (typically 5000-20000 ns, may be longer than sequence length)
-- **Repetitions**: Number of times to repeat the sequence
+- **Repetitions**: Number of times to repeat the sequence. When > 1, the second sequence starts at sequence_length + sequence_interval, with total display length of sequence_length + sequence_interval + sequence_length
 
 ## Technical Specifications
 
