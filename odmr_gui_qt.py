@@ -404,7 +404,7 @@ class ODMRControlCenter(QMainWindow):
         
     def init_ui(self):
         """Initialize the user interface"""
-        self.setWindowTitle("ODMR Control Center - NV Lab")
+        self.setWindowTitle("ODMR Control - Burke Lab")
         self.setGeometry(100, 100, 2000, 1350)
         
         # Apply dark theme style (napari-inspired)
@@ -1740,9 +1740,9 @@ def main():
     app = QApplication(sys.argv)
     
     # Set application properties
-    app.setApplicationName("ODMR Control Center")
+    app.setApplicationName("ODMR Control")
     app.setApplicationVersion("1.0")
-    app.setOrganizationName("NV Lab")
+    app.setOrganizationName("Burke Lab")
     
     # Create and show main window
     window = ODMRControlCenter()
