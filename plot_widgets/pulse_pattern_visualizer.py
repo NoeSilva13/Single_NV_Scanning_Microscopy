@@ -60,7 +60,13 @@ class PulsePatternVisualizer(QWidget):
             - laser_delay: Delay before laser pulse (ns)
             - mw_delay: Delay before microwave pulse (ns)
             - detection_delay: Delay before detection window (ns)
-            - sequence_interval: Time between sequence repetitions (ns)
+            - sequence_interval: Time between two complete sequences (ns)
+            
+        Notes
+        -----
+        The sequence length is calculated as max(laser_delay + laser_duration, 
+        mw_delay + mw_duration, detection_delay + detection_duration).
+        The sequence_interval represents the time between consecutive sequences.
         """
         # Clear previous plot
         self.ax.clear()
@@ -84,8 +90,11 @@ class PulsePatternVisualizer(QWidget):
         detection_start = laser_start + detection_delay
         detection_end = detection_start + detection_duration
         
-        # Set up the plot
-        self.ax.set_xlim(0, sequence_interval)
+        # Calculate sequence length as max of all pulse end times
+        sequence_length = max(laser_end, mw_end, detection_end)
+        
+        # Set up the plot - show the full sequence length
+        self.ax.set_xlim(0, sequence_length)
         self.ax.set_ylim(0, 4)
         
         # Plot laser pulse
@@ -107,11 +116,11 @@ class PulsePatternVisualizer(QWidget):
                     ha='center', va='center', color='white', fontweight='bold', fontsize=10)
         
         # Add timeline markers
-        time_points = [0, laser_start, laser_end, mw_start, mw_end, detection_start, detection_end, sequence_interval]
+        time_points = [0, laser_start, laser_end, mw_start, mw_end, detection_start, detection_end, sequence_length]
         time_points = sorted(list(set(time_points)))  # Remove duplicates and sort
         
         for t in time_points:
-            if t <= sequence_interval:
+            if t <= sequence_length:
                 self.ax.axvline(x=t, color='#666666', linestyle='--', alpha=0.5, linewidth=0.5)
                 self.ax.text(t, 3.5, f'{int(t)}', ha='center', va='bottom', 
                            color='#cccccc', fontsize=8, rotation=45)
@@ -128,6 +137,26 @@ class PulsePatternVisualizer(QWidget):
         
         # Add grid
         self.ax.grid(True, alpha=0.2, color='#666666')
+        
+        # Add sequence interval indicator if it's greater than sequence length
+        if sequence_interval > sequence_length:
+            # Draw a gap to show the interval
+            self.ax.axvspan(sequence_length, sequence_interval, alpha=0.1, color='#666666', 
+                           label=f'Interval ({int(sequence_interval - sequence_length)} ns)')
+            # Add interval marker
+            self.ax.axvline(x=sequence_interval, color='#ff9800', linestyle='-', alpha=0.8, linewidth=2)
+            self.ax.text(sequence_interval, 3.5, f'Interval\n{int(sequence_interval)}', 
+                        ha='center', va='bottom', color='#ff9800', fontsize=8, fontweight='bold')
+            # Update x-axis to show the full interval
+            self.ax.set_xlim(0, sequence_interval)
+        
+        # Add sequence information text
+        info_text = f'Sequence Length: {int(sequence_length)} ns'
+        if sequence_interval > sequence_length:
+            info_text += f'\nInterval: {int(sequence_interval)} ns'
+        self.ax.text(0.02, 0.98, info_text, transform=self.ax.transAxes, 
+                    fontsize=9, color='#cccccc', verticalalignment='top',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor=self.bg_color, alpha=0.8))
         
         # Add legend
         self.ax.legend(loc='upper right', framealpha=0.8, facecolor=self.bg_color, 

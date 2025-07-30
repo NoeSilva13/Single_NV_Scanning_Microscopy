@@ -89,7 +89,8 @@ Automatically connects parameter input fields to trigger visualization updates w
 - **Detection Delay**: Positioned after MW pulse for readout
 
 #### Sequence Parameters
-- **Sequence Interval**: Total time for one complete sequence (typically 5000-20000 ns)
+- **Sequence Length**: Calculated as max(laser_delay + laser_duration, mw_delay + mw_duration, detection_delay + detection_duration)
+- **Sequence Interval**: Time between two complete sequences (typically 5000-20000 ns, may be longer than sequence length)
 - **Repetitions**: Number of times to repeat the sequence
 
 ## Technical Specifications
