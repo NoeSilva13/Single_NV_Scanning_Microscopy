@@ -99,19 +99,19 @@ class PulsePatternVisualizer(QWidget):
         
         # Plot laser pulse
         self.ax.fill_between([laser_start, laser_end], 0, 1, 
-                           color='#ff6b6b', alpha=0.8, label='Laser (AOM)')
+                           color='#4caf50', alpha=0.8, label='Laser (AOM)')
         self.ax.text((laser_start + laser_end) / 2, 0.5, 'LASER', 
                     ha='center', va='center', color='white', fontweight='bold', fontsize=10)
         
         # Plot microwave pulse
         self.ax.fill_between([mw_start, mw_end], 1, 2, 
-                           color='#9c27b0', alpha=0.8, label='Microwave (MW)')
+                           color='#2196f3', alpha=0.8, label='Microwave (MW)')
         self.ax.text((mw_start + mw_end) / 2, 1.5, 'MW', 
                     ha='center', va='center', color='white', fontweight='bold', fontsize=10)
         
         # Plot detection window
         self.ax.fill_between([detection_start, detection_end], 2, 3, 
-                           color='#45b7d1', alpha=0.8, label='Detection (SPD)')
+                           color='#f44336', alpha=0.8, label='Detection (SPD)')
         self.ax.text((detection_start + detection_end) / 2, 2.5, 'DETECT', 
                     ha='center', va='center', color='white', fontweight='bold', fontsize=10)
         

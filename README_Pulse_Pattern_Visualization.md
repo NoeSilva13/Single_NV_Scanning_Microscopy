@@ -19,9 +19,9 @@ A new pulse pattern visualization feature has been added to the ODMR Control GUI
 ### 🎨 Professional UI Design
 - **Dark Theme**: Consistent with the existing GUI design
 - **Color Coding**: 
-  - 🔴 Laser pulses (AOM) - Red (#ff6b6b)
-  - 🟣 Microwave pulses (MW) - Purple (#9c27b0)
-  - 🔵 Detection windows (SPD) - Blue (#45b7d1)
+  - 🟢 Laser pulses (AOM) - Green (#4caf50)
+  - 🔵 Microwave pulses (MW) - Blue (#2196f3)
+  - 🔴 Detection windows (SPD) - Red (#f44336)
 - **Responsive Layout**: Adapts to different parameter values
 
 ## Implementation Details
