@@ -49,9 +49,8 @@ class ODMRExperiments:
         if self.tagger is None:
             try:
                 self.tagger = TimeTagger.createTimeTagger()
-                if self.tagger is not None:
-                    self.tagger.reset()
-                    print("✅ Connected to real TimeTagger device")
+                self.tagger.reset()
+                print("✅ Connected to real TimeTagger device")
             except Exception as e:
                 print(f"⚠️ Real TimeTagger not detected: {str(e)}")
                 self.tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
