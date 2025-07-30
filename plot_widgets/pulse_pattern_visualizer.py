@@ -160,7 +160,7 @@ class PulsePatternVisualizer(QWidget):
         
         # Add legend
         self.ax.legend(loc='upper right', framealpha=0.8, facecolor=self.bg_color, 
-                      edgecolor='white', fontsize=8)
+                      edgecolor='white', fontsize=8, labelcolor='white')
         
         # Adjust layout
         self.fig.tight_layout()
