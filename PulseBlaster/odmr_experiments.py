@@ -44,6 +44,7 @@ class ODMRExperiments:
             print("✅ Connected to Network TimeTagger device")
         except Exception as e:
             print(f"⚠️ Network TimeTagger not detected: {str(e)}")
+            self.tagger = None
 
         if self.tagger is None:
             try:
