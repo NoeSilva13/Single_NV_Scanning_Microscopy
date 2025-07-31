@@ -577,6 +577,11 @@ class ODMRControlCenter(QMainWindow):
         self.num_points = freq_group.add_parameter("Number of Points:", "51", "Number of frequency points to measure")
         scroll_layout.addWidget(freq_group)
         
+        # MW power parameter
+        power_group = ParameterGroupBox("Microwave Settings")
+        self.mw_power_advanced = power_group.add_parameter("MW Power (dBm):", "-10.0", "Microwave power level")
+        scroll_layout.addWidget(power_group)
+        
         # Timing parameters
         timing_group = ParameterGroupBox("Timing Parameters (ns)")
         self.laser_duration = timing_group.add_parameter("Laser Duration:", "2000", "Duration of laser pulse")
@@ -625,11 +630,6 @@ class ODMRControlCenter(QMainWindow):
         
         pattern_group.setLayout(pattern_layout)
         scroll_layout.addWidget(pattern_group)
-        
-        # MW power parameter
-        power_group = ParameterGroupBox("Microwave Settings")
-        self.mw_power_advanced = power_group.add_parameter("MW Power (dBm):", "-10.0", "Microwave power level")
-        scroll_layout.addWidget(power_group)
         
         # Control buttons
         button_group = QGroupBox("Measurement Control")
