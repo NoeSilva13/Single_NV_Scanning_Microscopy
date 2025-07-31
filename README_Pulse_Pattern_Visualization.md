@@ -69,14 +69,13 @@ Automatically connects parameter input fields to trigger visualization updates w
 1. Navigate to the "🔬 ODMR Control" tab
 2. Locate the "🎯 Pulse Pattern Visualization" section
 3. Adjust timing parameters in the "Timing Parameters" and "Delay Parameters" sections
-4. The pulse pattern will update automatically
-5. Use the "🔄 Update Pulse Pattern" button for manual updates
+4. The pulse pattern will update automatically in real-time
 
 ### Rabi Control Tab
 1. Navigate to the "📈 Rabi Control" tab
 2. Locate the "🎯 Rabi Pulse Pattern" section
 3. Adjust timing parameters for Rabi experiments
-4. The visualization updates in real-time
+4. The visualization updates automatically in real-time
 
 ### Parameter Guidelines
 

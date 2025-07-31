@@ -623,12 +623,6 @@ class ODMRControlCenter(QMainWindow):
         self.pulse_pattern_widget = PulsePatternVisualizer(widget_height=250)
         pattern_layout.addWidget(self.pulse_pattern_widget)
         
-        # Add update button
-        update_pattern_btn = QPushButton("🔄 Update Pulse Pattern")
-        update_pattern_btn.setFixedHeight(35)
-        update_pattern_btn.clicked.connect(self.update_pulse_pattern)
-        pattern_layout.addWidget(update_pattern_btn)
-        
         pattern_group.setLayout(pattern_layout)
         scroll_layout.addWidget(pattern_group)
         
@@ -759,12 +753,6 @@ class ODMRControlCenter(QMainWindow):
         # Add pulse pattern visualizer for Rabi
         self.rabi_pulse_pattern_widget = PulsePatternVisualizer(widget_height=250)
         rabi_pattern_layout.addWidget(self.rabi_pulse_pattern_widget)
-        
-        # Add update button
-        update_rabi_pattern_btn = QPushButton("🔄 Update Rabi Pattern")
-        update_rabi_pattern_btn.setFixedHeight(35)
-        update_rabi_pattern_btn.clicked.connect(self.update_rabi_pulse_pattern)
-        rabi_pattern_layout.addWidget(update_rabi_pattern_btn)
         
         rabi_pattern_group.setLayout(rabi_pattern_layout)
         scroll_layout.addWidget(rabi_pattern_group)
