@@ -601,7 +601,7 @@ class ODMRControlCenter(QMainWindow):
         self.connect_parameter_signals()
         
         # Pulse Pattern Visualization
-        pattern_group = QGroupBox("🎯 Pulse Pattern Visualization")
+        pattern_group = QGroupBox("Pulse Pattern Visualization")
         pattern_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;

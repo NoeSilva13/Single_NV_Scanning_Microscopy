@@ -195,13 +195,10 @@ class PulsePatternVisualizer(QWidget):
             self.ax.set_xlim(0, sequence_interval)
         
         # Add sequence information text
-        info_text = f'Sequence Length: {int(sequence_length)} ns'
-        if sequence_interval > sequence_length:
-            info_text += f'\nInterval: {int(sequence_interval)} ns'
+        info_text = f'Seq. Length: {int(sequence_length)} ns'
         if repetitions > 1:
             info_text += f'\nRepetitions: {repetitions}'
-            info_text += f'\nTotal Length: {int(sequence_length + sequence_interval + sequence_length)} ns'
-        self.ax.text(0.02, 0.98, info_text, transform=self.ax.transAxes, 
+        self.ax.text(0.02, 0.90, info_text, transform=self.ax.transAxes, 
                     fontsize=9, color='#cccccc', verticalalignment='top',
                     bbox=dict(boxstyle='round,pad=0.3', facecolor=self.bg_color, alpha=0.8))
         
