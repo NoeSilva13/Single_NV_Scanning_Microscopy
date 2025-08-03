@@ -1280,7 +1280,7 @@ class ODMRControlCenter(QMainWindow):
         
         # Initialize experiments if needed
         if not self.experiments:
-            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator, self.shared_tagger)
+            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator)
         
         # Set MW power
         if self.mw_generator:
@@ -1521,7 +1521,7 @@ class ODMRControlCenter(QMainWindow):
         
         # Initialize experiments if needed
         if not self.experiments:
-            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator, self.shared_tagger)
+            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator)
         
         # Update UI
         self.start_t1_btn.setEnabled(False)
