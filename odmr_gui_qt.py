@@ -859,11 +859,11 @@ class ODMRControlCenter(QMainWindow):
         self.connect_t1_parameter_signals()
         
         # Pulse Pattern Visualization for T1
-        t1_pattern_group = QGroupBox("🎯 T1 Pulse Pattern")
+        t1_pattern_group = QGroupBox("Pulse Pattern Visualization")
         t1_pattern_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
-                border: 2px solid #ff5722;
+                border: 2px solid #00d4aa;
                 border-radius: 5px;
                 margin-top: 1ex;
                 padding-top: 10px;
@@ -872,7 +872,7 @@ class ODMRControlCenter(QMainWindow):
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
-                color: #ff5722;
+                color: #00d4aa;
             }
         """)
         t1_pattern_layout = QVBoxLayout()

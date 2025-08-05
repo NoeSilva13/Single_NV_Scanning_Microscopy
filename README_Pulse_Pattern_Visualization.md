@@ -20,6 +20,7 @@ A new pulse pattern visualization feature has been added to the ODMR Control GUI
 
 ### 🎨 Professional UI Design
 - **Dark Theme**: Consistent with the existing GUI design
+- **Consistent Styling**: All tabs (ODMR, Rabi, T1) use the same visual styling for pulse pattern sections
 - **Color Coding**: 
   - 🟢 Laser pulses (AOM) - Green (#4caf50)
   - 🟢 Readout Laser (T1) - Light Green (#8bc34a)
@@ -88,13 +89,13 @@ Automatically connects parameter input fields to trigger visualization updates w
 
 ### Rabi Control Tab
 1. Navigate to the "📈 Rabi Control" tab
-2. Locate the "🎯 Rabi Pulse Pattern" section
+2. Locate the "Pulse Pattern Visualization" section
 3. Adjust timing parameters for Rabi experiments
 4. The visualization updates automatically in real-time
 
 ### T1 Decay Control Tab
 1. Navigate to the "⏱️ T1 Decay" tab
-2. Locate the "🎯 T1 Pulse Pattern" section
+2. Locate the "Pulse Pattern Visualization" section
 3. Adjust timing parameters for T1 decay experiments
 4. The visualization shows two channels: Laser (Init + Readout) and Detection
 5. Laser sequence: init laser delay + init laser duration + start delay + readout laser duration + sequence interval
