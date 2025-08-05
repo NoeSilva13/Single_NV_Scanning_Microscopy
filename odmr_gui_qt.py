@@ -39,6 +39,9 @@ from PulseBlaster.swabian_pulse_streamer import SwabianPulseController
 from PulseBlaster.rigol_dsg836 import RigolDSG836Controller
 from PulseBlaster.odmr_experiments import ODMRExperiments
 
+# Import plot widgets
+from plot_widgets import PulsePatternVisualizer
+
 
 class ODMRWorker(QThread):
     """Worker thread for running ODMR measurements"""
@@ -571,33 +574,62 @@ class ODMRControlCenter(QMainWindow):
         freq_group = ParameterGroupBox("Frequency Parameters")
         self.start_freq = freq_group.add_parameter("Start Freq (GHz):", "2.80", "Starting frequency for ODMR sweep")
         self.stop_freq = freq_group.add_parameter("Stop Freq (GHz):", "2.90", "Ending frequency for ODMR sweep")
-        self.num_points = freq_group.add_parameter("Number of Points:", "51", "Number of frequency points to measure")
+        self.num_points = freq_group.add_parameter("Number of Points:", "50", "Number of frequency points to measure")
         scroll_layout.addWidget(freq_group)
-        
-        # Timing parameters
-        timing_group = ParameterGroupBox("Timing Parameters (ns)")
-        self.laser_duration = timing_group.add_parameter("Laser Duration:", "2000", "Duration of laser pulse")
-        self.mw_duration = timing_group.add_parameter("MW Duration:", "2000", "Duration of microwave pulse")
-        self.detection_duration = timing_group.add_parameter("Detection Duration:", "1000", "Duration of detection window")
-        scroll_layout.addWidget(timing_group)
-        
-        # Delay parameters
-        delay_group = ParameterGroupBox("Delay Parameters (ns)")
-        self.laser_delay = delay_group.add_parameter("Laser Delay:", "0", "Delay before laser pulse")
-        self.mw_delay = delay_group.add_parameter("MW Delay:", "0", "Delay before microwave pulse")
-        self.detection_delay = delay_group.add_parameter("Detection Delay:", "0", "Delay before detection window")
-        scroll_layout.addWidget(delay_group)
-        
-        # Sequence parameters
-        seq_group = ParameterGroupBox("Sequence Parameters")
-        self.sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "10000", "Time between sequence repetitions")
-        self.repetitions = seq_group.add_parameter("Repetitions:", "100", "Number of sequence repetitions")
-        scroll_layout.addWidget(seq_group)
         
         # MW power parameter
         power_group = ParameterGroupBox("Microwave Settings")
         self.mw_power_advanced = power_group.add_parameter("MW Power (dBm):", "-10.0", "Microwave power level")
         scroll_layout.addWidget(power_group)
+        
+        # Timing parameters
+        timing_group = ParameterGroupBox("Timing Parameters (ns)")
+        self.laser_duration = timing_group.add_parameter("Laser Duration:", "5000", "Duration of laser pulse")
+        self.mw_duration = timing_group.add_parameter("MW Duration:", "5000", "Duration of microwave pulse")
+        self.detection_duration = timing_group.add_parameter("Detection Duration:", "5000", "Duration of detection window")
+        scroll_layout.addWidget(timing_group)
+        
+        # Delay parameters
+        delay_group = ParameterGroupBox("Delay Parameters (ns)")
+        self.laser_delay = delay_group.add_parameter("Laser Delay:", "0", "Delay before laser pulse")
+        self.mw_delay = delay_group.add_parameter("MW Delay:", "6000", "Delay before microwave pulse")
+        self.detection_delay = delay_group.add_parameter("Detection Delay:", "0", "Delay before detection window")
+        scroll_layout.addWidget(delay_group)
+        
+        # Sequence parameters
+        seq_group = ParameterGroupBox("Sequence Parameters")
+        self.sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "1000", "Time between sequence repetitions")
+        self.repetitions = seq_group.add_parameter("Repetitions:", "5000", "Number of sequence repetitions")
+        scroll_layout.addWidget(seq_group)
+        
+        # Connect parameter changes to pulse pattern updates
+        self.connect_parameter_signals()
+        
+        # Pulse Pattern Visualization
+        pattern_group = QGroupBox("Pulse Pattern Visualization")
+        pattern_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #00d4aa;
+                border-radius: 5px;
+                margin-top: 1ex;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #00d4aa;
+            }
+        """)
+        pattern_layout = QVBoxLayout()
+        
+        # Add pulse pattern visualizer
+        self.pulse_pattern_widget = PulsePatternVisualizer(widget_height=250)
+        pattern_layout.addWidget(self.pulse_pattern_widget)
+        
+        pattern_group.setLayout(pattern_layout)
+        scroll_layout.addWidget(pattern_group)
         
         # Control buttons
         button_group = QGroupBox("Measurement Control")
@@ -653,6 +685,9 @@ class ODMRControlCenter(QMainWindow):
         
         # Add to tab widget
         self.tab_widget.addTab(control_widget, "🔬 ODMR Control")
+        
+        # Initialize pulse pattern visualization with default parameters
+        QTimer.singleShot(100, self.update_pulse_pattern)
     
     def create_rabi_control_tab(self):
         """Create the Rabi Oscillations Control tab"""
@@ -666,9 +701,9 @@ class ODMRControlCenter(QMainWindow):
         
         # MW Duration parameters
         duration_group = ParameterGroupBox("MW Duration Parameters")
-        self.start_duration = duration_group.add_parameter("Start Duration (ns):", "0", "Starting MW pulse duration")
-        self.stop_duration = duration_group.add_parameter("Stop Duration (ns):", "200", "Ending MW pulse duration")
-        self.duration_step = duration_group.add_parameter("Step Size (ns):", "5", "Step size for MW pulse duration")
+        self.start_duration = duration_group.add_parameter("Start Duration (ns):", "100", "Starting MW pulse duration")
+        self.stop_duration = duration_group.add_parameter("Stop Duration (ns):", "5000", "Ending MW pulse duration")
+        self.duration_step = duration_group.add_parameter("Step Size (ns):", "100", "Step size for MW pulse duration")
         scroll_layout.addWidget(duration_group)
         
         # MW Frequency parameters
@@ -679,22 +714,51 @@ class ODMRControlCenter(QMainWindow):
         
         # Timing parameters
         timing_group = ParameterGroupBox("Timing Parameters")
-        self.rabi_laser_duration = timing_group.add_parameter("Laser Duration (ns):", "1000", "Duration of laser pulse")
-        self.rabi_detection_duration = timing_group.add_parameter("Detection Duration (ns):", "500", "Duration of detection window")
+        self.rabi_laser_duration = timing_group.add_parameter("Laser Duration (ns):", "5000", "Duration of laser pulse")
+        self.rabi_detection_duration = timing_group.add_parameter("Detection Duration (ns):", "5000", "Duration of detection window")
         scroll_layout.addWidget(timing_group)
         
         # Delay parameters
         delay_group = ParameterGroupBox("Delay Parameters (ns)")
         self.rabi_laser_delay = delay_group.add_parameter("Laser Delay:", "0", "Delay before laser pulse")
-        self.rabi_mw_delay = delay_group.add_parameter("MW Delay:", "0", "Delay before MW pulse")
+        self.rabi_mw_delay = delay_group.add_parameter("MW Delay:", "6000", "Delay before MW pulse")
         self.rabi_detection_delay = delay_group.add_parameter("Detection Delay:", "0", "Delay before detection window")
         scroll_layout.addWidget(delay_group)
         
         # Sequence parameters
         seq_group = ParameterGroupBox("Sequence Parameters")
-        self.rabi_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "10000", "Time between sequence repetitions")
-        self.rabi_repetitions = seq_group.add_parameter("Repetitions:", "1000", "Number of sequence repetitions")
+        self.rabi_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "1000", "Time between sequence repetitions")
+        self.rabi_repetitions = seq_group.add_parameter("Repetitions:", "5000", "Number of sequence repetitions")
         scroll_layout.addWidget(seq_group)
+        
+        # Pulse Pattern Visualization for Rabi
+        rabi_pattern_group = QGroupBox("Pulse Pattern Visualization")
+        rabi_pattern_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #00d4aa;
+                border-radius: 5px;
+                margin-top: 1ex;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #00d4aa;
+            }
+        """)
+        rabi_pattern_layout = QVBoxLayout()
+        
+        # Add pulse pattern visualizer for Rabi
+        self.rabi_pulse_pattern_widget = PulsePatternVisualizer(widget_height=250)
+        rabi_pattern_layout.addWidget(self.rabi_pulse_pattern_widget)
+        
+        rabi_pattern_group.setLayout(rabi_pattern_layout)
+        scroll_layout.addWidget(rabi_pattern_group)
+        
+        # Connect Rabi parameter changes to pulse pattern updates
+        self.connect_rabi_parameter_signals()
         
         # Control buttons
         button_group = QGroupBox("Measurement Control")
@@ -750,6 +814,9 @@ class ODMRControlCenter(QMainWindow):
         
         # Add to tab widget
         self.tab_widget.addTab(control_widget, "📈 Rabi Control")
+        
+        # Initialize Rabi pulse pattern visualization with default parameters
+        QTimer.singleShot(100, self.update_rabi_pulse_pattern)
     
     def create_t1_control_tab(self):
         """Create the T1 Decay Control tab"""
@@ -763,16 +830,16 @@ class ODMRControlCenter(QMainWindow):
         
         # Delay Time parameters
         delay_group = ParameterGroupBox("Delay Time Parameters")
-        self.start_delay = delay_group.add_parameter("Start Delay (ns):", "0", "Starting delay time between init and readout")
-        self.stop_delay = delay_group.add_parameter("Stop Delay (ns):", "10000", "Ending delay time between init and readout")
+        self.start_delay = delay_group.add_parameter("Start Delay (ns):", "500", "Starting delay time between init and readout")
+        self.stop_delay = delay_group.add_parameter("Stop Delay (ns):", "50000", "Ending delay time between init and readout")
         self.delay_step = delay_group.add_parameter("Step Size (ns):", "100", "Step size for delay time sweep")
         scroll_layout.addWidget(delay_group)
         
         # Laser parameters
         laser_group = ParameterGroupBox("Laser Parameters")
-        self.t1_init_laser_duration = laser_group.add_parameter("Init Laser Duration (ns):", "1000", "Duration of initialization laser pulse")
-        self.t1_readout_laser_duration = laser_group.add_parameter("Readout Laser Duration (ns):", "1000", "Duration of readout laser pulse")
-        self.t1_detection_duration = laser_group.add_parameter("Detection Duration (ns):", "500", "Duration of detection window")
+        self.t1_init_laser_duration = laser_group.add_parameter("Init Laser Duration (ns):", "5000", "Duration of initialization laser pulse")
+        self.t1_readout_laser_duration = laser_group.add_parameter("Readout Laser Duration (ns):", "5000", "Duration of readout laser pulse")
+        self.t1_detection_duration = laser_group.add_parameter("Detection Duration (ns):", "5000", "Duration of detection window")
         scroll_layout.addWidget(laser_group)
         
         # Timing parameters
@@ -784,9 +851,38 @@ class ODMRControlCenter(QMainWindow):
         
         # Sequence parameters
         seq_group = ParameterGroupBox("Sequence Parameters")
-        self.t1_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "50000", "Time between sequence repetitions")
-        self.t1_repetitions = seq_group.add_parameter("Repetitions:", "1000", "Number of sequence repetitions")
+        self.t1_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "1000", "Time between sequence repetitions")
+        self.t1_repetitions = seq_group.add_parameter("Repetitions:", "5000", "Number of sequence repetitions")
         scroll_layout.addWidget(seq_group)
+        
+        # Connect parameter changes to pulse pattern updates
+        self.connect_t1_parameter_signals()
+        
+        # Pulse Pattern Visualization for T1
+        t1_pattern_group = QGroupBox("Pulse Pattern Visualization")
+        t1_pattern_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #00d4aa;
+                border-radius: 5px;
+                margin-top: 1ex;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #00d4aa;
+            }
+        """)
+        t1_pattern_layout = QVBoxLayout()
+        
+        # Add pulse pattern visualizer for T1
+        self.t1_pulse_pattern_widget = PulsePatternVisualizer(widget_height=250)
+        t1_pattern_layout.addWidget(self.t1_pulse_pattern_widget)
+        
+        t1_pattern_group.setLayout(t1_pattern_layout)
+        scroll_layout.addWidget(t1_pattern_group)
         
         # Control buttons
         button_group = QGroupBox("Measurement Control")
@@ -842,6 +938,9 @@ class ODMRControlCenter(QMainWindow):
         
         # Add to tab widget
         self.tab_widget.addTab(control_widget, "⏱️ T1 Decay")
+        
+        # Initialize T1 pulse pattern visualization with default parameters
+        QTimer.singleShot(100, self.update_t1_pulse_pattern)
     
     def create_device_settings_tab(self):
         """Create the Device Settings tab"""
@@ -1029,6 +1128,131 @@ class ODMRControlCenter(QMainWindow):
         except ValueError as e:
             QMessageBox.warning(self, "Parameter Error", f"Invalid parameter value: {e}")
             return None
+    
+    def update_pulse_pattern(self):
+        """Update the pulse pattern visualization based on current parameters"""
+        try:
+            # Get timing parameters from GUI
+            parameters = {
+                'laser_duration': int(self.laser_duration.text()),
+                'mw_duration': int(self.mw_duration.text()),
+                'detection_duration': int(self.detection_duration.text()),
+                'laser_delay': int(self.laser_delay.text()),
+                'mw_delay': int(self.mw_delay.text()),
+                'detection_delay': int(self.detection_delay.text()),
+                'sequence_interval': int(self.sequence_interval.text()),
+                'repetitions': int(self.repetitions.text())
+            }
+            
+            # Update the pulse pattern visualization
+            self.pulse_pattern_widget.update_pulse_pattern(parameters, "ODMR")
+            self.log_message("✅ Pulse pattern updated")
+            
+        except ValueError as e:
+            QMessageBox.warning(self, "Parameter Error", f"Invalid parameter value: {e}")
+        except Exception as e:
+            QMessageBox.warning(self, "Visualization Error", f"Failed to update pulse pattern: {e}")
+    
+    def connect_parameter_signals(self):
+        """Connect parameter input fields to automatic pulse pattern updates"""
+        # Connect timing parameters
+        self.laser_duration.textChanged.connect(self.update_pulse_pattern)
+        self.mw_duration.textChanged.connect(self.update_pulse_pattern)
+        self.detection_duration.textChanged.connect(self.update_pulse_pattern)
+        
+        # Connect delay parameters
+        self.laser_delay.textChanged.connect(self.update_pulse_pattern)
+        self.mw_delay.textChanged.connect(self.update_pulse_pattern)
+        self.detection_delay.textChanged.connect(self.update_pulse_pattern)
+        
+        # Connect sequence parameters
+        self.sequence_interval.textChanged.connect(self.update_pulse_pattern)
+        self.repetitions.textChanged.connect(self.update_pulse_pattern)
+    
+    def update_rabi_pulse_pattern(self):
+        """Update the Rabi pulse pattern visualization based on current parameters"""
+        try:
+            # Get timing parameters from GUI
+            parameters = {
+                'laser_duration': int(self.rabi_laser_duration.text()),
+                'mw_duration': int(self.start_duration.text()),  # Use Start Duration from GUI
+                'detection_duration': int(self.rabi_detection_duration.text()),
+                'laser_delay': int(self.rabi_laser_delay.text()),
+                'mw_delay': int(self.rabi_mw_delay.text()),
+                'detection_delay': int(self.rabi_detection_delay.text()),
+                'sequence_interval': int(self.rabi_sequence_interval.text()),
+                'repetitions': int(self.rabi_repetitions.text())
+            }
+            
+            # Update the pulse pattern visualization
+            self.rabi_pulse_pattern_widget.update_pulse_pattern(parameters, "Rabi")
+            self.log_message("✅ Rabi pulse pattern updated")
+            
+        except ValueError as e:
+            QMessageBox.warning(self, "Parameter Error", f"Invalid parameter value: {e}")
+        except Exception as e:
+            QMessageBox.warning(self, "Visualization Error", f"Failed to update Rabi pulse pattern: {e}")
+    
+    def connect_rabi_parameter_signals(self):
+        """Connect Rabi parameter input fields to automatic pulse pattern updates"""
+        # Connect MW duration parameters
+        self.start_duration.textChanged.connect(self.update_rabi_pulse_pattern)
+        
+        # Connect timing parameters
+        self.rabi_laser_duration.textChanged.connect(self.update_rabi_pulse_pattern)
+        self.rabi_detection_duration.textChanged.connect(self.update_rabi_pulse_pattern)
+        
+        # Connect delay parameters
+        self.rabi_laser_delay.textChanged.connect(self.update_rabi_pulse_pattern)
+        self.rabi_mw_delay.textChanged.connect(self.update_rabi_pulse_pattern)
+        self.rabi_detection_delay.textChanged.connect(self.update_rabi_pulse_pattern)
+        
+        # Connect sequence parameters
+        self.rabi_sequence_interval.textChanged.connect(self.update_rabi_pulse_pattern)
+        self.rabi_repetitions.textChanged.connect(self.update_rabi_pulse_pattern)
+    
+    def update_t1_pulse_pattern(self):
+        """Update the T1 pulse pattern visualization based on current parameters"""
+        try:
+            # Get timing parameters from GUI
+            parameters = {
+                'init_laser_duration': int(self.t1_init_laser_duration.text()),
+                'readout_laser_duration': int(self.t1_readout_laser_duration.text()),
+                'detection_duration': int(self.t1_detection_duration.text()),
+                'init_laser_delay': int(self.t1_init_laser_delay.text()),
+                'readout_laser_delay': int(self.start_delay.text()),  # Use Start Delay from GUI
+                'detection_delay': 0,  # Detection is aligned with readout, so no additional delay
+                'sequence_interval': int(self.t1_sequence_interval.text()),
+                'repetitions': int(self.t1_repetitions.text())
+            }
+            
+            # Update the pulse pattern visualization
+            self.t1_pulse_pattern_widget.update_t1_pulse_pattern(parameters)
+            self.log_message("✅ T1 pulse pattern updated")
+            
+        except ValueError as e:
+            QMessageBox.warning(self, "Parameter Error", f"Invalid parameter value: {e}")
+        except Exception as e:
+            QMessageBox.warning(self, "Visualization Error", f"Failed to update T1 pulse pattern: {e}")
+    
+    def connect_t1_parameter_signals(self):
+        """Connect T1 parameter input fields to automatic pulse pattern updates"""
+        # Connect laser parameters
+        self.t1_init_laser_duration.textChanged.connect(self.update_t1_pulse_pattern)
+        self.t1_readout_laser_duration.textChanged.connect(self.update_t1_pulse_pattern)
+        self.t1_detection_duration.textChanged.connect(self.update_t1_pulse_pattern)
+        
+        # Connect timing parameters
+        self.t1_init_laser_delay.textChanged.connect(self.update_t1_pulse_pattern)
+        self.t1_readout_laser_delay.textChanged.connect(self.update_t1_pulse_pattern)
+        self.t1_detection_delay.textChanged.connect(self.update_t1_pulse_pattern)
+        
+        # Connect delay parameters (Start Delay controls the space between init and readout)
+        self.start_delay.textChanged.connect(self.update_t1_pulse_pattern)
+        
+        # Connect sequence parameters
+        self.t1_sequence_interval.textChanged.connect(self.update_t1_pulse_pattern)
+        self.t1_repetitions.textChanged.connect(self.update_t1_pulse_pattern)
     
     def start_measurement(self):
         """Start ODMR measurement"""
