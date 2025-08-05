@@ -574,7 +574,7 @@ class ODMRControlCenter(QMainWindow):
         freq_group = ParameterGroupBox("Frequency Parameters")
         self.start_freq = freq_group.add_parameter("Start Freq (GHz):", "2.80", "Starting frequency for ODMR sweep")
         self.stop_freq = freq_group.add_parameter("Stop Freq (GHz):", "2.90", "Ending frequency for ODMR sweep")
-        self.num_points = freq_group.add_parameter("Number of Points:", "51", "Number of frequency points to measure")
+        self.num_points = freq_group.add_parameter("Number of Points:", "50", "Number of frequency points to measure")
         scroll_layout.addWidget(freq_group)
         
         # MW power parameter
@@ -584,22 +584,22 @@ class ODMRControlCenter(QMainWindow):
         
         # Timing parameters
         timing_group = ParameterGroupBox("Timing Parameters (ns)")
-        self.laser_duration = timing_group.add_parameter("Laser Duration:", "2000", "Duration of laser pulse")
-        self.mw_duration = timing_group.add_parameter("MW Duration:", "2000", "Duration of microwave pulse")
-        self.detection_duration = timing_group.add_parameter("Detection Duration:", "1000", "Duration of detection window")
+        self.laser_duration = timing_group.add_parameter("Laser Duration:", "5000", "Duration of laser pulse")
+        self.mw_duration = timing_group.add_parameter("MW Duration:", "5000", "Duration of microwave pulse")
+        self.detection_duration = timing_group.add_parameter("Detection Duration:", "5000", "Duration of detection window")
         scroll_layout.addWidget(timing_group)
         
         # Delay parameters
         delay_group = ParameterGroupBox("Delay Parameters (ns)")
         self.laser_delay = delay_group.add_parameter("Laser Delay:", "0", "Delay before laser pulse")
-        self.mw_delay = delay_group.add_parameter("MW Delay:", "0", "Delay before microwave pulse")
+        self.mw_delay = delay_group.add_parameter("MW Delay:", "6000", "Delay before microwave pulse")
         self.detection_delay = delay_group.add_parameter("Detection Delay:", "0", "Delay before detection window")
         scroll_layout.addWidget(delay_group)
         
         # Sequence parameters
         seq_group = ParameterGroupBox("Sequence Parameters")
-        self.sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "10000", "Time between sequence repetitions")
-        self.repetitions = seq_group.add_parameter("Repetitions:", "100", "Number of sequence repetitions")
+        self.sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "1000", "Time between sequence repetitions")
+        self.repetitions = seq_group.add_parameter("Repetitions:", "5000", "Number of sequence repetitions")
         scroll_layout.addWidget(seq_group)
         
         # Connect parameter changes to pulse pattern updates
@@ -701,9 +701,9 @@ class ODMRControlCenter(QMainWindow):
         
         # MW Duration parameters
         duration_group = ParameterGroupBox("MW Duration Parameters")
-        self.start_duration = duration_group.add_parameter("Start Duration (ns):", "0", "Starting MW pulse duration")
-        self.stop_duration = duration_group.add_parameter("Stop Duration (ns):", "200", "Ending MW pulse duration")
-        self.duration_step = duration_group.add_parameter("Step Size (ns):", "5", "Step size for MW pulse duration")
+        self.start_duration = duration_group.add_parameter("Start Duration (ns):", "100", "Starting MW pulse duration")
+        self.stop_duration = duration_group.add_parameter("Stop Duration (ns):", "5000", "Ending MW pulse duration")
+        self.duration_step = duration_group.add_parameter("Step Size (ns):", "100", "Step size for MW pulse duration")
         scroll_layout.addWidget(duration_group)
         
         # MW Frequency parameters
@@ -714,21 +714,21 @@ class ODMRControlCenter(QMainWindow):
         
         # Timing parameters
         timing_group = ParameterGroupBox("Timing Parameters")
-        self.rabi_laser_duration = timing_group.add_parameter("Laser Duration (ns):", "1000", "Duration of laser pulse")
-        self.rabi_detection_duration = timing_group.add_parameter("Detection Duration (ns):", "500", "Duration of detection window")
+        self.rabi_laser_duration = timing_group.add_parameter("Laser Duration (ns):", "5000", "Duration of laser pulse")
+        self.rabi_detection_duration = timing_group.add_parameter("Detection Duration (ns):", "5000", "Duration of detection window")
         scroll_layout.addWidget(timing_group)
         
         # Delay parameters
         delay_group = ParameterGroupBox("Delay Parameters (ns)")
         self.rabi_laser_delay = delay_group.add_parameter("Laser Delay:", "0", "Delay before laser pulse")
-        self.rabi_mw_delay = delay_group.add_parameter("MW Delay:", "0", "Delay before MW pulse")
+        self.rabi_mw_delay = delay_group.add_parameter("MW Delay:", "6000", "Delay before MW pulse")
         self.rabi_detection_delay = delay_group.add_parameter("Detection Delay:", "0", "Delay before detection window")
         scroll_layout.addWidget(delay_group)
         
         # Sequence parameters
         seq_group = ParameterGroupBox("Sequence Parameters")
-        self.rabi_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "10000", "Time between sequence repetitions")
-        self.rabi_repetitions = seq_group.add_parameter("Repetitions:", "1000", "Number of sequence repetitions")
+        self.rabi_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "1000", "Time between sequence repetitions")
+        self.rabi_repetitions = seq_group.add_parameter("Repetitions:", "5000", "Number of sequence repetitions")
         scroll_layout.addWidget(seq_group)
         
         # Pulse Pattern Visualization for Rabi
@@ -830,16 +830,16 @@ class ODMRControlCenter(QMainWindow):
         
         # Delay Time parameters
         delay_group = ParameterGroupBox("Delay Time Parameters")
-        self.start_delay = delay_group.add_parameter("Start Delay (ns):", "0", "Starting delay time between init and readout")
-        self.stop_delay = delay_group.add_parameter("Stop Delay (ns):", "10000", "Ending delay time between init and readout")
+        self.start_delay = delay_group.add_parameter("Start Delay (ns):", "500", "Starting delay time between init and readout")
+        self.stop_delay = delay_group.add_parameter("Stop Delay (ns):", "50000", "Ending delay time between init and readout")
         self.delay_step = delay_group.add_parameter("Step Size (ns):", "100", "Step size for delay time sweep")
         scroll_layout.addWidget(delay_group)
         
         # Laser parameters
         laser_group = ParameterGroupBox("Laser Parameters")
-        self.t1_init_laser_duration = laser_group.add_parameter("Init Laser Duration (ns):", "1000", "Duration of initialization laser pulse")
-        self.t1_readout_laser_duration = laser_group.add_parameter("Readout Laser Duration (ns):", "1000", "Duration of readout laser pulse")
-        self.t1_detection_duration = laser_group.add_parameter("Detection Duration (ns):", "500", "Duration of detection window")
+        self.t1_init_laser_duration = laser_group.add_parameter("Init Laser Duration (ns):", "5000", "Duration of initialization laser pulse")
+        self.t1_readout_laser_duration = laser_group.add_parameter("Readout Laser Duration (ns):", "5000", "Duration of readout laser pulse")
+        self.t1_detection_duration = laser_group.add_parameter("Detection Duration (ns):", "5000", "Duration of detection window")
         scroll_layout.addWidget(laser_group)
         
         # Timing parameters
@@ -851,8 +851,8 @@ class ODMRControlCenter(QMainWindow):
         
         # Sequence parameters
         seq_group = ParameterGroupBox("Sequence Parameters")
-        self.t1_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "50000", "Time between sequence repetitions")
-        self.t1_repetitions = seq_group.add_parameter("Repetitions:", "1000", "Number of sequence repetitions")
+        self.t1_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "1000", "Time between sequence repetitions")
+        self.t1_repetitions = seq_group.add_parameter("Repetitions:", "5000", "Number of sequence repetitions")
         scroll_layout.addWidget(seq_group)
         
         # Connect parameter changes to pulse pattern updates
