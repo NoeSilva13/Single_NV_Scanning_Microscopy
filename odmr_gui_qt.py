@@ -1217,8 +1217,8 @@ class ODMRControlCenter(QMainWindow):
                 'readout_laser_duration': int(self.t1_readout_laser_duration.text()),
                 'detection_duration': int(self.t1_detection_duration.text()),
                 'init_laser_delay': int(self.t1_init_laser_delay.text()),
-                'readout_laser_delay': 1000,  # Use a default for visualization
-                'detection_delay': 1000,  # Use a default for visualization
+                'readout_laser_delay': int(self.start_delay.text()),  # Use Start Delay from GUI
+                'detection_delay': 0,  # Detection is aligned with readout, so no additional delay
                 'sequence_interval': int(self.t1_sequence_interval.text()),
                 'repetitions': int(self.t1_repetitions.text())
             }
@@ -1243,6 +1243,9 @@ class ODMRControlCenter(QMainWindow):
         self.t1_init_laser_delay.textChanged.connect(self.update_t1_pulse_pattern)
         self.t1_readout_laser_delay.textChanged.connect(self.update_t1_pulse_pattern)
         self.t1_detection_delay.textChanged.connect(self.update_t1_pulse_pattern)
+        
+        # Connect delay parameters (Start Delay controls the space between init and readout)
+        self.start_delay.textChanged.connect(self.update_t1_pulse_pattern)
         
         # Connect sequence parameters
         self.t1_sequence_interval.textChanged.connect(self.update_t1_pulse_pattern)
