@@ -73,7 +73,7 @@ Updates the T1 visualization based on provided parameters:
 - `sequence_interval`: Time between two complete sequences (ns)
 - `repetitions`: Number of sequence repetitions (if > 1, shows two sequences)
 
-**Note**: T1 visualization shows only two channels: Laser (combining init and readout) and Detection. The laser sequence follows: init laser delay + init laser duration + delay time (variable) + readout laser duration + sequence interval.
+**Note**: T1 visualization shows only two channels: Laser (combining init and readout) and Detection. The laser sequence follows: init laser delay + init laser duration + readout laser delay + readout laser duration + sequence interval. The readout laser starts at init_laser_delay + init_laser_duration + readout_laser_delay. The detection window starts exactly when the readout laser starts (aligned).
 
 #### `connect_parameter_signals()`
 Automatically connects parameter input fields to trigger visualization updates when values change.
@@ -97,7 +97,7 @@ Automatically connects parameter input fields to trigger visualization updates w
 2. Locate the "🎯 T1 Pulse Pattern" section
 3. Adjust timing parameters for T1 decay experiments
 4. The visualization shows two channels: Laser (Init + Readout) and Detection
-5. Laser sequence: init laser delay + init laser duration + delay time (variable) + readout laser duration + sequence interval
+5. Laser sequence: init laser delay + init laser duration + readout laser delay + readout laser duration + sequence interval
 6. The visualization updates automatically in real-time
 
 ### Parameter Guidelines

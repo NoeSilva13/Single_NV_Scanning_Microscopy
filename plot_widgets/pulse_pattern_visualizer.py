@@ -229,10 +229,12 @@ class PulsePatternVisualizer(QWidget):
             
         Notes
         -----
-        T1 sequence: Init Laser -> Delay -> Readout Laser + Detection
-        Laser sequence: init laser delay + init laser duration + delay time (variable) + readout laser duration + sequence interval
+        T1 sequence: Init Laser -> Readout Laser Delay -> Readout Laser + Detection (aligned)
+        Laser sequence: init laser delay + init laser duration + readout laser delay + readout laser duration + sequence interval
         Only two channels: Laser (combining init and readout) and Detection
-        The sequence length is calculated as max(laser_end, detection_end).
+        The readout laser starts at init_laser_delay + init_laser_duration + readout_laser_delay
+        The detection window starts at the same time as the readout laser (aligned)
+        The sequence length is calculated as max(readout_laser_end, detection_end).
         The sequence_interval represents the time between consecutive sequences.
         When repetitions > 1, the second sequence starts at sequence_length + sequence_interval,
         and the total display length is sequence_length + sequence_interval + sequence_length.
@@ -254,10 +256,12 @@ class PulsePatternVisualizer(QWidget):
         init_laser_start = init_laser_delay
         init_laser_end = init_laser_start + init_laser_duration
         
-        readout_laser_start = init_laser_start + readout_laser_delay
+        # Readout laser starts after init laser delay + init laser duration + readout laser delay
+        readout_laser_start = init_laser_delay + init_laser_duration + readout_laser_delay
         readout_laser_end = readout_laser_start + readout_laser_duration
         
-        detection_start = init_laser_start + detection_delay
+        # Detection starts after readout laser starts (aligned with readout)
+        detection_start = readout_laser_start
         detection_end = detection_start + detection_duration
         
         # Calculate sequence length as max of laser and detection end times
@@ -299,9 +303,11 @@ class PulsePatternVisualizer(QWidget):
             # Second sequence timing - starts after sequence_length + sequence_interval
             init_laser_start_2 = sequence_length + sequence_interval
             init_laser_end_2 = init_laser_start_2 + init_laser_duration
-            readout_laser_start_2 = init_laser_start_2 + readout_laser_delay
+            # Readout laser starts after init laser delay + init laser duration + readout laser delay
+            readout_laser_start_2 = init_laser_start_2 + init_laser_duration + readout_laser_delay
             readout_laser_end_2 = readout_laser_start_2 + readout_laser_duration
-            detection_start_2 = init_laser_start_2 + detection_delay
+            # Detection starts after readout laser starts (aligned with readout)
+            detection_start_2 = readout_laser_start_2
             detection_end_2 = detection_start_2 + detection_duration
             
             # Plot second init laser pulse (slightly transparent)
