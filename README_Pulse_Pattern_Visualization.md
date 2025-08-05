@@ -91,7 +91,8 @@ Automatically connects parameter input fields to trigger visualization updates w
 1. Navigate to the "📈 Rabi Control" tab
 2. Locate the "Pulse Pattern Visualization" section
 3. Adjust timing parameters for Rabi experiments
-4. The visualization updates automatically in real-time
+4. The microwave duration is controlled by the "Start Duration" parameter from the GUI
+5. The visualization updates automatically in real-time
 
 ### T1 Decay Control Tab
 1. Navigate to the "⏱️ T1 Decay" tab
@@ -105,7 +106,7 @@ Automatically connects parameter input fields to trigger visualization updates w
 
 #### Timing Parameters
 - **Laser Duration**: Typically 1000-3000 ns for initialization
-- **MW Duration**: Variable for different experiments (ODMR: 2000 ns, Rabi: variable)
+- **MW Duration**: Variable for different experiments (ODMR: 2000 ns, Rabi: controlled by "Start Duration" parameter)
 - **Detection Duration**: Usually 500-2000 ns for photon counting
 
 #### Delay Parameters

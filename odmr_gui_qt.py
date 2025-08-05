@@ -1175,7 +1175,7 @@ class ODMRControlCenter(QMainWindow):
             # Get timing parameters from GUI
             parameters = {
                 'laser_duration': int(self.rabi_laser_duration.text()),
-                'mw_duration': 100,  # Use a default MW duration for visualization
+                'mw_duration': int(self.start_duration.text()),  # Use Start Duration from GUI
                 'detection_duration': int(self.rabi_detection_duration.text()),
                 'laser_delay': int(self.rabi_laser_delay.text()),
                 'mw_delay': int(self.rabi_mw_delay.text()),
@@ -1195,6 +1195,9 @@ class ODMRControlCenter(QMainWindow):
     
     def connect_rabi_parameter_signals(self):
         """Connect Rabi parameter input fields to automatic pulse pattern updates"""
+        # Connect MW duration parameters
+        self.start_duration.textChanged.connect(self.update_rabi_pulse_pattern)
+        
         # Connect timing parameters
         self.rabi_laser_duration.textChanged.connect(self.update_rabi_pulse_pattern)
         self.rabi_detection_duration.textChanged.connect(self.update_rabi_pulse_pattern)
