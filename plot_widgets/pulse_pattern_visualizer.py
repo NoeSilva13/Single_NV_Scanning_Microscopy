@@ -172,7 +172,7 @@ class PulsePatternVisualizer(QWidget):
         # Style the plot
         self.ax.set_xlabel('Time (ns)', color='white', fontsize=10)
         self.ax.set_ylabel('Channels', color='white', fontsize=10)
-        self.ax.set_title('ODMR Pulse Sequence', color='white', fontsize=12, fontweight='bold')
+        self.ax.set_title('Pulse Sequence', color='white', fontsize=12, fontweight='bold')
         
         # Set y-axis ticks
         self.ax.set_yticks([0.5, 1.5, 2.5])

@@ -732,11 +732,11 @@ class ODMRControlCenter(QMainWindow):
         scroll_layout.addWidget(seq_group)
         
         # Pulse Pattern Visualization for Rabi
-        rabi_pattern_group = QGroupBox("🎯 Rabi Pulse Pattern")
+        rabi_pattern_group = QGroupBox("Pulse Pattern Visualization")
         rabi_pattern_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
-                border: 2px solid #ff9800;
+                border: 2px solid #00d4aa;
                 border-radius: 5px;
                 margin-top: 1ex;
                 padding-top: 10px;
@@ -745,7 +745,7 @@ class ODMRControlCenter(QMainWindow):
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
-                color: #ff9800;
+                color: #00d4aa;
             }
         """)
         rabi_pattern_layout = QVBoxLayout()
