@@ -209,6 +209,174 @@ class PulsePatternVisualizer(QWidget):
         # Adjust layout
         self.fig.tight_layout()
         self.canvas.draw()
+    
+    def update_t1_pulse_pattern(self, parameters):
+        """
+        Update the T1 pulse pattern visualization based on the provided parameters.
+        
+        Parameters
+        ----------
+        parameters : dict
+            Dictionary containing T1 pulse timing parameters:
+            - init_laser_duration: Duration of initialization laser pulse (ns)
+            - readout_laser_duration: Duration of readout laser pulse (ns)
+            - detection_duration: Duration of detection window (ns)
+            - init_laser_delay: Delay before initialization laser pulse (ns)
+            - readout_laser_delay: Delay before readout laser pulse (ns)
+            - detection_delay: Delay before detection window (ns)
+            - sequence_interval: Time between two complete sequences (ns)
+            - repetitions: Number of sequence repetitions (if > 1, shows two sequences)
+            
+        Notes
+        -----
+        T1 sequence: Init Laser -> Delay -> Readout Laser + Detection
+        The sequence length is calculated as max(init_laser_end, readout_laser_end, detection_end).
+        The sequence_interval represents the time between consecutive sequences.
+        When repetitions > 1, the second sequence starts at sequence_length + sequence_interval,
+        and the total display length is sequence_length + sequence_interval + sequence_length.
+        """
+        # Clear previous plot
+        self.ax.clear()
+        
+        # Extract parameters with defaults
+        init_laser_duration = float(parameters.get('init_laser_duration', 1000))
+        readout_laser_duration = float(parameters.get('readout_laser_duration', 1000))
+        detection_duration = float(parameters.get('detection_duration', 500))
+        init_laser_delay = float(parameters.get('init_laser_delay', 0))
+        readout_laser_delay = float(parameters.get('readout_laser_delay', 1000))
+        detection_delay = float(parameters.get('detection_delay', 1000))
+        sequence_interval = float(parameters.get('sequence_interval', 10000))
+        repetitions = int(parameters.get('repetitions', 1))
+        
+        # Calculate timing for T1 sequence
+        init_laser_start = init_laser_delay
+        init_laser_end = init_laser_start + init_laser_duration
+        
+        readout_laser_start = init_laser_start + readout_laser_delay
+        readout_laser_end = readout_laser_start + readout_laser_duration
+        
+        detection_start = init_laser_start + detection_delay
+        detection_end = detection_start + detection_duration
+        
+        # Calculate sequence length as max of all pulse end times
+        sequence_length = max(init_laser_end, readout_laser_end, detection_end)
+        
+        # Determine x-axis range based on repetitions
+        if repetitions > 1:
+            # Show two complete sequences: sequence_length + sequence_interval + sequence_length
+            x_max = sequence_length + sequence_interval + sequence_length
+        else:
+            # Show just one sequence
+            x_max = sequence_length
+        
+        # Set up the plot
+        self.ax.set_xlim(0, x_max)
+        self.ax.set_ylim(0, 4)
+        
+        # Plot initialization laser pulse
+        self.ax.fill_between([init_laser_start, init_laser_end], 0, 1, 
+                           color='#4caf50', alpha=0.8, label='Init Laser')
+        self.ax.text((init_laser_start + init_laser_end) / 2, 0.5, 'INIT', 
+                    ha='center', va='center', color='white', fontweight='bold', fontsize=10)
+        
+        # Plot readout laser pulse
+        self.ax.fill_between([readout_laser_start, readout_laser_end], 1, 2, 
+                           color='#8bc34a', alpha=0.8, label='Readout Laser')
+        self.ax.text((readout_laser_start + readout_laser_end) / 2, 1.5, 'READOUT', 
+                    ha='center', va='center', color='white', fontweight='bold', fontsize=10)
+        
+        # Plot detection window
+        self.ax.fill_between([detection_start, detection_end], 2, 3, 
+                           color='#f44336', alpha=0.8, label='Detection (SPD)')
+        self.ax.text((detection_start + detection_end) / 2, 2.5, 'DETECT', 
+                    ha='center', va='center', color='white', fontweight='bold', fontsize=10)
+        
+        # If repetitions > 1, plot second sequence
+        if repetitions > 1:
+            # Second sequence timing - starts after sequence_length + sequence_interval
+            init_laser_start_2 = sequence_length + sequence_interval
+            init_laser_end_2 = init_laser_start_2 + init_laser_duration
+            readout_laser_start_2 = init_laser_start_2 + readout_laser_delay
+            readout_laser_end_2 = readout_laser_start_2 + readout_laser_duration
+            detection_start_2 = init_laser_start_2 + detection_delay
+            detection_end_2 = detection_start_2 + detection_duration
+            
+            # Plot second init laser pulse (slightly transparent)
+            self.ax.fill_between([init_laser_start_2, init_laser_end_2], 0, 1, 
+                               color='#4caf50', alpha=0.4)
+            self.ax.text((init_laser_start_2 + init_laser_end_2) / 2, 0.5, 'INIT', 
+                        ha='center', va='center', color='white', fontweight='bold', fontsize=8)
+            
+            # Plot second readout laser pulse (slightly transparent)
+            self.ax.fill_between([readout_laser_start_2, readout_laser_end_2], 1, 2, 
+                               color='#8bc34a', alpha=0.4)
+            self.ax.text((readout_laser_start_2 + readout_laser_end_2) / 2, 1.5, 'READOUT', 
+                        ha='center', va='center', color='white', fontweight='bold', fontsize=8)
+            
+            # Plot second detection window (slightly transparent)
+            self.ax.fill_between([detection_start_2, detection_end_2], 2, 3, 
+                               color='#f44336', alpha=0.4)
+            self.ax.text((detection_start_2 + detection_end_2) / 2, 2.5, 'DETECT', 
+                        ha='center', va='center', color='white', fontweight='bold', fontsize=8)
+        
+        # Add timeline markers
+        time_points = [0, init_laser_start, init_laser_end, readout_laser_start, 
+                      readout_laser_end, detection_start, detection_end, sequence_length]
+        if repetitions > 1:
+            time_points.extend([sequence_interval, sequence_length + sequence_interval, 
+                              init_laser_start_2, init_laser_end_2, readout_laser_start_2, 
+                              readout_laser_end_2, detection_start_2, detection_end_2])
+        time_points = sorted(list(set(time_points)))  # Remove duplicates and sort
+        
+        for t in time_points:
+            if t <= x_max:
+                self.ax.axvline(x=t, color='#666666', linestyle='--', alpha=0.5, linewidth=0.5)
+                self.ax.text(t, 3.5, f'{int(t)}', ha='center', va='bottom', 
+                           color='#cccccc', fontsize=8, rotation=45)
+        
+        # Style the plot
+        self.ax.set_xlabel('Time (ns)', color='white', fontsize=10)
+        self.ax.set_ylabel('Channels', color='white', fontsize=10)
+        self.ax.set_title('T1 Decay Pulse Sequence', color='white', fontsize=12, fontweight='bold')
+        
+        # Set y-axis ticks
+        self.ax.set_yticks([0.5, 1.5, 2.5])
+        self.ax.set_yticklabels(['Init Laser', 'Readout Laser', 'Detection'])
+        self.ax.tick_params(colors='white')
+        
+        # Add grid
+        self.ax.grid(True, alpha=0.2, color='#666666')
+        
+        # Add sequence interval indicator if it's greater than sequence length (only for single sequence)
+        if sequence_interval > sequence_length and repetitions == 1:
+            # Draw a gap to show the interval
+            self.ax.axvspan(sequence_length, sequence_interval, alpha=0.1, color='#666666', 
+                           label=f'Interval ({int(sequence_interval - sequence_length)} ns)')
+            # Add interval marker
+            self.ax.axvline(x=sequence_interval, color='#ff9800', linestyle='-', alpha=0.8, linewidth=2)
+            self.ax.text(sequence_interval, 3.5, f'Interval\n{int(sequence_interval)}', 
+                        ha='center', va='bottom', color='#ff9800', fontsize=8, fontweight='bold')
+            # Update x-axis to show the full interval
+            self.ax.set_xlim(0, sequence_interval)
+        
+        # Add sequence information text
+        info_text = f'Seq. Length: {int(sequence_length)} ns'
+        if sequence_interval > sequence_length:
+            info_text += f'\nInterval: {int(sequence_interval)} ns'
+        if repetitions > 1:
+            info_text += f'\nRepetitions: {repetitions}'
+            info_text += f'\nTotal Length: {int(sequence_length + sequence_interval + sequence_length)} ns'
+        self.ax.text(0.02, 0.90, info_text, transform=self.ax.transAxes, 
+                     fontsize=9, color='#cccccc', verticalalignment='top',
+                     bbox=dict(boxstyle='round,pad=0.3', facecolor=self.bg_color, alpha=0.8))
+        
+        # Add legend
+        self.ax.legend(loc='upper right', framealpha=0.8, facecolor=self.bg_color, 
+                      edgecolor='white', fontsize=8, labelcolor='white')
+        
+        # Adjust layout
+        self.fig.tight_layout()
+        self.canvas.draw()
         
     def clear(self):
         """Clear the plot"""

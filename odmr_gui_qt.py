@@ -855,6 +855,35 @@ class ODMRControlCenter(QMainWindow):
         self.t1_repetitions = seq_group.add_parameter("Repetitions:", "1000", "Number of sequence repetitions")
         scroll_layout.addWidget(seq_group)
         
+        # Connect parameter changes to pulse pattern updates
+        self.connect_t1_parameter_signals()
+        
+        # Pulse Pattern Visualization for T1
+        t1_pattern_group = QGroupBox("🎯 T1 Pulse Pattern")
+        t1_pattern_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #ff5722;
+                border-radius: 5px;
+                margin-top: 1ex;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+                color: #ff5722;
+            }
+        """)
+        t1_pattern_layout = QVBoxLayout()
+        
+        # Add pulse pattern visualizer for T1
+        self.t1_pulse_pattern_widget = PulsePatternVisualizer(widget_height=250)
+        t1_pattern_layout.addWidget(self.t1_pulse_pattern_widget)
+        
+        t1_pattern_group.setLayout(t1_pattern_layout)
+        scroll_layout.addWidget(t1_pattern_group)
+        
         # Control buttons
         button_group = QGroupBox("Measurement Control")
         button_layout = QVBoxLayout()
@@ -909,6 +938,9 @@ class ODMRControlCenter(QMainWindow):
         
         # Add to tab widget
         self.tab_widget.addTab(control_widget, "⏱️ T1 Decay")
+        
+        # Initialize T1 pulse pattern visualization with default parameters
+        QTimer.singleShot(100, self.update_t1_pulse_pattern)
     
     def create_device_settings_tab(self):
         """Create the Device Settings tab"""
@@ -1176,6 +1208,46 @@ class ODMRControlCenter(QMainWindow):
         self.rabi_sequence_interval.textChanged.connect(self.update_rabi_pulse_pattern)
         self.rabi_repetitions.textChanged.connect(self.update_rabi_pulse_pattern)
     
+    def update_t1_pulse_pattern(self):
+        """Update the T1 pulse pattern visualization based on current parameters"""
+        try:
+            # Get timing parameters from GUI
+            parameters = {
+                'init_laser_duration': int(self.t1_init_laser_duration.text()),
+                'readout_laser_duration': int(self.t1_readout_laser_duration.text()),
+                'detection_duration': int(self.t1_detection_duration.text()),
+                'init_laser_delay': int(self.t1_init_laser_delay.text()),
+                'readout_laser_delay': 1000,  # Use a default for visualization
+                'detection_delay': 1000,  # Use a default for visualization
+                'sequence_interval': int(self.t1_sequence_interval.text()),
+                'repetitions': int(self.t1_repetitions.text())
+            }
+            
+            # Update the pulse pattern visualization
+            self.t1_pulse_pattern_widget.update_t1_pulse_pattern(parameters)
+            self.log_message("✅ T1 pulse pattern updated")
+            
+        except ValueError as e:
+            QMessageBox.warning(self, "Parameter Error", f"Invalid parameter value: {e}")
+        except Exception as e:
+            QMessageBox.warning(self, "Visualization Error", f"Failed to update T1 pulse pattern: {e}")
+    
+    def connect_t1_parameter_signals(self):
+        """Connect T1 parameter input fields to automatic pulse pattern updates"""
+        # Connect laser parameters
+        self.t1_init_laser_duration.textChanged.connect(self.update_t1_pulse_pattern)
+        self.t1_readout_laser_duration.textChanged.connect(self.update_t1_pulse_pattern)
+        self.t1_detection_duration.textChanged.connect(self.update_t1_pulse_pattern)
+        
+        # Connect timing parameters
+        self.t1_init_laser_delay.textChanged.connect(self.update_t1_pulse_pattern)
+        self.t1_readout_laser_delay.textChanged.connect(self.update_t1_pulse_pattern)
+        self.t1_detection_delay.textChanged.connect(self.update_t1_pulse_pattern)
+        
+        # Connect sequence parameters
+        self.t1_sequence_interval.textChanged.connect(self.update_t1_pulse_pattern)
+        self.t1_repetitions.textChanged.connect(self.update_t1_pulse_pattern)
+    
     def start_measurement(self):
         """Start ODMR measurement"""
         if not self.pulse_controller or not self.pulse_controller.is_connected:
@@ -1426,7 +1498,7 @@ class ODMRControlCenter(QMainWindow):
         
         # Initialize experiments if needed
         if not self.experiments:
-            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator, self.shared_tagger)
+            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator)
         
         # Set MW power
         if self.mw_generator:
@@ -1667,7 +1739,7 @@ class ODMRControlCenter(QMainWindow):
         
         # Initialize experiments if needed
         if not self.experiments:
-            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator, self.shared_tagger)
+            self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator)
         
         # Update UI
         self.start_t1_btn.setEnabled(False)

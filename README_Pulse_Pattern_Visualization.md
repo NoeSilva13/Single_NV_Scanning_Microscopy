@@ -15,12 +15,14 @@ A new pulse pattern visualization feature has been added to the ODMR Control GUI
 ### 📊 Multi-Experiment Support
 - **ODMR Experiments**: Full pulse sequence visualization for ODMR measurements
 - **Rabi Oscillations**: Specialized visualization for Rabi oscillation experiments
-- **Extensible Design**: Easy to add support for other experiment types (T1, etc.)
+- **T1 Decay**: Specialized visualization for T1 decay experiments with init and readout laser pulses
+- **Extensible Design**: Easy to add support for other experiment types
 
 ### 🎨 Professional UI Design
 - **Dark Theme**: Consistent with the existing GUI design
 - **Color Coding**: 
   - 🟢 Laser pulses (AOM) - Green (#4caf50)
+  - 🟢 Readout Laser (T1) - Light Green (#8bc34a)
   - 🔵 Microwave pulses (MW) - Blue (#2196f3)
   - 🔴 Detection windows (SPD) - Red (#f44336)
 - **Responsive Layout**: Adapts to different parameter values
@@ -35,7 +37,7 @@ A new pulse pattern visualization feature has been added to the ODMR Control GUI
 
 #### Modified Files
 - `plot_widgets/__init__.py` - Added import for new widget
-- `odmr_gui_qt.py` - Integrated visualization into ODMR and Rabi tabs
+- `odmr_gui_qt.py` - Integrated visualization into ODMR, Rabi, and T1 tabs
 
 ### Widget Architecture
 
@@ -60,6 +62,17 @@ Updates the visualization based on provided parameters:
 - `sequence_interval`: Time between two complete sequences (ns)
 - `repetitions`: Number of sequence repetitions (if > 1, shows two sequences)
 
+#### `update_t1_pulse_pattern(parameters)`
+Updates the T1 visualization based on provided parameters:
+- `init_laser_duration`: Duration of initialization laser pulse (ns)
+- `readout_laser_duration`: Duration of readout laser pulse (ns)
+- `detection_duration`: Duration of detection window (ns)
+- `init_laser_delay`: Delay before initialization laser pulse (ns)
+- `readout_laser_delay`: Delay before readout laser pulse (ns)
+- `detection_delay`: Delay before detection window (ns)
+- `sequence_interval`: Time between two complete sequences (ns)
+- `repetitions`: Number of sequence repetitions (if > 1, shows two sequences)
+
 #### `connect_parameter_signals()`
 Automatically connects parameter input fields to trigger visualization updates when values change.
 
@@ -76,6 +89,13 @@ Automatically connects parameter input fields to trigger visualization updates w
 2. Locate the "🎯 Rabi Pulse Pattern" section
 3. Adjust timing parameters for Rabi experiments
 4. The visualization updates automatically in real-time
+
+### T1 Decay Control Tab
+1. Navigate to the "⏱️ T1 Decay" tab
+2. Locate the "🎯 T1 Pulse Pattern" section
+3. Adjust timing parameters for T1 decay experiments
+4. The visualization shows init laser, delay, and readout laser with detection
+5. The visualization updates automatically in real-time
 
 ### Parameter Guidelines
 
