@@ -230,7 +230,9 @@ class PulsePatternVisualizer(QWidget):
         Notes
         -----
         T1 sequence: Init Laser -> Delay -> Readout Laser + Detection
-        The sequence length is calculated as max(init_laser_end, readout_laser_end, detection_end).
+        Laser sequence: init laser delay + init laser duration + delay time (variable) + readout laser duration + sequence interval
+        Only two channels: Laser (combining init and readout) and Detection
+        The sequence length is calculated as max(laser_end, detection_end).
         The sequence_interval represents the time between consecutive sequences.
         When repetitions > 1, the second sequence starts at sequence_length + sequence_interval,
         and the total display length is sequence_length + sequence_interval + sequence_length.
@@ -258,8 +260,8 @@ class PulsePatternVisualizer(QWidget):
         detection_start = init_laser_start + detection_delay
         detection_end = detection_start + detection_duration
         
-        # Calculate sequence length as max of all pulse end times
-        sequence_length = max(init_laser_end, readout_laser_end, detection_end)
+        # Calculate sequence length as max of laser and detection end times
+        sequence_length = max(readout_laser_end, detection_end)
         
         # Determine x-axis range based on repetitions
         if repetitions > 1:
@@ -271,24 +273,25 @@ class PulsePatternVisualizer(QWidget):
         
         # Set up the plot
         self.ax.set_xlim(0, x_max)
-        self.ax.set_ylim(0, 4)
+        self.ax.set_ylim(0, 3)  # Only 2 channels now
         
-        # Plot initialization laser pulse
+        # Plot laser sequence (init + readout as one channel)
+        # Init laser pulse
         self.ax.fill_between([init_laser_start, init_laser_end], 0, 1, 
-                           color='#4caf50', alpha=0.8, label='Init Laser')
+                           color='#4caf50', alpha=0.8, label='Laser (Init + Readout)')
         self.ax.text((init_laser_start + init_laser_end) / 2, 0.5, 'INIT', 
                     ha='center', va='center', color='white', fontweight='bold', fontsize=10)
         
-        # Plot readout laser pulse
-        self.ax.fill_between([readout_laser_start, readout_laser_end], 1, 2, 
-                           color='#8bc34a', alpha=0.8, label='Readout Laser')
-        self.ax.text((readout_laser_start + readout_laser_end) / 2, 1.5, 'READOUT', 
+        # Readout laser pulse
+        self.ax.fill_between([readout_laser_start, readout_laser_end], 0, 1, 
+                           color='#8bc34a', alpha=0.8)
+        self.ax.text((readout_laser_start + readout_laser_end) / 2, 0.5, 'READOUT', 
                     ha='center', va='center', color='white', fontweight='bold', fontsize=10)
         
         # Plot detection window
-        self.ax.fill_between([detection_start, detection_end], 2, 3, 
+        self.ax.fill_between([detection_start, detection_end], 1, 2, 
                            color='#f44336', alpha=0.8, label='Detection (SPD)')
-        self.ax.text((detection_start + detection_end) / 2, 2.5, 'DETECT', 
+        self.ax.text((detection_start + detection_end) / 2, 1.5, 'DETECT', 
                     ha='center', va='center', color='white', fontweight='bold', fontsize=10)
         
         # If repetitions > 1, plot second sequence
@@ -308,15 +311,15 @@ class PulsePatternVisualizer(QWidget):
                         ha='center', va='center', color='white', fontweight='bold', fontsize=8)
             
             # Plot second readout laser pulse (slightly transparent)
-            self.ax.fill_between([readout_laser_start_2, readout_laser_end_2], 1, 2, 
+            self.ax.fill_between([readout_laser_start_2, readout_laser_end_2], 0, 1, 
                                color='#8bc34a', alpha=0.4)
-            self.ax.text((readout_laser_start_2 + readout_laser_end_2) / 2, 1.5, 'READOUT', 
+            self.ax.text((readout_laser_start_2 + readout_laser_end_2) / 2, 0.5, 'READOUT', 
                         ha='center', va='center', color='white', fontweight='bold', fontsize=8)
             
             # Plot second detection window (slightly transparent)
-            self.ax.fill_between([detection_start_2, detection_end_2], 2, 3, 
+            self.ax.fill_between([detection_start_2, detection_end_2], 1, 2, 
                                color='#f44336', alpha=0.4)
-            self.ax.text((detection_start_2 + detection_end_2) / 2, 2.5, 'DETECT', 
+            self.ax.text((detection_start_2 + detection_end_2) / 2, 1.5, 'DETECT', 
                         ha='center', va='center', color='white', fontweight='bold', fontsize=8)
         
         # Add timeline markers
@@ -331,7 +334,7 @@ class PulsePatternVisualizer(QWidget):
         for t in time_points:
             if t <= x_max:
                 self.ax.axvline(x=t, color='#666666', linestyle='--', alpha=0.5, linewidth=0.5)
-                self.ax.text(t, 3.5, f'{int(t)}', ha='center', va='bottom', 
+                self.ax.text(t, 2.5, f'{int(t)}', ha='center', va='bottom', 
                            color='#cccccc', fontsize=8, rotation=45)
         
         # Style the plot
@@ -339,9 +342,9 @@ class PulsePatternVisualizer(QWidget):
         self.ax.set_ylabel('Channels', color='white', fontsize=10)
         self.ax.set_title('T1 Decay Pulse Sequence', color='white', fontsize=12, fontweight='bold')
         
-        # Set y-axis ticks
-        self.ax.set_yticks([0.5, 1.5, 2.5])
-        self.ax.set_yticklabels(['Init Laser', 'Readout Laser', 'Detection'])
+        # Set y-axis ticks for 2 channels
+        self.ax.set_yticks([0.5, 1.5])
+        self.ax.set_yticklabels(['Laser (Init + Readout)', 'Detection'])
         self.ax.tick_params(colors='white')
         
         # Add grid
@@ -354,7 +357,7 @@ class PulsePatternVisualizer(QWidget):
                            label=f'Interval ({int(sequence_interval - sequence_length)} ns)')
             # Add interval marker
             self.ax.axvline(x=sequence_interval, color='#ff9800', linestyle='-', alpha=0.8, linewidth=2)
-            self.ax.text(sequence_interval, 3.5, f'Interval\n{int(sequence_interval)}', 
+            self.ax.text(sequence_interval, 2.5, f'Interval\n{int(sequence_interval)}', 
                         ha='center', va='bottom', color='#ff9800', fontsize=8, fontweight='bold')
             # Update x-axis to show the full interval
             self.ax.set_xlim(0, sequence_interval)
