@@ -256,7 +256,7 @@ class LivePlotWidget(QWidget):
         
         # Style the plot with napari-inspired dark theme
         self.ax.set_xlabel('Frequency (GHz)', fontsize=12, color='white')
-        self.ax.set_ylabel('Count Rate (Hz)', fontsize=12, color='white')
+        self.ax.set_ylabel('Count Rate (cps)', fontsize=12, color='white')
         self.ax.set_title('ODMR Spectrum (Live)', fontsize=14, fontweight='bold', color='white')
         self.ax.grid(True, alpha=0.3, color='#555555')
         self.ax.tick_params(colors='white')
@@ -284,7 +284,7 @@ class LivePlotWidget(QWidget):
         # Re-apply dark theme styling after clear
         self.ax.set_facecolor('#262930')
         self.ax.set_xlabel('Frequency (GHz)', fontsize=12, color='white')
-        self.ax.set_ylabel('Count Rate (Hz)', fontsize=12, color='white')
+        self.ax.set_ylabel('Count Rate (cps)', fontsize=12, color='white')
         self.ax.set_title('ODMR Spectrum (Live)', fontsize=14, fontweight='bold', color='white')
         self.ax.grid(True, alpha=0.3, color='#555555')
         self.ax.tick_params(colors='white')
