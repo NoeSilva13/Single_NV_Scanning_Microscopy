@@ -46,7 +46,7 @@ class PulsePatternVisualizer(QWidget):
         # Add the canvas to the layout
         self.layout.addWidget(self.canvas)
         
-    def update_pulse_pattern(self, parameters):
+    def update_pulse_pattern(self, parameters, experiment_type="ODMR"):
         """
         Update the pulse pattern visualization based on the provided parameters.
         
@@ -62,6 +62,8 @@ class PulsePatternVisualizer(QWidget):
             - detection_delay: Delay before detection window (ns)
             - sequence_interval: Time between two complete sequences (ns)
             - repetitions: Number of sequence repetitions (if > 1, shows two sequences)
+        experiment_type : str, optional
+            Type of experiment for title display ("ODMR", "Rabi")
             
         Notes
         -----
@@ -172,7 +174,13 @@ class PulsePatternVisualizer(QWidget):
         # Style the plot
         self.ax.set_xlabel('Time (ns)', color='white', fontsize=10)
         self.ax.set_ylabel('Channels', color='white', fontsize=10)
-        self.ax.set_title('Pulse Sequence', color='white', fontsize=12, fontweight='bold')
+        
+        # Set title based on experiment type
+        if experiment_type == "Rabi":
+            title = "Rabi Pulse Sequence"
+        else:
+            title = "ODMR Pulse Sequence"
+        self.ax.set_title(title, color='white', fontsize=12, fontweight='bold')
         
         # Set y-axis ticks
         self.ax.set_yticks([0.5, 1.5, 2.5])

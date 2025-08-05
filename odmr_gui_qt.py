@@ -1145,7 +1145,7 @@ class ODMRControlCenter(QMainWindow):
             }
             
             # Update the pulse pattern visualization
-            self.pulse_pattern_widget.update_pulse_pattern(parameters)
+            self.pulse_pattern_widget.update_pulse_pattern(parameters, "ODMR")
             self.log_message("✅ Pulse pattern updated")
             
         except ValueError as e:
@@ -1185,7 +1185,7 @@ class ODMRControlCenter(QMainWindow):
             }
             
             # Update the pulse pattern visualization
-            self.rabi_pulse_pattern_widget.update_pulse_pattern(parameters)
+            self.rabi_pulse_pattern_widget.update_pulse_pattern(parameters, "Rabi")
             self.log_message("✅ Rabi pulse pattern updated")
             
         except ValueError as e:
