@@ -39,7 +39,7 @@ def new_scan(scan_pattern_func, scan_points_manager, shapes):
     return _new_scan
 
 
-def close_scanner(output_task):
+def close_scanner(output_task, galvo_position_tracker_widget=None):
     """Factory function to create close_scanner widget with dependencies"""
     
     @magicgui(call_button="🎯 Set to Zero")
@@ -49,6 +49,9 @@ def close_scanner(output_task):
         """
         def run_close():
             output_task.write([0, 0])
+            # Update the galvo position tracker widget if provided
+            if galvo_position_tracker_widget is not None:
+                galvo_position_tracker_widget.update_position(0.0, 0.0)
         
         threading.Thread(target=run_close, daemon=True).start()
         show_info("🎯 Scanner set to zero")

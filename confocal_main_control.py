@@ -407,7 +407,6 @@ def get_data_path():
 
 # Create scan control widgets
 new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes)
-close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
 update_scan_parameters_widget = create_update_scan_parameters(scan_params_manager, scan_points_manager)
 update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, scan_params_manager)
@@ -436,7 +435,8 @@ auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge)
 # Create galvo position tracker widget
 galvo_position_tracker_widget = GalvoPositionTrackerWidget()
 
-
+# Create close scanner widget (after galvo position tracker is created)
+close_scanner_widget = create_close_scanner(output_task, galvo_position_tracker_widget)
 
 # Create single axis scan widget
 single_axis_scan_widget = SingleAxisScanWidget(
