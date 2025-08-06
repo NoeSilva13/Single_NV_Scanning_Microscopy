@@ -6,8 +6,9 @@ the current position of the galvo scanner.
 """
 
 import numpy as np
-from PyQt5.QtWidgets import QWidget, QGridLayout, QLabel
+from PyQt5.QtWidgets import QWidget, QGridLayout, QLabel, QSizePolicy
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont
 from utils import MICRONS_PER_VOLT
 
 
@@ -28,35 +29,63 @@ class GalvoPositionTrackerWidget(QWidget):
         
     def setup_ui(self):
         """Setup the user interface using the same approach as ScanParametersWidget"""
-        # Create the main layout
+        # Create the main layout with minimal spacing
         layout = QGridLayout()
+        layout.setSpacing(2)  # Minimal spacing between elements
+        layout.setContentsMargins(5, 5, 5, 5)  # Minimal margins
+        
+        # Create smaller font for compact display
+        small_font = QFont()
+        small_font.setPointSize(7)  # Even smaller font for compact display
         
         # Headers
-        layout.addWidget(QLabel("Axis"), 0, 0)
-        layout.addWidget(QLabel("Voltage (V)"), 0, 1)
-        layout.addWidget(QLabel("Distance (µm)"), 0, 2)
+        axis_header = QLabel("Axis")
+        axis_header.setFont(small_font)
+        layout.addWidget(axis_header, 0, 0)
+        
+        voltage_header = QLabel("Voltage (V)")
+        voltage_header.setFont(small_font)
+        layout.addWidget(voltage_header, 0, 1)
+        
+        distance_header = QLabel("Distance (µm)")
+        distance_header.setFont(small_font)
+        layout.addWidget(distance_header, 0, 2)
         
         # X position display
-        layout.addWidget(QLabel("X:"), 1, 0)
+        x_label = QLabel("X:")
+        x_label.setFont(small_font)
+        layout.addWidget(x_label, 1, 0)
+        
         self.x_value_label = QLabel("0.000")
         self.x_value_label.setAlignment(Qt.AlignCenter)
+        self.x_value_label.setFont(small_font)
         layout.addWidget(self.x_value_label, 1, 1)
         
         self.x_distance_label = QLabel("0.0")
         self.x_distance_label.setAlignment(Qt.AlignCenter)
+        self.x_distance_label.setFont(small_font)
         layout.addWidget(self.x_distance_label, 1, 2)
         
         # Y position display
-        layout.addWidget(QLabel("Y:"), 2, 0)
+        y_label = QLabel("Y:")
+        y_label.setFont(small_font)
+        layout.addWidget(y_label, 2, 0)
+        
         self.y_value_label = QLabel("0.000")
         self.y_value_label.setAlignment(Qt.AlignCenter)
+        self.y_value_label.setFont(small_font)
         layout.addWidget(self.y_value_label, 2, 1)
         
         self.y_distance_label = QLabel("0.0")
         self.y_distance_label.setAlignment(Qt.AlignCenter)
+        self.y_distance_label.setFont(small_font)
         layout.addWidget(self.y_distance_label, 2, 2)
         
         self.setLayout(layout)
+        
+        # Set size policy to minimize vertical space
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        self.setMaximumHeight(80)  # Limit maximum height
         
     def update_position(self, x_voltage, y_voltage):
         """Update the displayed position values"""
