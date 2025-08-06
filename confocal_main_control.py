@@ -300,8 +300,6 @@ def scan_pattern(x_points, y_points):
     scan_in_progress[0] = True
     stop_scan_requested[0] = False
     
-    # Set scan in progress flag for position tracker
-    galvo_position_tracker_widget.set_scan_in_progress(True)
     
     # Get all scan parameters once at the start
     current_scan_params = scan_params_manager.get_params()
@@ -322,7 +320,6 @@ def scan_pattern(x_points, y_points):
                     scan_in_progress[0] = False
                     # Update position tracker and reset scan flag
                     galvo_position_tracker_widget.update_position(0.0, 0.0)
-                    galvo_position_tracker_widget.set_scan_in_progress(False)
                     return None, None
                     
                 output_task.write([x, y])
@@ -398,7 +395,6 @@ def scan_pattern(x_points, y_points):
         
         # Update position tracker and reset scan flag
         galvo_position_tracker_widget.update_position(0.0, 0.0)
-        galvo_position_tracker_widget.set_scan_in_progress(False)
         
     return x_points, y_points
 
@@ -411,6 +407,7 @@ def get_data_path():
 
 # Create scan control widgets
 new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes)
+close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
 update_scan_parameters_widget = create_update_scan_parameters(scan_params_manager, scan_points_manager)
 update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, scan_params_manager)
@@ -437,14 +434,13 @@ signal_bridge = SignalBridge(viewer)
 auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge)
 
 # Create galvo position tracker widget
-galvo_position_tracker_widget = GalvoPositionTrackerWidget(output_task)
+galvo_position_tracker_widget = GalvoPositionTrackerWidget()
 
-# Create close scanner widget (after position tracker is created)
-close_scanner_widget = create_close_scanner(output_task, galvo_position_tracker_widget)
+
 
 # Create single axis scan widget
 single_axis_scan_widget = SingleAxisScanWidget(
-    scan_params_manager, layer, output_task, counter, binwidth, galvo_position_tracker_widget
+    scan_params_manager, layer, output_task, counter, binwidth
 )
 
 # Set the global reference for position tracking
