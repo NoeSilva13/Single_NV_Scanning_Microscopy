@@ -195,6 +195,9 @@ viewer.window.resize(screen.width(), screen.height())
 layer = viewer.add_image(image, name="live scan", colormap="viridis", contrast_limits=contrast_limits)
 # Add a shapes layer to display the zoom area
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
+# Add an image layer to display the current galvo scanner position as a pixel
+position_indicator_image = np.zeros((y_res, x_res), dtype=np.uint8)
+position_indicator = viewer.add_image(position_indicator_image, name="scanner position", colormap="yellow", blending="additive", opacity=0.8)
 
 # Configure scale bar
 viewer.scale_bar.visible = True
@@ -207,6 +210,8 @@ y_range = [-1.0, 1.0]  # Default range
 scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
 scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
 layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+# Set the same scale for the position indicator layer
+position_indicator.scale = (scale_um_per_px_y, scale_um_per_px_x)
 
 # --------------------- TIMETAGGER SETUP ---------------------
 try:
@@ -260,6 +265,16 @@ def on_mouse_click(layer, event):
         
         # Update the galvo position tracker widget
         galvo_position_tracker_widget.update_position(x_voltage, y_voltage)
+        
+        # Update the visual position indicator
+        # Convert voltage back to pixel coordinates for display
+        display_x = int(np.interp(x_voltage, [x_range[0], x_range[1]], [0, x_res-1]))
+        display_y = int(np.interp(y_voltage, [y_range[0], y_range[1]], [0, y_res-1]))
+        
+        # Clear previous position and set new position pixel
+        position_indicator_image.fill(0)
+        position_indicator_image[display_y, display_x] = 255
+        position_indicator.data = position_indicator_image
         
     except Exception as e:
         show_info(f"Error moving scanner: {str(e)}")
@@ -352,6 +367,8 @@ def scan_pattern(x_points, y_points):
         scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
         scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
         layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+        # Update position indicator scale to match
+        position_indicator.scale = (scale_um_per_px_y, scale_um_per_px_x)
         
         # Create a dictionary with image and scan positions
         scan_data = {
@@ -427,7 +444,8 @@ reset_zoom_widget = create_reset_zoom(
     scan_pattern, scan_history, scan_params_manager, scan_points_manager,
     shapes, lambda **kwargs: scan_params_manager.update_scan_parameters(**kwargs), 
     update_widget_func,
-    zoom_manager
+    zoom_manager,
+    position_indicator
 )
 
 # Create camera control widgets
@@ -441,7 +459,7 @@ auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge)
 galvo_position_tracker_widget = GalvoPositionTrackerWidget()
 
 # Create close scanner widget (after galvo position tracker is created)
-close_scanner_widget = create_close_scanner(output_task, galvo_position_tracker_widget)
+close_scanner_widget = create_close_scanner(output_task, galvo_position_tracker_widget, position_indicator, scan_params_manager, position_indicator_image)
 
 # Create single axis scan widget
 single_axis_scan_widget = SingleAxisScanWidget(
@@ -520,6 +538,11 @@ def on_shape_added(event):
             x_res=current_x_res,
             y_res=current_y_res
         )
+        
+        # Update position indicator scale to match new scan parameters
+        scale_um_per_px_x = calculate_scale(x_zoom[0], x_zoom[-1], current_x_res)
+        scale_um_per_px_y = calculate_scale(y_zoom[0], y_zoom[-1], current_y_res)
+        position_indicator.scale = (scale_um_per_px_y, scale_um_per_px_x)
         
         shapes.data = []
         scan_pattern(x_zoom, y_zoom)
