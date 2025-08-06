@@ -15,7 +15,7 @@ import json
 import numpy as np
 from magicgui import magicgui
 from napari.utils.notifications import show_info
-from utils import MICRONS_PER_VOLT
+from utils import MICRONS_PER_VOLT, calculate_scale
 from PyQt5.QtWidgets import QWidget, QGridLayout, QLabel, QDoubleSpinBox, QSpinBox, QPushButton
 from PyQt5.QtCore import Qt
 
@@ -39,7 +39,7 @@ def new_scan(scan_pattern_func, scan_points_manager, shapes):
     return _new_scan
 
 
-def close_scanner(output_task, galvo_position_tracker_widget=None):
+def close_scanner(output_task, galvo_position_tracker_widget=None, position_indicator=None, scan_params_manager=None, position_indicator_image=None):
     """Factory function to create close_scanner widget with dependencies"""
     
     @magicgui(call_button="🎯 Set to Zero")
@@ -52,6 +52,23 @@ def close_scanner(output_task, galvo_position_tracker_widget=None):
             # Update the galvo position tracker widget if provided
             if galvo_position_tracker_widget is not None:
                 galvo_position_tracker_widget.update_position(0.0, 0.0)
+            
+            # Update the visual position indicator if provided
+            if position_indicator is not None and scan_params_manager is not None and position_indicator_image is not None:
+                params = scan_params_manager.get_params()
+                x_range = params['scan_range']['x']
+                y_range = params['scan_range']['y']
+                x_res = params['resolution']['x']
+                y_res = params['resolution']['y']
+                
+                # Convert zero voltage to pixel coordinates for display
+                display_x = int(np.interp(0.0, [x_range[0], x_range[1]], [0, x_res-1]))
+                display_y = int(np.interp(0.0, [y_range[0], y_range[1]], [0, y_res-1]))
+                
+                # Clear previous position and set new position pixel
+                position_indicator_image = np.zeros((y_res, x_res), dtype=np.uint8)
+                position_indicator_image[display_y, display_x] = 255
+                position_indicator.data = position_indicator_image
         
         threading.Thread(target=run_close, daemon=True).start()
         show_info("🎯 Scanner set to zero")
@@ -79,7 +96,7 @@ def save_image(viewer, data_path_func):
 
 def reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points_manager,
                shapes, update_scan_parameters_func, update_scan_parameters_widget_func,
-               zoom_level_manager):
+               zoom_level_manager, position_indicator=None):
     """Factory function to create reset_zoom widget with dependencies"""
     
     @magicgui(call_button="🔄 Reset Zoom")
@@ -121,6 +138,13 @@ def reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points
                 x_res=len(orig_x_points),
                 y_res=len(orig_y_points)
             )
+            
+            # Update position indicator scale to match reset parameters
+            if position_indicator is not None:
+                scale_um_per_px_x = calculate_scale(orig_x_points[0], orig_x_points[-1], len(orig_x_points))
+                scale_um_per_px_y = calculate_scale(orig_y_points[0], orig_y_points[-1], len(orig_y_points))
+                position_indicator.scale = (scale_um_per_px_y, scale_um_per_px_x)
+            
             scan_pattern_func(orig_x_points, orig_y_points)
             shapes.data = []
             update_scan_parameters_widget_func()
