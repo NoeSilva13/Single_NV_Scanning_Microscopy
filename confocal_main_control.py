@@ -231,6 +231,11 @@ counter = TimeTagger.Counter(tagger, [1], binwidth, n_values)
 # --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
 def on_mouse_click(layer, event):
     """Handle mouse click events to move the galvo scanner to the clicked position."""
+    # Block positioning during active scan
+    if scan_in_progress[0]:
+        show_info("⚠️ Scanner positioning blocked - scan in progress")
+        return
+    
     coords = layer.world_to_data(event.position)
     x_idx, y_idx = int(round(coords[1])), int(round(coords[0]))
     
