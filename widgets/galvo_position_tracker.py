@@ -14,9 +14,8 @@ from PyQt5.QtGui import QFont, QPalette, QColor
 class GalvoPositionTrackerWidget(QWidget):
     """Widget for tracking and displaying the current galvo scanner position"""
     
-    def __init__(self, output_task, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.output_task = output_task
         
         # Track current scanner position internally
         self.current_x_voltage = 0.0
