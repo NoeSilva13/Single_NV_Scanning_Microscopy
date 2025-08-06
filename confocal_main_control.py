@@ -542,9 +542,9 @@ viewer.window.add_dock_widget(reset_zoom_widget, area="bottom")
 viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
+viewer.window.add_dock_widget(galvo_position_tracker_widget, area="bottom", name="Galvo Position")
 
-# Add left panel widgets in the desired order
-galvo_position_dock = viewer.window.add_dock_widget(galvo_position_tracker_widget, area="left", name="Galvo Position")
+# Add left panel widgets
 update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
 
 # Add right panel widgets

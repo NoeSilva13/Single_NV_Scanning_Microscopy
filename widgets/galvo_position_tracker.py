@@ -31,8 +31,8 @@ class GalvoPositionTrackerWidget(QWidget):
         """Setup the user interface using the same approach as ScanParametersWidget"""
         # Create the main layout with minimal spacing
         layout = QGridLayout()
-        layout.setSpacing(2)  # Minimal spacing between elements
-        layout.setContentsMargins(5, 5, 5, 5)  # Minimal margins
+        layout.setSpacing(1)  # Very minimal spacing between elements
+        layout.setContentsMargins(3, 3, 3, 3)  # Very minimal margins
         
         # Create smaller font for compact display
         small_font = QFont()
@@ -83,9 +83,10 @@ class GalvoPositionTrackerWidget(QWidget):
         
         self.setLayout(layout)
         
-        # Set size policy to minimize vertical space
-        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        # Set size policy to minimize both vertical and horizontal space
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.setMaximumHeight(80)  # Limit maximum height
+        self.setMaximumWidth(200)  # Limit maximum width for bottom section
         
     def update_position(self, x_voltage, y_voltage):
         """Update the displayed position values"""
