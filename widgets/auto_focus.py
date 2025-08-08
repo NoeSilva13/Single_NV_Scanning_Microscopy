@@ -11,7 +11,6 @@ Contains:
 import threading
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal
-from PyQt5.QtWidgets import QProgressBar, QVBoxLayout, QWidget, QLabel
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 from piezo_controller import PiezoController
@@ -34,8 +33,6 @@ class SignalBridge(QObject):
         self.hide_progress_signal.connect(self._hide_progress)
         self.focus_plot_widget = None
         self.focus_dock_widget = None
-        self.progress_widget = None
-        self.progress_dock_widget = None
     
     def _update_focus_plot(self, positions, counts, name):
         """Update the focus plot widget from the main thread"""
@@ -60,53 +57,21 @@ class SignalBridge(QObject):
     
     def _update_progress(self, value, text):
         """Update the progress bar from the main thread"""
-        if self.progress_widget:
-            self.progress_widget.progress_bar.setValue(value)
-            self.progress_widget.status_label.setText(text)
+        if self.focus_plot_widget and hasattr(self.focus_plot_widget, 'update_progress'):
+            self.focus_plot_widget.update_progress(value, text)
     
     def _show_progress(self):
-        """Show the progress bar widget from the main thread"""
-        if self.progress_widget is None:
-            self.progress_widget = create_progress_widget()
-            self.progress_dock_widget = self.viewer.window.add_dock_widget(
-                self.progress_widget,
-                area='bottom',
-                name='Auto-Focus Progress'
-            )
-        self.progress_widget.progress_bar.setValue(0)
-        self.progress_widget.status_label.setText('Initializing...')
+        """Show the progress bar from the main thread"""
+        if self.focus_plot_widget and hasattr(self.focus_plot_widget, 'show_progress'):
+            self.focus_plot_widget.show_progress()
     
     def _hide_progress(self):
-        """Hide the progress bar widget from the main thread"""
-        if self.progress_dock_widget:
-            self.progress_dock_widget.close()
-            self.progress_widget = None
-            self.progress_dock_widget = None
+        """Hide the progress bar from the main thread"""
+        if self.focus_plot_widget and hasattr(self.focus_plot_widget, 'hide_progress'):
+            self.focus_plot_widget.hide_progress()
 
 
-def create_progress_widget():
-    """Create a progress bar widget for auto-focus"""
-    widget = QWidget()
-    layout = QVBoxLayout()
-    
-    # Status label
-    status_label = QLabel('Initializing...')
-    status_label.setStyleSheet("QLabel { font-weight: bold; }")
-    layout.addWidget(status_label)
-    
-    # Progress bar
-    progress_bar = QProgressBar()
-    progress_bar.setMinimum(0)
-    progress_bar.setMaximum(100)
-    progress_bar.setValue(0)
-    progress_bar.setFormat('%p%')
-    layout.addWidget(progress_bar)
-    
-    widget.setLayout(layout)
-    widget.status_label = status_label
-    widget.progress_bar = progress_bar
-    
-    return widget
+
 
 
 def auto_focus(counter, binwidth, signal_bridge):
@@ -174,9 +139,9 @@ def create_focus_plot_widget(positions, counts):
     Returns
     -------
     SingleAxisPlot
-        A widget containing the focus plot
+        A widget containing the focus plot with integrated progress bar
     """
-    plot_widget = SingleAxisPlot()
+    plot_widget = SingleAxisPlot(show_progress_bar=True)
     plot_widget.plot_data(
         x_data=positions,
         y_data=counts,

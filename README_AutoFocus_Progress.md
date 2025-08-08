@@ -2,15 +2,17 @@
 
 ## Overview
 
-The auto-focus functionality now includes a real-time progress bar that shows the current status of the auto-focus process. This provides better user feedback during the potentially lengthy auto-focus operation.
+The auto-focus functionality now includes a real-time progress bar that is **integrated directly into the focus plot widget**. This provides better user feedback during the potentially lengthy auto-focus operation without cluttering the interface with additional dock widgets.
 
 ## Features
 
-### Progress Bar Widget
+### Integrated Progress Bar
+- **Embedded design**: Progress bar appears within the focus plot widget itself
 - **Real-time updates**: Shows current progress percentage and status
 - **Stage information**: Displays whether the system is performing coarse scan, fine scan, or completion
 - **Position and counts**: Shows current Z position and photon counts during scanning
-- **Automatic cleanup**: Progress bar automatically disappears when auto-focus completes
+- **Automatic show/hide**: Progress bar appears when auto-focus starts and disappears when complete
+- **Compact layout**: Status label and progress bar are stacked below the plot
 
 ### Progress Tracking
 - **Coarse scan**: First 50% of progress bar shows coarse Z-axis scanning
@@ -20,12 +22,12 @@ The auto-focus functionality now includes a real-time progress bar that shows th
 ## Implementation Details
 
 ### Signal Bridge Extensions
-The `SignalBridge` class in `widgets/auto_focus.py` has been extended with new signals:
+The `SignalBridge` class in `widgets/auto_focus.py` has been extended with new signals that communicate with the integrated progress bar:
 
 ```python
 update_progress_signal = pyqtSignal(int, str)  # (progress_percent, status_text)
-show_progress_signal = pyqtSignal()            # Show progress bar
-hide_progress_signal = pyqtSignal()            # Hide progress bar
+show_progress_signal = pyqtSignal()            # Show progress elements
+hide_progress_signal = pyqtSignal()            # Hide progress elements
 ```
 
 ### Progress Callback
@@ -52,13 +54,23 @@ All progress updates are thread-safe using PyQt5 signals, ensuring the GUI updat
 
 ### For Users
 1. Click the "🔍 Auto Focus" button in the Napari interface
-2. A progress bar will appear at the bottom of the window
+2. The progress bar and status label will appear directly below the focus plot
 3. Watch real-time updates showing:
    - Current scan stage (Coarse/Fine)
    - Z position being measured
    - Photon counts at each position
    - Overall progress percentage
-4. Progress bar automatically disappears when auto-focus completes
+4. Progress elements automatically disappear when auto-focus completes
+
+### Widget Layout
+```
+┌─────────────────────┐
+│   Focus Plot        │  ← Matplotlib plot (always visible)
+├─────────────────────┤
+│ Status: Coarse Scan │  ← Status label (hidden when idle)
+│ [████████░░░░] 80%  │  ← Progress bar (hidden when idle)
+└─────────────────────┘
+```
 
 ### For Developers
 To add progress tracking to other operations:
@@ -84,11 +96,12 @@ signal_bridge.update_progress_signal.emit(progress_percent, status_text)
 
 ## Configuration
 
-The progress bar appearance can be customized by modifying the `create_progress_widget()` function in `widgets/auto_focus.py`:
+The progress bar appearance can be customized by modifying the `_create_progress_bar()` method in the `SingleAxisPlot` class:
 
 - **Progress bar style**: Modify the `QProgressBar` properties
-- **Status label style**: Adjust the `QLabel` styling
-- **Layout**: Change the `QVBoxLayout` arrangement
+- **Status label style**: Adjust the `QLabel` styling and CSS
+- **Layout**: Change the `QVBoxLayout` arrangement and spacing
+- **Widget height**: Adjust the overall widget height in the constructor
 
 ## Error Handling
 
@@ -99,13 +112,19 @@ The progress bar automatically hides if:
 
 This ensures the interface remains clean even when errors occur.
 
-## Testing
+## Advantages of Integrated Design
 
-A test script `test_auto_focus_progress.py` is provided to verify the progress bar functionality without requiring the full microscope setup.
+1. **Cleaner Interface**: No additional dock widgets cluttering the Napari window
+2. **Better UX**: Progress information appears exactly where the user expects it
+3. **Compact Layout**: All auto-focus related elements are grouped together
+4. **Responsive Design**: Progress elements appear/disappear smoothly within the widget
+5. **Consistent Styling**: Progress bar matches the overall plot widget design
 
-Run the test with:
-```bash
-python test_auto_focus_progress.py
-```
+## Migration from Previous Version
 
-This will open a simple window with a test button that simulates the auto-focus process and shows the progress bar in action. 
+The new implementation is backward compatible with the existing API:
+- The `auto_focus()` factory function still returns a widget
+- The `SignalBridge` class maintains the same interface
+- The `PiezoController` changes are optional (progress callback is not required)
+
+The main difference is that the progress bar is now integrated into the `SingleAxisPlot` widget instead of being a separate dock widget. 
