@@ -457,9 +457,9 @@ def on_shape_added(event):
     # Ensure zoom region stays within image bounds
     height, width = layer.data.shape
     min_x = max(0, min_x)
-    max_x = min(width, max_x)
+    max_x = min(width - 1, max_x)  # Ensure we don't exceed array bounds
     min_y = max(0, min_y)
-    max_y = min(height, max_y)
+    max_y = min(height - 1, max_y)  # Ensure we don't exceed array bounds
 
     # Save current state for zoom history
     current_x_points, current_y_points = scan_points_manager.get_points()
@@ -469,8 +469,10 @@ def on_shape_added(event):
     current_params = scan_params_manager.get_params()
     current_x_res = current_params['resolution']['x']
     current_y_res = current_params['resolution']['y']
-    x_zoom = np.linspace(current_x_points[min_x], current_x_points[max_x - 1], current_x_res)
-    y_zoom = np.linspace(current_y_points[min_y], current_y_points[max_y - 1], current_y_res)
+    # Create new scan points covering the full selected region
+    # min_x/max_x are pixel indices, we convert them to voltage values
+    x_zoom = np.linspace(current_x_points[min_x], current_x_points[max_x], current_x_res)
+    y_zoom = np.linspace(current_y_points[min_y], current_y_points[max_y], current_y_res)
 
     def run_zoom():
         global zoom_in_progress
