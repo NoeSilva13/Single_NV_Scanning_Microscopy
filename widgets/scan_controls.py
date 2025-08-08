@@ -144,7 +144,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             # Headers
             layout.addWidget(QLabel("Parameter"), 0, 0)
             layout.addWidget(QLabel("Voltage (V)"), 0, 1)
-            layout.addWidget(QLabel("Distance (µm)"), 0, 2)
+            layout.addWidget(QLabel("Dist (µm)"), 0, 2)
             
             # Set default values directly in the widget
             default_x_min = -1.0
@@ -164,7 +164,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             self.x_min_spinbox.setValue(default_x_min)
             layout.addWidget(self.x_min_spinbox, 1, 1)
             
-            self.x_min_label = QLabel(f"{default_x_min * MICRONS_PER_VOLT:.1f}")
+            self.x_min_label = QLabel(f"{default_x_min * MICRONS_PER_VOLT:.2f}")
             self.x_min_label.setAlignment(Qt.AlignCenter)
             layout.addWidget(self.x_min_label, 1, 2)
             
@@ -177,7 +177,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             self.x_max_spinbox.setValue(default_x_max)
             layout.addWidget(self.x_max_spinbox, 2, 1)
             
-            self.x_max_label = QLabel(f"{default_x_max * MICRONS_PER_VOLT:.1f}")
+            self.x_max_label = QLabel(f"{default_x_max * MICRONS_PER_VOLT:.2f}")
             self.x_max_label.setAlignment(Qt.AlignCenter)
             layout.addWidget(self.x_max_label, 2, 2)
             
@@ -190,7 +190,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             self.y_min_spinbox.setValue(default_y_min)
             layout.addWidget(self.y_min_spinbox, 3, 1)
             
-            self.y_min_label = QLabel(f"{default_y_min * MICRONS_PER_VOLT:.1f}")
+            self.y_min_label = QLabel(f"{default_y_min * MICRONS_PER_VOLT:.2f}")
             self.y_min_label.setAlignment(Qt.AlignCenter)
             layout.addWidget(self.y_min_label, 3, 2)
             
@@ -203,7 +203,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             self.y_max_spinbox.setValue(default_y_max)
             layout.addWidget(self.y_max_spinbox, 4, 1)
             
-            self.y_max_label = QLabel(f"{default_y_max * MICRONS_PER_VOLT:.1f}")
+            self.y_max_label = QLabel(f"{default_y_max * MICRONS_PER_VOLT:.2f}")
             self.y_max_label.setAlignment(Qt.AlignCenter)
             layout.addWidget(self.y_max_label, 4, 2)
             
@@ -265,16 +265,16 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
                 return None
             
         def update_x_min_distance(self, value):
-            self.x_min_label.setText(f"{value * MICRONS_PER_VOLT:.1f}")
+            self.x_min_label.setText(f"{value * MICRONS_PER_VOLT:.2f}")
             
         def update_x_max_distance(self, value):
-            self.x_max_label.setText(f"{value * MICRONS_PER_VOLT:.1f}")
+            self.x_max_label.setText(f"{value * MICRONS_PER_VOLT:.2f}")
             
         def update_y_min_distance(self, value):
-            self.y_min_label.setText(f"{value * MICRONS_PER_VOLT:.1f}")
+            self.y_min_label.setText(f"{value * MICRONS_PER_VOLT:.2f}")
             
         def update_y_max_distance(self, value):
-            self.y_max_label.setText(f"{value * MICRONS_PER_VOLT:.1f}")
+            self.y_max_label.setText(f"{value * MICRONS_PER_VOLT:.2f}")
             
         def apply_changes(self):
             # Update scan parameters manager (this will call back to get_parameters)
