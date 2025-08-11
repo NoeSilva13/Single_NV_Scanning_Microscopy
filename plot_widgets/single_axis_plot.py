@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QProgressBar, QLabel
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 import numpy as np
@@ -16,23 +16,27 @@ class SingleAxisPlot(QWidget):
         bg_color='#262930',
         plot_color='#00ff00',
         peak_color='red',
+        show_progress_bar=False,
         parent=None
     ):
         super().__init__(parent)
         self.bg_color = bg_color
         self.plot_color = plot_color
         self.peak_color = peak_color
+        self.show_progress_bar = show_progress_bar
         
         # Setup widget
         self.setFixedHeight(widget_height)
         self._setup_layout()
         self._create_figure(figsize)
+        if show_progress_bar:
+            self._create_progress_bar()
         
     def _setup_layout(self):
         """Initialize the widget layout"""
-        self.layout = QGridLayout()
+        self.layout = QVBoxLayout()
         self.layout.setContentsMargins(0, 0, 0, 0)
-        self.layout.setSpacing(0)
+        self.layout.setSpacing(5)
         self.setLayout(self.layout)
         
     def _create_figure(self, figsize):
@@ -49,6 +53,43 @@ class SingleAxisPlot(QWidget):
             
         # Add the canvas to the layout
         self.layout.addWidget(self.canvas)
+    
+    def _create_progress_bar(self):
+        """Create and setup the progress bar"""
+        # Status label
+        self.status_label = QLabel('Ready')
+        self.status_label.setStyleSheet("QLabel { font-weight: bold; color: white; }")
+        self.status_label.setVisible(False)
+        self.layout.addWidget(self.status_label)
+        
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimum(0)
+        self.progress_bar.setMaximum(100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setFormat('%p%')
+        self.progress_bar.setVisible(False)
+        self.layout.addWidget(self.progress_bar)
+    
+    def show_progress(self):
+        """Show the progress bar and status label"""
+        if hasattr(self, 'progress_bar'):
+            self.progress_bar.setVisible(True)
+            self.status_label.setVisible(True)
+            self.progress_bar.setValue(0)
+            self.status_label.setText('Initializing...')
+    
+    def hide_progress(self):
+        """Hide the progress bar and status label"""
+        if hasattr(self, 'progress_bar'):
+            self.progress_bar.setVisible(False)
+            self.status_label.setVisible(False)
+    
+    def update_progress(self, value, text):
+        """Update the progress bar and status text"""
+        if hasattr(self, 'progress_bar'):
+            self.progress_bar.setValue(value)
+            self.status_label.setText(text)
         
     def plot_data(
         self,

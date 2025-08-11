@@ -113,7 +113,8 @@ class PiezoController:
                          settling_time: float = 0.1,
                          fine_tune: bool = True,
                          fine_step_size: float = PIEZO_FINE_STEP,
-                         fine_range: float = PIEZO_FINE_RANGE
+                         fine_range: float = PIEZO_FINE_RANGE,
+                         progress_callback: Optional[Callable[[int, int, str, float, int], None]] = None
                          ) -> Tuple[List[float], List[int], float]:
         """Perform auto-focus by scanning the Z axis and measuring counts.
         
@@ -124,6 +125,8 @@ class PiezoController:
             fine_tune: Whether to perform fine-tuning after coarse scan
             fine_step_size: Step size for fine-tuning scan in µm (default: PIEZO_FINE_STEP)
             fine_range: Range around peak to scan during fine-tuning in µm (default: PIEZO_FINE_RANGE)
+            progress_callback: Optional callback function for progress updates
+                             Signature: callback(current_step, total_steps, stage, position, counts)
             
         Returns:
             Tuple containing:
@@ -146,12 +149,29 @@ class PiezoController:
             positions.append(current_pos)
             current_pos += step_size
 
+        # Calculate total steps for progress tracking
+        total_coarse_steps = len(positions)
+        total_fine_steps = 0
+        if fine_tune:
+            # Estimate fine steps
+            fine_start = max(0.0, 0.0 - fine_range/2)  # Rough estimate
+            fine_end = min(max_pos, 0.0 + fine_range/2)
+            total_fine_steps = int((fine_end - fine_start) / fine_step_size) + 1
+        
+        total_steps = total_coarse_steps + total_fine_steps
+        current_step = 0
+
         # Perform coarse Z sweep
-        for pos in positions:
+        for i, pos in enumerate(positions):
             self.set_position(pos)  # set_position handles conversion to System.Decimal
             time.sleep(settling_time)
             count = counter_function()
             counts.append(count)
+            current_step += 1
+            
+            if progress_callback:
+                progress_callback(current_step, total_steps, "Coarse Scan", pos, count)
+            
             print(f'Coarse scan - Position: {pos:.1f} µm, counts: {count}')
 
         # Find optimal position from coarse scan
@@ -175,12 +195,21 @@ class PiezoController:
                 fine_positions.append(current_fine_pos)
                 current_fine_pos += fine_step_size
             
+            # Update total steps with actual fine steps
+            total_fine_steps = len(fine_positions)
+            total_steps = total_coarse_steps + total_fine_steps
+            
             # Perform fine Z sweep
-            for pos in fine_positions:
+            for i, pos in enumerate(fine_positions):
                 self.set_position(pos)
                 time.sleep(settling_time)
                 count = counter_function()
                 fine_counts.append(count)
+                current_step = total_coarse_steps + i + 1
+                
+                if progress_callback:
+                    progress_callback(current_step, total_steps, "Fine Scan", pos, count)
+                
                 print(f'Fine scan - Position: {pos:.2f} µm, counts: {count}')
             
             # Find optimal position from fine scan
@@ -200,6 +229,10 @@ class PiezoController:
         # Move to final optimal position
         self.set_position(optimal_pos)
         time.sleep(settling_time)
+        
+        if progress_callback:
+            progress_callback(total_steps, total_steps, "Complete", optimal_pos, max(all_counts))
+        
         print(f"Auto-focus complete. Final position: {optimal_pos:.2f} µm")
 
         return all_positions, all_counts, optimal_pos
