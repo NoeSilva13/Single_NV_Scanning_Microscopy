@@ -210,7 +210,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             # X Resolution
             layout.addWidget(QLabel("X Resolution:"), 5, 0)
             self.x_res_spinbox = QSpinBox()
-            self.x_res_spinbox.setRange(2, 200)
+            self.x_res_spinbox.setRange(2, 1000)
             self.x_res_spinbox.setValue(default_x_res)
             self.x_res_spinbox.setSuffix(" px")
             layout.addWidget(self.x_res_spinbox, 5, 1, 1, 2)  # Span 2 columns
@@ -218,7 +218,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             # Y Resolution
             layout.addWidget(QLabel("Y Resolution:"), 6, 0)
             self.y_res_spinbox = QSpinBox()
-            self.y_res_spinbox.setRange(2, 200)
+            self.y_res_spinbox.setRange(2, 1000)
             self.y_res_spinbox.setValue(default_y_res)
             self.y_res_spinbox.setSuffix(" px")
             layout.addWidget(self.y_res_spinbox, 6, 1, 1, 2)  # Span 2 columns
