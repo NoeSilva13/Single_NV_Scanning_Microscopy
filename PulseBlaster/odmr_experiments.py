@@ -82,7 +82,7 @@ class ODMRExperiments:
             self.tagger.reset()
             print("✅ TimeTagger resources cleaned up")
     
-    def continuous_wave_odmr(self, 
+    def odmr(self, 
                            mw_frequencies: List[float],
                            laser_duration: int = 2000,
                            mw_duration: int = 2000,
@@ -93,7 +93,7 @@ class ODMRExperiments:
                            sequence_interval: int = 10000,
                            repetitions: int = 100) -> Dict:
         """
-        Perform continuous wave ODMR measurement.
+        Perform ODMR measurement.
         
         Args:
             mw_frequencies: List of microwave frequencies to sweep (Hz)
@@ -104,11 +104,11 @@ class ODMRExperiments:
         Returns:
             Dictionary containing frequencies and corresponding count rates
         """
-        print("🔬 Starting Continuous Wave ODMR measurement...")
+        print("🔬 Starting ODMR measurement...")
         
         frequencies = []
         count_rates = []
-        # Create CW ODMR sequence
+        # Create ODMR sequence
         sequence, total_duration = self.pulse_controller.create_odmr_sequence(
             laser_duration=laser_duration,
             mw_duration=mw_duration,  # MW on during detection
@@ -143,13 +143,13 @@ class ODMRExperiments:
         # Turn off RF output after measurement
         if self.mw_generator:
                     self.mw_generator.set_rf_output(False)
-        self.results['cw_odmr'] = {
+        self.results['odmr'] = {
             'frequencies': frequencies,
             'count_rates': count_rates
         }
         
-        print("✅ CW ODMR measurement completed")
-        return self.results['cw_odmr']
+        print("✅ ODMR measurement completed")
+        return self.results['odmr']
     
     def rabi_oscillation(self,
                         mw_durations: List[int],
@@ -753,10 +753,10 @@ class ODMRExperiments:
         
         plt.figure(figsize=(10, 6))
         
-        if experiment_type == 'cw_odmr' or experiment_type == 'automated_odmr':
-            if experiment_type == 'cw_odmr':
+        if experiment_type == 'odmr' or experiment_type == 'automated_odmr':
+            if experiment_type == 'odmr':
                 freqs = np.array(data['frequencies'])/1e6  # Convert Hz to MHz
-                title = 'Continuous Wave ODMR'
+                title = 'ODMR'
             else:
                 freqs = np.array(data['frequencies']) * 1000  # Convert GHz to MHz
                 title = 'Automated ODMR Sweep (RIGOL)'
@@ -822,11 +822,11 @@ def run_example_experiments():
     experiments = ODMRExperiments(controller, rigol)
     
     try:
-        # 1. CW ODMR
+        # 1. ODMR
         print("\n" + "="*50)
         frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        cw_result = experiments.continuous_wave_odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=1000, laser_delay=0, mw_delay=6000, detection_delay=2000, sequence_interval=10000, repetitions=2)
-        experiments.plot_results('cw_odmr')
+        odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=1000, laser_delay=0, mw_delay=6000, detection_delay=2000, sequence_interval=10000, repetitions=2)
+        experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
         #print("\n" + "="*50)

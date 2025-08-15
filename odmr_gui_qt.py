@@ -84,7 +84,7 @@ class ODMRWorker(QThread):
                 single_params = self.parameters.copy()
                 single_params['mw_frequencies'] = [freq]
                 
-                result = self.experiments.continuous_wave_odmr(**single_params)
+                result = self.experiments.odmr(**single_params)
                 
                 if result and 'count_rates' in result and len(result['count_rates']) > 0:
                     all_frequencies.append(freq)

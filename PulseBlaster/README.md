@@ -81,10 +81,10 @@ experiments = ODMRExperiments(pulse_controller, rigol)
 
 # Run ODMR sweep
 frequencies = [2.85e9, 2.87e9, 2.89e9]  # MHz
-results = experiments.continuous_wave_odmr(frequencies)
+results = experiments.odmr(frequencies)
 
 # Plot results
-experiments.plot_results('cw_odmr')
+experiments.plot_results('odmr')
 
 # Clean up
 rigol.set_rf_output(False)

@@ -166,8 +166,8 @@ def run_odmr_with_rigol():
         print(f"📡 Frequency sweep: {start_freq/1e9:.2f} - {stop_freq/1e9:.2f} GHz")
         print(f"📊 Number of points: {num_points}")
         
-        # Run CW ODMR experiment
-        results = experiments.continuous_wave_odmr(
+        # Run ODMR experiment
+        results = experiments.odmr(
             mw_frequencies=list(frequencies),
             laser_duration=2000,
             detection_duration=1000,
@@ -181,7 +181,7 @@ def run_odmr_with_rigol():
             print(f"Count rate range: {min(results['count_rates']):.0f} - {max(results['count_rates']):.0f} Hz")
             
             # Plot results
-            experiments.plot_results('cw_odmr')
+            experiments.plot_results('odmr')
             
             print("✅ ODMR experiment completed successfully")
         else:
