@@ -79,6 +79,80 @@ class ODMRExperiments:
         #return counts
         return 0
     
+    def cw_odmr(self, 
+                  mw_frequencies: List[float],
+                  acquisition_time: float = 1.0,  # Time per point in seconds
+                  mw_power: float = -10.0) -> Dict:  # Power in dBm
+        """
+        Perform Continuous Wave ODMR measurement.
+        
+        In CW-ODMR, both laser and microwave are kept on continuously while sweeping frequencies.
+        For each frequency point, counts are accumulated for the specified acquisition time.
+        No pulse sequence is used - just continuous signals.
+        
+        Args:
+            mw_frequencies: List of microwave frequencies to sweep (Hz)
+            acquisition_time: How long to count at each frequency point (seconds)
+            mw_power: Microwave power (dBm)
+            
+        Returns:
+            Dictionary containing frequencies and corresponding count rates
+        """
+        print("🔬 Starting CW-ODMR measurement...")
+        
+        frequencies = []
+        count_rates = []
+        
+        # Initialize TimeTagger counter
+        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
+        
+        # Turn on laser (AOM)
+        self.pulse_controller.pulse_streamer.constant([1, 0, 0])  # AOM on, MW off, SPD off
+        time.sleep(0.1)  # Let laser stabilize
+        
+        # Set initial MW power
+        if self.mw_generator:
+            self.mw_generator.set_power(mw_power)
+            self.mw_generator.set_rf_output(True)
+        
+        try:
+            for freq in mw_frequencies:
+                print(f"📡 Measuring at {freq/1e6:.2f} MHz")
+                
+                # Set MW frequency
+                if self.mw_generator:
+                    self.mw_generator.set_odmr_frequency(freq / 1e9)  # Convert Hz to GHz
+                    
+                # Clear counter and wait for acquisition
+                self.counter.clear()
+                time.sleep(acquisition_time)
+                
+                # Get count rate
+                count_rate = np.mean(self.counter.getData())
+                print(f"Count rate: {count_rate} Hz")
+                
+                frequencies.append(freq)
+                count_rates.append(count_rate)
+                
+        finally:
+            # Clean up: turn off MW and laser
+            if self.mw_generator:
+                self.mw_generator.set_rf_output(False)
+            self.pulse_controller.pulse_streamer.constant([0, 0, 0])  # All off
+        
+        # Store and return results
+        self.results['cw_odmr'] = {
+            'frequencies': frequencies,
+            'count_rates': count_rates,
+            'parameters': {
+                'acquisition_time': acquisition_time,
+                'mw_power': mw_power
+            }
+        }
+        
+        print("✅ CW-ODMR measurement completed")
+        return self.results['cw_odmr']
+
     def cleanup(self):
         """
         Clean up TimeTagger resources.
