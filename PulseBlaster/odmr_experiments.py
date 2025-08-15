@@ -18,10 +18,12 @@ from typing import List, Tuple, Dict, Optional
 try:
     from .swabian_pulse_streamer import SwabianPulseController
     from .rigol_dsg836 import RigolDSG836Controller
+    from pulsestreamer import OutputState
 except ImportError:
     # Fall back to direct imports (when run as script)
     from swabian_pulse_streamer import SwabianPulseController
     from rigol_dsg836 import RigolDSG836Controller
+    from pulsestreamer import OutputState
 
 # TimeTagger imports for real data acquisition
 import TimeTagger
@@ -107,9 +109,10 @@ class ODMRExperiments:
         self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
         
         # Turn on laser (AOM)
-        self.pulse_controller.pulse_streamer.constant([1, 0, 0])  # AOM on, MW off, SPD off
+        self.pulse_controller.pulse_streamer.constant(OutputState([0, 1], 0, 0))
         time.sleep(0.1)  # Let laser stabilize
-        
+        print("Laser on")
+
         # Set initial MW power
         if self.mw_generator:
             self.mw_generator.set_power(mw_power)
@@ -138,7 +141,7 @@ class ODMRExperiments:
             # Clean up: turn off MW and laser
             if self.mw_generator:
                 self.mw_generator.set_rf_output(False)
-            self.pulse_controller.pulse_streamer.constant([0, 0, 0])  # All off
+            self.pulse_controller.pulse_streamer.constant(OutputState.ZERO())  # All off
         
         # Store and return results
         self.results['cw_odmr'] = {
