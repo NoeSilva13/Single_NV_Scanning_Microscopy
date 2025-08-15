@@ -93,13 +93,23 @@ class ODMRExperiments:
                            sequence_interval: int = 10000,
                            repetitions: int = 100) -> Dict:
         """
-        Perform ODMR measurement.
+        Perform ODMR (Optically Detected Magnetic Resonance) measurement.
+        
+        This function performs ODMR measurements by sweeping through microwave
+        frequencies and measuring the fluorescence count rate at each frequency.
+        The measurement sequence consists of laser excitation, microwave irradiation,
+        and fluorescence detection phases.
         
         Args:
             mw_frequencies: List of microwave frequencies to sweep (Hz)
-            laser_duration: Duration of laser pulse in ns
-            detection_duration: Duration of detection window in ns
-            measurements_per_point: Number of measurements per frequency point
+            laser_duration: Duration of laser excitation pulse in ns
+            mw_duration: Duration of microwave pulse in ns
+            detection_duration: Duration of fluorescence detection window in ns
+            laser_delay: Delay before laser pulse in ns
+            mw_delay: Delay before microwave pulse in ns (relative to laser)
+            detection_delay: Delay before detection window in ns
+            sequence_interval: Interval between measurement sequences in ns
+            repetitions: Number of sequence repetitions per frequency point
             
         Returns:
             Dictionary containing frequencies and corresponding count rates
