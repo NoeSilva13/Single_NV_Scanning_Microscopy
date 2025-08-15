@@ -14,8 +14,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 from typing import List, Tuple, Dict, Optional
-from .swabian_pulse_streamer import SwabianPulseController
-from .rigol_dsg836 import RigolDSG836Controller
+# Try relative imports first (when used as package)
+try:
+    from .swabian_pulse_streamer import SwabianPulseController
+    from .rigol_dsg836 import RigolDSG836Controller
+except ImportError:
+    # Fall back to direct imports (when run as script)
+    from swabian_pulse_streamer import SwabianPulseController
+    from rigol_dsg836 import RigolDSG836Controller
 
 # TimeTagger imports for real data acquisition
 import TimeTagger
