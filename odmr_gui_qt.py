@@ -39,6 +39,9 @@ from PulseBlaster.swabian_pulse_streamer import SwabianPulseController
 from PulseBlaster.rigol_dsg836 import RigolDSG836Controller
 from PulseBlaster.odmr_experiments import ODMRExperiments
 
+# Import data manager for automatic saving
+from odmr_data_manager import ODMRDataManager
+
 # Import plot widgets
 from plot_widgets import PulsePatternVisualizer
 
@@ -51,12 +54,14 @@ class ODMRWorker(QThread):
     data_updated = pyqtSignal(list, list)  # frequencies, count_rates
     measurement_finished = pyqtSignal()
     error_occurred = pyqtSignal(str)
+    data_saved = pyqtSignal(str)  # Signal for when data is saved
     
     def __init__(self, experiments, parameters):
         super().__init__()
         self.experiments = experiments
         self.parameters = parameters
         self.is_running = True
+        self.data_manager = ODMRDataManager()
     
     def stop(self):
         """Stop the measurement"""
@@ -96,6 +101,20 @@ class ODMRWorker(QThread):
             if self.is_running:
                 self.progress_updated.emit(100)
                 self.status_updated.emit("ODMR measurement completed!")
+                
+                # Automatically save the data
+                try:
+                    # Prepare parameters for saving (remove the frequencies list to avoid redundancy)
+                    save_params = self.parameters.copy()
+                    if 'mw_frequencies' in save_params:
+                        del save_params['mw_frequencies']
+                    
+                    # Save the data
+                    filename = self.data_manager.save_odmr_data(all_frequencies, all_count_rates, save_params)
+                    self.data_saved.emit(filename)
+                    self.status_updated.emit(f"💾 Data automatically saved to {filename}")
+                except Exception as save_error:
+                    self.status_updated.emit(f"⚠️ Warning: Could not save data automatically: {save_error}")
             
         except Exception as e:
             self.error_occurred.emit(str(e))
@@ -111,12 +130,14 @@ class RabiWorker(QThread):
     data_updated = pyqtSignal(list, list)  # durations, count_rates
     measurement_finished = pyqtSignal()
     error_occurred = pyqtSignal(str)
+    data_saved = pyqtSignal(str)  # Signal for when data is saved
     
     def __init__(self, experiments, parameters):
         super().__init__()
         self.experiments = experiments
         self.parameters = parameters
         self.is_running = True
+        self.data_manager = ODMRDataManager()
     
     def stop(self):
         """Stop the measurement"""
@@ -163,6 +184,20 @@ class RabiWorker(QThread):
             if self.is_running:
                 self.progress_updated.emit(100)
                 self.status_updated.emit("Rabi oscillation measurement completed!")
+                
+                # Automatically save the data
+                try:
+                    # Prepare parameters for saving (remove the durations list to avoid redundancy)
+                    save_params = self.parameters.copy()
+                    if 'mw_durations' in save_params:
+                        del save_params['mw_durations']
+                    
+                    # Save the data
+                    filename = self.data_manager.save_rabi_data(all_durations, all_count_rates, save_params)
+                    self.data_saved.emit(filename)
+                    self.status_updated.emit(f"💾 Data automatically saved to {filename}")
+                except Exception as save_error:
+                    self.status_updated.emit(f"⚠️ Warning: Could not save data automatically: {save_error}")
             
         except Exception as e:
             self.error_occurred.emit(str(e))
@@ -178,12 +213,14 @@ class T1Worker(QThread):
     data_updated = pyqtSignal(list, list)  # delays, count_rates
     measurement_finished = pyqtSignal()
     error_occurred = pyqtSignal(str)
+    data_saved = pyqtSignal(str)  # Signal for when data is saved
     
     def __init__(self, experiments, parameters):
         super().__init__()
         self.experiments = experiments
         self.parameters = parameters
         self.is_running = True
+        self.data_manager = ODMRDataManager()
     
     def stop(self):
         """Stop the measurement"""
@@ -230,6 +267,20 @@ class T1Worker(QThread):
             if self.is_running:
                 self.progress_updated.emit(100)
                 self.status_updated.emit("T1 decay measurement completed!")
+                
+                # Automatically save the data
+                try:
+                    # Prepare parameters for saving (remove the delays list to avoid redundancy)
+                    save_params = self.parameters.copy()
+                    if 'delay_times' in save_params:
+                        del save_params['delay_times']
+                    
+                    # Save the data
+                    filename = self.data_manager.save_t1_data(all_delays, all_count_rates, save_params)
+                    self.data_saved.emit(filename)
+                    self.status_updated.emit(f"💾 Data automatically saved to {filename}")
+                except Exception as save_error:
+                    self.status_updated.emit(f"⚠️ Warning: Could not save data automatically: {save_error}")
             
         except Exception as e:
             self.error_occurred.emit(str(e))
@@ -1290,6 +1341,7 @@ class ODMRControlCenter(QMainWindow):
         self.worker.data_updated.connect(self.update_plot)
         self.worker.measurement_finished.connect(self.measurement_finished)
         self.worker.error_occurred.connect(self.handle_error)
+        self.worker.data_saved.connect(self.on_data_saved)  # Connect data saved signal
         self.worker.start()
         
         self.log_message("🚀 ODMR measurement started")
@@ -1323,6 +1375,15 @@ class ODMRControlCenter(QMainWindow):
         """Handle measurement errors"""
         QMessageBox.critical(self, "Measurement Error", f"Error during measurement:\n{error_message}")
         self.measurement_finished()
+    
+    def on_data_saved(self, filename):
+        """Handle automatic data saving completion"""
+        # Log the successful save
+        self.log_message(f"💾 Data automatically saved to: {filename}")
+        
+        # Optionally show a brief success message
+        # You can uncomment the following line if you want a popup notification
+        # QMessageBox.information(self, "Data Saved", f"Data automatically saved to:\n{filename}")
     
     def save_parameters(self):
         """Save current parameters to JSON file"""
@@ -1528,6 +1589,7 @@ class ODMRControlCenter(QMainWindow):
         self.worker.data_updated.connect(self.update_rabi_plot)
         self.worker.measurement_finished.connect(self.rabi_measurement_finished)
         self.worker.error_occurred.connect(self.handle_error)
+        self.worker.data_saved.connect(self.on_data_saved)  # Connect data saved signal
         self.worker.start()
         
         self.log_message("🚀 Rabi oscillation measurement started")
@@ -1761,6 +1823,7 @@ class ODMRControlCenter(QMainWindow):
         self.worker.data_updated.connect(self.update_t1_plot)
         self.worker.measurement_finished.connect(self.t1_measurement_finished)
         self.worker.error_occurred.connect(self.handle_error)
+        self.worker.data_saved.connect(self.on_data_saved)  # Connect data saved signal
         self.worker.start()
         
         self.log_message("🚀 T1 decay measurement started")
