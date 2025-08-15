@@ -843,7 +843,7 @@ class ODMRExperiments:
         
         plt.figure(figsize=(10, 6))
         
-        if experiment_type == 'odmr' or experiment_type == 'automated_odmr':
+        if experiment_type == 'odmr' or experiment_type == 'automated_odmr' or experiment_type == 'cw_odmr':
             if experiment_type == 'odmr':
                 freqs = np.array(data['frequencies'])/1e6  # Convert Hz to MHz
                 title = 'ODMR'
@@ -912,11 +912,21 @@ def run_example_experiments():
     experiments = ODMRExperiments(controller, rigol)
     
     try:
-        # 1. ODMR
+        #1. Continuous Wave ODMR
         print("\n" + "="*50)
-        frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=1000, laser_delay=0, mw_delay=6000, detection_delay=2000, sequence_interval=10000, repetitions=2)
-        experiments.plot_results('odmr')
+        frequencies = np.linspace(2.7e9, 3e9, 50)  # 2.85-2.89 GHz
+        cw_odmr_result = experiments.cw_odmr(
+            mw_frequencies=frequencies,
+            acquisition_time=1,  # 1 seconds per point
+            mw_power=-10.0  # -10 dBm
+        )
+        experiments.plot_results('cw_odmr')
+        
+        #2. ODMR
+        #print("\n" + "="*50)
+        #frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
+        #odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=1000, laser_delay=0, mw_delay=6000, detection_delay=2000, sequence_interval=10000, repetitions=2)
+        #experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
         #print("\n" + "="*50)
