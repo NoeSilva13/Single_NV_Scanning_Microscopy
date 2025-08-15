@@ -110,7 +110,7 @@ class ODMRWorker(QThread):
                         del save_params['mw_frequencies']
                     
                     # Save the data
-                    filename = self.data_manager.save_odmr_data(all_frequencies, all_count_rates, save_params)
+                    filename = self.data_manager.save_experiment_data('odmr', all_frequencies, all_count_rates, save_params)
                     self.data_saved.emit(filename)
                     self.status_updated.emit(f"💾 Data automatically saved to {filename}")
                 except Exception as save_error:
@@ -193,7 +193,7 @@ class RabiWorker(QThread):
                         del save_params['mw_durations']
                     
                     # Save the data
-                    filename = self.data_manager.save_rabi_data(all_durations, all_count_rates, save_params)
+                    filename = self.data_manager.save_experiment_data('rabi', all_durations, all_count_rates, save_params)
                     self.data_saved.emit(filename)
                     self.status_updated.emit(f"💾 Data automatically saved to {filename}")
                 except Exception as save_error:
@@ -276,7 +276,7 @@ class T1Worker(QThread):
                         del save_params['delay_times']
                     
                     # Save the data
-                    filename = self.data_manager.save_t1_data(all_delays, all_count_rates, save_params)
+                    filename = self.data_manager.save_experiment_data('t1', all_delays, all_count_rates, save_params)
                     self.data_saved.emit(filename)
                     self.status_updated.emit(f"💾 Data automatically saved to {filename}")
                 except Exception as save_error:
