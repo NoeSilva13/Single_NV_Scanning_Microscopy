@@ -109,7 +109,7 @@ class ODMRExperiments:
         self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
         
         # Turn on laser (AOM)
-        self.pulse_controller.pulse_streamer.constant(OutputState([0, 1], 0, 0))
+        self.pulse_controller.pulse_streamer.constant(OutputState([0, 1, 2], 0, 0))
         time.sleep(0.1)  # Let laser stabilize
         print("Laser on")
 
