@@ -35,7 +35,7 @@ class RigolDSG836Controller:
     over Ethernet using SCPI commands for ODMR experiments.
     """
     
-    def __init__(self, ip_address: str = "192.168.0.222", timeout: float = 10.0):
+    def __init__(self, ip_address: str = "192.168.0.224", timeout: float = 10.0):
         """
         Initialize the RIGOL DSG836 controller.
         

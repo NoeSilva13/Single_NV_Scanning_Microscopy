@@ -901,7 +901,7 @@ def run_example_experiments():
     
     # Initialize RIGOL signal generator
     try:
-        rigol = RigolDSG836Controller("192.168.0.222")
+        rigol = RigolDSG836Controller("192.168.0.224")
         if rigol.connect():
             print("✅ RIGOL DSG836 connected successfully")
         else:
@@ -917,10 +917,10 @@ def run_example_experiments():
     try:
         #1. Continuous Wave ODMR
         print("\n" + "="*50)
-        frequencies = np.linspace(2.7e9, 3e9, 50)  # 2.85-2.89 GHz
+        frequencies = np.linspace(2.7e9, 3e9, 100)  # 2.85-2.89 GHz
         cw_odmr_result = experiments.cw_odmr(
             mw_frequencies=frequencies,
-            acquisition_time=1,  # 1 seconds per point
+            acquisition_time=3,  # 1 seconds per point
             mw_power=-10.0  # -10 dBm
         )
         experiments.plot_results('cw_odmr')
