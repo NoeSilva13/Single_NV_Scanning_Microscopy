@@ -48,6 +48,19 @@ class SingleAxisPlot(QWidget):
         # Style the plot for dark theme
         self.ax.set_facecolor(self.bg_color)
         self.ax.tick_params(colors='white')
+        
+        # Ensure tick labels are white (fixes scientific notation display)
+        self.ax.tick_params(axis='both', which='major', colors='white')
+        self.ax.tick_params(axis='both', which='minor', colors='white')
+        
+        # Style axis labels to be white
+        self.ax.xaxis.label.set_color('white')
+        self.ax.yaxis.label.set_color('white')
+        
+        # Style tick labels to be white
+        self.ax.xaxis.set_tick_params(labelcolor='white')
+        self.ax.yaxis.set_tick_params(labelcolor='white')
+        
         for spine in self.ax.spines.values():
             spine.set_color('white')
             
