@@ -923,6 +923,18 @@ def run_example_experiments():
             acquisition_time=3,  # 1 seconds per point
             mw_power=-10.0  # -10 dBm
         )
+        
+        # Save data using odmr_data_manager
+        from odmr_data_manager import ODMRDataManager
+        data_manager = ODMRDataManager()
+        saved_file = data_manager.save_experiment_data(
+            experiment_type='odmr',
+            x_data=cw_odmr_result['frequencies'],
+            count_rates=cw_odmr_result['count_rates'],
+            parameters=cw_odmr_result['parameters']
+        )
+        print(f"✅ Data saved to: {saved_file}")
+        
         experiments.plot_results('cw_odmr')
         
         #2. ODMR
