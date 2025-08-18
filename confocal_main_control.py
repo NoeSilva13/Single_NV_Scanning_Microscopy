@@ -258,7 +258,17 @@ def on_mouse_click(layer, event):
 layer.mouse_drag_callbacks.append(on_mouse_click)
 
 # --------------------- MPL WIDGET (SIGNAL LIVE PLOT) ---------------------
-mpl_widget = live_plot(measure_function=lambda: counter.getData()[0][0]/(binwidth/1e12), histogram_range=100, dt=0.2)
+# Function to get count rate and check for overflow
+def get_count_with_overflow():
+    data = counter.getData()
+    count_rate = data[0][0]/(binwidth/1e12)
+    # Check if any bins are in overflow mode
+    counter_data = counter.getDataObject()
+    overflow = counter_data.overflow  # Access as attribute, not as a method
+    return count_rate, overflow
+
+# Add a live plot widget to display count rate with overflow detection
+mpl_widget = live_plot(measure_function=get_count_with_overflow, histogram_range=100, dt=0.2)
 viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
 
 def update_contrast_limits(layer, image):
