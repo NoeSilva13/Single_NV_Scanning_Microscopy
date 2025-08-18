@@ -847,40 +847,37 @@ class ODMRExperiments:
         plt.figure(figsize=(10, 6))
         
         if experiment_type == 'odmr' or experiment_type == 'automated_odmr' or experiment_type == 'cw_odmr':
-            if experiment_type == 'odmr':
-                freqs = np.array(data['frequencies'])/1e6  # Convert Hz to MHz
-                title = 'ODMR'
-            else:
-                freqs = np.array(data['frequencies']) * 1000  # Convert GHz to MHz
-                title = 'ODMR'
+            # All frequencies are stored in Hz, convert to GHz for plotting
+            freqs = np.array(data['frequencies']) / 1e9  # Convert Hz to GHz
+            title = 'ODMR'
             
             plt.plot(freqs, data['count_rates'], 'bo-')
-            plt.xlabel('Frequency (MHz)')
-            plt.ylabel('Count Rate (Hz)')
+            plt.xlabel('Frequency (GHz)')
+            plt.ylabel('Count Rate (cps)')
             plt.title(title)
             
         elif experiment_type == 'rabi':
             plt.plot(data['durations'], data['count_rates'], 'ro-')
             plt.xlabel('MW Duration (ns)')
-            plt.ylabel('Count Rate (Hz)')
+            plt.ylabel('Count Rate (cps)')
             plt.title('Rabi Oscillation')
             
         elif experiment_type == 'ramsey':
             plt.plot(np.array(data['delays'])/1000, data['count_rates'], 'go-')
             plt.xlabel('Delay (µs)')
-            plt.ylabel('Count Rate (Hz)')
+            plt.ylabel('Count Rate (cps)')
             plt.title('Ramsey Coherence')
             
         elif experiment_type == 'spin_echo':
             plt.plot(np.array(data['delays'])/1000, data['count_rates'], 'mo-')
             plt.xlabel('Delay (µs)')
-            plt.ylabel('Count Rate (Hz)')
+            plt.ylabel('Count Rate (cps)')
             plt.title('Spin Echo')
             
         elif experiment_type == 't1_decay':
             plt.plot(np.array(data['delays'])/1000, data['count_rates'], 'co-')
             plt.xlabel('Delay (µs)')
-            plt.ylabel('Count Rate (Hz)')
+            plt.ylabel('Count Rate (cps)')
             plt.title('T1 Decay')
         
         plt.grid(True, alpha=0.3)
@@ -920,7 +917,7 @@ def run_example_experiments():
         frequencies = np.linspace(2.7e9, 3e9, 3)  # 2.85-2.89 GHz
         cw_odmr_result = experiments.cw_odmr(
             mw_frequencies=frequencies,
-            acquisition_time=1,  # 1 seconds per point
+            acquisition_time=10,  # 1 seconds per point
             mw_power=-10.0  # -10 dBm
         )
         
