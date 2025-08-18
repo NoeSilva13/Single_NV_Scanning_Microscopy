@@ -852,7 +852,7 @@ class ODMRExperiments:
                 title = 'ODMR'
             else:
                 freqs = np.array(data['frequencies']) * 1000  # Convert GHz to MHz
-                title = 'Automated ODMR Sweep (RIGOL)'
+                title = 'ODMR'
             
             plt.plot(freqs, data['count_rates'], 'bo-')
             plt.xlabel('Frequency (MHz)')
@@ -917,14 +917,18 @@ def run_example_experiments():
     try:
         #1. Continuous Wave ODMR
         print("\n" + "="*50)
-        frequencies = np.linspace(2.7e9, 3e9, 100)  # 2.85-2.89 GHz
+        frequencies = np.linspace(2.7e9, 3e9, 3)  # 2.85-2.89 GHz
         cw_odmr_result = experiments.cw_odmr(
             mw_frequencies=frequencies,
-            acquisition_time=3,  # 1 seconds per point
+            acquisition_time=1,  # 1 seconds per point
             mw_power=-10.0  # -10 dBm
         )
         
         # Save data using odmr_data_manager
+        import sys
+        import os
+        # Add parent directory to path to import odmr_data_manager
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         from odmr_data_manager import ODMRDataManager
         data_manager = ODMRDataManager()
         saved_file = data_manager.save_experiment_data(

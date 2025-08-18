@@ -13,9 +13,7 @@ class ODMRDataManager:
             'folder_name': 'ODMR',
             'file_suffix': '_ODMR',
             'x_column': 'Frequency_Hz',
-            'x_columns_converted': [
-                ('Frequency_GHz', 1e-9),  # Common unit in the field
-            ],
+            'x_columns_converted': [],
             'data_key': 'mw_frequencies',
             'x_label': 'Frequency',
             'x_unit': 'Hz',
@@ -55,7 +53,7 @@ class ODMRDataManager:
         Args:
             experiment_type: Type of experiment ('odmr', 'rabi', or 't1')
             x_data: List of x-axis values (frequencies, durations, or delays)
-            count_rates: List of corresponding count rates (Hz)
+            count_rates: List of corresponding count rates (cps)
             parameters: Dictionary containing measurement parameters
             
         Returns:
@@ -93,7 +91,7 @@ class ODMRDataManager:
         # Create DataFrame with the data
         data_dict = {
             config['x_column']: x_data,
-            'Count_Rate_Hz': count_rates
+            'Count_Rate_cps': count_rates
         }
         
         # Add converted columns (including SI units)
