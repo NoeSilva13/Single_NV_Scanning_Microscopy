@@ -304,10 +304,10 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
                 self.dwell_time_spinbox.setValue(dwell_time)
             
             # Update distance labels
-            self.x_min_label.setText(f"{x_range[0] * MICRONS_PER_VOLT:.1f}")
-            self.x_max_label.setText(f"{x_range[1] * MICRONS_PER_VOLT:.1f}")
-            self.y_min_label.setText(f"{y_range[0] * MICRONS_PER_VOLT:.1f}")
-            self.y_max_label.setText(f"{y_range[1] * MICRONS_PER_VOLT:.1f}")
+            self.x_min_label.setText(f"{x_range[0] * MICRONS_PER_VOLT:.2f}")
+            self.x_max_label.setText(f"{x_range[1] * MICRONS_PER_VOLT:.2f}")
+            self.y_min_label.setText(f"{y_range[0] * MICRONS_PER_VOLT:.2f}")
+            self.y_max_label.setText(f"{y_range[1] * MICRONS_PER_VOLT:.2f}")
     
     widget_instance = ScanParametersWidget()
     # Set the widget instance in the scan_params_manager so it can get parameters from it
