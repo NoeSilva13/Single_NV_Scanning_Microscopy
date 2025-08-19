@@ -306,6 +306,11 @@ def scan_pattern(x_points, y_points):
         layer.data = image
         layer.contrast_limits = contrast_limits
         
+        # Update scale before starting the scan
+        scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
+        scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
+        layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+        
         start_time = time.time()
         for y_idx, y in enumerate(y_points):
             for x_idx, x in enumerate(x_points):
@@ -336,10 +341,6 @@ def scan_pattern(x_points, y_points):
         print(f"Scan time: {end_time - start_time} seconds, {len(x_points)}, {len(y_points)}")
         # Adjust contrast and save data
         update_contrast_limits(layer, image)
-        
-        scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
-        scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
-        layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
         
         # Create a dictionary with image and scan positions
         scan_data = {
