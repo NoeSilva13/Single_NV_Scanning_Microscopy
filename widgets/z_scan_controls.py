@@ -16,6 +16,7 @@ from PyQt5.QtWidgets import (QWidget, QGridLayout, QLabel, QDoubleSpinBox,
                             QSpinBox, QPushButton, QComboBox, QGroupBox, 
                             QVBoxLayout, QHBoxLayout, QProgressBar)
 from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtGui import QFont
 from utils import MICRONS_PER_VOLT
 
 
@@ -31,159 +32,153 @@ class ExtendedScanParametersWidget(QWidget):
     def setup_ui(self):
         """Setup the user interface"""
         layout = QVBoxLayout()
+        layout.setSpacing(2)  # Reduce spacing between widgets
         
         # Create group boxes for organization
         xy_group = QGroupBox("X-Y Scan Parameters")
         z_group = QGroupBox("Z-Axis Parameters")
         scan_type_group = QGroupBox("Scan Configuration")
         
+        # Set smaller font for all group boxes
+        font = xy_group.font()
+        font.setPointSize(7)  # Reduce font size
+        xy_group.setFont(font)
+        z_group.setFont(font)
+        scan_type_group.setFont(font)
+        
         # X-Y parameters (reuse existing layout)
         xy_layout = QGridLayout()
+        xy_layout.setSpacing(3)  # Reduce spacing between grid items
+        xy_layout.setContentsMargins(3, 3, 3, 3)  # Reduce margins
         
-        # Headers
-        xy_layout.addWidget(QLabel("Parameter"), 0, 0)
-        xy_layout.addWidget(QLabel("Voltage (V)"), 0, 1)
-        xy_layout.addWidget(QLabel("Dist (µm)"), 0, 2)
+        # Headers with smaller font
+        header_font = QFont(font)
+        header_font.setBold(False)
+        for label_text in ["Parameter", "Voltage (V)", "Dist (µm)"]:
+            label = QLabel(label_text)
+            label.setFont(header_font)
+            xy_layout.addWidget(label, 0, ["Parameter", "Voltage (V)", "Dist (µm)"].index(label_text))
+        
+        def create_spinbox(min_val, max_val, step, decimals, value, suffix=""):
+            """Helper function to create spinboxes with consistent style"""
+            spinbox = QDoubleSpinBox() if decimals > 0 else QSpinBox()
+            spinbox.setFont(font)
+            spinbox.setRange(min_val, max_val)
+            spinbox.setSingleStep(step)
+            if decimals > 0:
+                spinbox.setDecimals(decimals)
+            spinbox.setValue(value)
+            if suffix:
+                spinbox.setSuffix(suffix)
+            spinbox.setFixedHeight(20)  # Reduce height
+            return spinbox
+            
+        def create_label(text, alignment=None):
+            """Helper function to create labels with consistent style"""
+            label = QLabel(text)
+            label.setFont(font)
+            if alignment:
+                label.setAlignment(alignment)
+            label.setFixedHeight(20)  # Reduce height
+            return label
         
         # X Min
-        xy_layout.addWidget(QLabel("X Min:"), 1, 0)
-        self.x_min_spinbox = QDoubleSpinBox()
-        self.x_min_spinbox.setRange(-10, 10)
-        self.x_min_spinbox.setSingleStep(0.1)
-        self.x_min_spinbox.setDecimals(4)
-        self.x_min_spinbox.setValue(-1.0)
+        xy_layout.addWidget(create_label("X Min:"), 1, 0)
+        self.x_min_spinbox = create_spinbox(-10, 10, 0.1, 4, -1.0)
         xy_layout.addWidget(self.x_min_spinbox, 1, 1)
         
-        self.x_min_label = QLabel(f"{self.x_min_spinbox.value() * MICRONS_PER_VOLT:.2f}")
-        self.x_min_label.setAlignment(Qt.AlignCenter)
+        self.x_min_label = create_label(f"{self.x_min_spinbox.value() * MICRONS_PER_VOLT:.2f}", Qt.AlignCenter)
         xy_layout.addWidget(self.x_min_label, 1, 2)
         
         # X Max
-        xy_layout.addWidget(QLabel("X Max:"), 2, 0)
-        self.x_max_spinbox = QDoubleSpinBox()
-        self.x_max_spinbox.setRange(-10, 10)
-        self.x_max_spinbox.setSingleStep(0.1)
-        self.x_max_spinbox.setDecimals(4)
-        self.x_max_spinbox.setValue(1.0)
+        xy_layout.addWidget(create_label("X Max:"), 2, 0)
+        self.x_max_spinbox = create_spinbox(-10, 10, 0.1, 4, 1.0)
         xy_layout.addWidget(self.x_max_spinbox, 2, 1)
         
-        self.x_max_label = QLabel(f"{self.x_max_spinbox.value() * MICRONS_PER_VOLT:.2f}")
-        self.x_max_label.setAlignment(Qt.AlignCenter)
+        self.x_max_label = create_label(f"{self.x_max_spinbox.value() * MICRONS_PER_VOLT:.2f}", Qt.AlignCenter)
         xy_layout.addWidget(self.x_max_label, 2, 2)
         
         # Y Min
-        xy_layout.addWidget(QLabel("Y Min:"), 3, 0)
-        self.y_min_spinbox = QDoubleSpinBox()
-        self.y_min_spinbox.setRange(-10, 10)
-        self.y_min_spinbox.setSingleStep(0.1)
-        self.y_min_spinbox.setDecimals(4)
-        self.y_min_spinbox.setValue(-1.0)
+        xy_layout.addWidget(create_label("Y Min:"), 3, 0)
+        self.y_min_spinbox = create_spinbox(-10, 10, 0.1, 4, -1.0)
         xy_layout.addWidget(self.y_min_spinbox, 3, 1)
         
-        self.y_min_label = QLabel(f"{self.y_min_spinbox.value() * MICRONS_PER_VOLT:.2f}")
-        self.y_min_label.setAlignment(Qt.AlignCenter)
+        self.y_min_label = create_label(f"{self.y_min_spinbox.value() * MICRONS_PER_VOLT:.2f}", Qt.AlignCenter)
         xy_layout.addWidget(self.y_min_label, 3, 2)
         
         # Y Max
-        xy_layout.addWidget(QLabel("Y Max:"), 4, 0)
-        self.y_max_spinbox = QDoubleSpinBox()
-        self.y_max_spinbox.setRange(-10, 10)
-        self.y_max_spinbox.setSingleStep(0.1)
-        self.y_max_spinbox.setDecimals(4)
-        self.y_max_spinbox.setValue(1.0)
+        xy_layout.addWidget(create_label("Y Max:"), 4, 0)
+        self.y_max_spinbox = create_spinbox(-10, 10, 0.1, 4, 1.0)
         xy_layout.addWidget(self.y_max_spinbox, 4, 1)
         
-        self.y_max_label = QLabel(f"{self.y_max_spinbox.value() * MICRONS_PER_VOLT:.2f}")
-        self.y_max_label.setAlignment(Qt.AlignCenter)
+        self.y_max_label = create_label(f"{self.y_max_spinbox.value() * MICRONS_PER_VOLT:.2f}", Qt.AlignCenter)
         xy_layout.addWidget(self.y_max_label, 4, 2)
         
         # X Resolution
-        xy_layout.addWidget(QLabel("X Resolution:"), 5, 0)
-        self.x_res_spinbox = QSpinBox()
-        self.x_res_spinbox.setRange(2, 1000)
-        self.x_res_spinbox.setValue(50)
-        self.x_res_spinbox.setSuffix(" px")
+        xy_layout.addWidget(create_label("X Resolution:"), 5, 0)
+        self.x_res_spinbox = create_spinbox(2, 1000, 1, 0, 50, " px")
         xy_layout.addWidget(self.x_res_spinbox, 5, 1, 1, 2)
         
         # Y Resolution
-        xy_layout.addWidget(QLabel("Y Resolution:"), 6, 0)
-        self.y_res_spinbox = QSpinBox()
-        self.y_res_spinbox.setRange(2, 1000)
-        self.y_res_spinbox.setValue(50)
-        self.y_res_spinbox.setSuffix(" px")
+        xy_layout.addWidget(create_label("Y Resolution:"), 6, 0)
+        self.y_res_spinbox = create_spinbox(2, 1000, 1, 0, 50, " px")
         xy_layout.addWidget(self.y_res_spinbox, 6, 1, 1, 2)
         
         xy_group.setLayout(xy_layout)
         
         # Z-axis parameters
         z_layout = QGridLayout()
+        z_layout.setSpacing(3)  # Reduce spacing between grid items
+        z_layout.setContentsMargins(3, 3, 3, 3)  # Reduce margins
         
         # Z Min
-        z_layout.addWidget(QLabel("Z Min (µm):"), 0, 0)
-        self.z_min_spinbox = QDoubleSpinBox()
-        self.z_min_spinbox.setRange(0, 20)
-        self.z_min_spinbox.setSingleStep(0.1)
-        self.z_min_spinbox.setDecimals(3)
-        self.z_min_spinbox.setValue(0.0)
+        z_layout.addWidget(create_label("Z Min (µm):"), 0, 0)
+        self.z_min_spinbox = create_spinbox(0, 20, 0.1, 3, 0.0)
         z_layout.addWidget(self.z_min_spinbox, 0, 1)
         
         # Z Max
-        z_layout.addWidget(QLabel("Z Max (µm):"), 1, 0)
-        self.z_max_spinbox = QDoubleSpinBox()
-        self.z_max_spinbox.setRange(0, 20)
-        self.z_max_spinbox.setSingleStep(0.1)
-        self.z_max_spinbox.setDecimals(3)
-        self.z_max_spinbox.setValue(5.0)
+        z_layout.addWidget(create_label("Z Max (µm):"), 1, 0)
+        self.z_max_spinbox = create_spinbox(0, 20, 0.1, 3, 5.0)
         z_layout.addWidget(self.z_max_spinbox, 1, 1)
         
         # Z Resolution
-        z_layout.addWidget(QLabel("Z Resolution:"), 2, 0)
-        self.z_res_spinbox = QSpinBox()
-        self.z_res_spinbox.setRange(2, 100)
-        self.z_res_spinbox.setValue(10)
-        self.z_res_spinbox.setSuffix(" steps")
+        z_layout.addWidget(create_label("Z Resolution:"), 2, 0)
+        self.z_res_spinbox = create_spinbox(2, 100, 1, 0, 10, " steps")
         z_layout.addWidget(self.z_res_spinbox, 2, 1)
         
         # Fixed position for X-Z and Y-Z scans
-        z_layout.addWidget(QLabel("Fixed X (V):"), 3, 0)
-        self.fixed_x_spinbox = QDoubleSpinBox()
-        self.fixed_x_spinbox.setRange(-10, 10)
-        self.fixed_x_spinbox.setSingleStep(0.1)
-        self.fixed_x_spinbox.setDecimals(4)
-        self.fixed_x_spinbox.setValue(0.0)
+        z_layout.addWidget(create_label("Fixed X (V):"), 3, 0)
+        self.fixed_x_spinbox = create_spinbox(-10, 10, 0.1, 4, 0.0)
         z_layout.addWidget(self.fixed_x_spinbox, 3, 1)
         
-        z_layout.addWidget(QLabel("Fixed Y (V):"), 4, 0)
-        self.fixed_y_spinbox = QDoubleSpinBox()
-        self.fixed_y_spinbox.setRange(-10, 10)
-        self.fixed_y_spinbox.setSingleStep(0.1)
-        self.fixed_y_spinbox.setDecimals(4)
-        self.fixed_y_spinbox.setValue(0.0)
+        z_layout.addWidget(create_label("Fixed Y (V):"), 4, 0)
+        self.fixed_y_spinbox = create_spinbox(-10, 10, 0.1, 4, 0.0)
         z_layout.addWidget(self.fixed_y_spinbox, 4, 1)
         
         z_group.setLayout(z_layout)
         
         # Scan type and timing
         scan_layout = QGridLayout()
+        scan_layout.setSpacing(3)  # Reduce spacing between grid items
+        scan_layout.setContentsMargins(3, 3, 3, 3)  # Reduce margins
         
         # Scan Type Selection
-        scan_layout.addWidget(QLabel("Scan Type:"), 0, 0)
+        scan_layout.addWidget(create_label("Scan Type:"), 0, 0)
         self.scan_type_combo = QComboBox()
+        self.scan_type_combo.setFont(font)
         self.scan_type_combo.addItems(["X-Y", "X-Z", "Y-Z", "3D"])
+        self.scan_type_combo.setFixedHeight(20)  # Reduce height
         scan_layout.addWidget(self.scan_type_combo, 0, 1)
         
         # Dwell Time
-        scan_layout.addWidget(QLabel("Dwell Time:"), 1, 0)
-        self.dwell_time_spinbox = QDoubleSpinBox()
-        self.dwell_time_spinbox.setRange(0.001, 10.0)
-        self.dwell_time_spinbox.setSingleStep(0.001)
-        self.dwell_time_spinbox.setDecimals(3)
-        self.dwell_time_spinbox.setValue(0.008)
-        self.dwell_time_spinbox.setSuffix(" s")
+        scan_layout.addWidget(create_label("Dwell Time:"), 1, 0)
+        self.dwell_time_spinbox = create_spinbox(0.001, 10.0, 0.001, 3, 0.008, " s")
         scan_layout.addWidget(self.dwell_time_spinbox, 1, 1)
         
         # Apply button
         self.apply_button = QPushButton("Apply Changes")
+        self.apply_button.setFont(font)
+        self.apply_button.setFixedHeight(25)  # Slightly taller for better clickability
         scan_layout.addWidget(self.apply_button, 2, 0, 1, 2)
         
         scan_type_group.setLayout(scan_layout)
