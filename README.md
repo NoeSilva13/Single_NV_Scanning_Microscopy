@@ -100,12 +100,11 @@ $ pip install -r requirements.txt
 python confocal_main_control.py
 ```
 Actions inside the Napari window:
-- "🔄 New Scan" ⇒ run full raster scan.
-- "🔬 Start Z Scan" ⇒ run Z-axis scans (X-Z, Y-Z, 3D).
-- **Drag rectangle** ⇒ zoom into ROI (up to 3 levels).
-- "🎯 Set to Zero" ⇒ return galvos to (0,0) V.
-- "⚙️ Scan Parameters" dock ⇒ adjust X-Y range / resolution on-the-fly.
-- "⚙️ Z Scan Parameters" dock ⇒ configure Z-axis parameters and scan types.
+- "🔬 Start Scan" ⇒ run any type of scan (X-Y, X-Z, Y-Z, 3D)
+- "🛑 Stop Scan" ⇒ stop any running scan
+- **Drag rectangle** ⇒ zoom into ROI (up to 3 levels)
+- "🎯 Set to Zero" ⇒ return galvos to (0,0) V
+- "⚙️ Scan Parameters" dock ⇒ configure all scan parameters (X-Y-Z) and select scan type
 
 ### 2. ODMR (continuous wave or Rabi)
 ```bash

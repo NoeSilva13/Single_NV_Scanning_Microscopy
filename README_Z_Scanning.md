@@ -58,12 +58,19 @@ Data management for Z scan results:
 - Save/load 3D data
 - Multiple export formats (NPZ, TIFF, MIP)
 
+#### `widgets/unified_scan_controls.py`
+Unified scan control for all scan types:
+- `UnifiedScanControlWidget` class
+- Single interface for all scan types (X-Y, X-Z, Y-Z, 3D)
+- Unified start/stop controls
+- Progress tracking for all scan types
+
 #### `widgets/z_scan_controls.py`
-GUI components for Z scanning:
+Extended scan parameter controls:
 - `ExtendedScanParametersWidget` class
+- Comprehensive parameter management (X-Y-Z)
 - Scan type selection
-- Z-axis parameter controls
-- Progress tracking widgets
+- Real-time parameter validation
 
 ### Integration Points
 
@@ -91,9 +98,10 @@ The Z scanning functionality integrates with existing components:
    - Set dwell time and fixed positions
 
 3. **Execute Scan**
-   - Use "Start Z Scan" button for Z-axis scans
-   - Use "New Scan" button for X-Y scans
+   - Use "Start Scan" button for any scan type
+   - Scan type determined by parameter widget selection
    - Monitor progress in real-time
+   - Use "Stop Scan" button to interrupt any scan
 
 4. **Data Management**
    - Automatic saving in multiple formats
@@ -191,9 +199,10 @@ Typical scan durations:
 4. **Hardware Errors**: Check galvo and piezo communication
 
 ### Recovery Procedures
-1. **Scan Interruption**: Use "Stop Z Scan" button
+1. **Scan Interruption**: Use "Stop Scan" button to stop any scan type
 2. **Hardware Reset**: Restart piezo controller if needed
 3. **Data Recovery**: Partial scans are saved automatically
+4. **Progress Recovery**: Scan progress is tracked and displayed in real-time
 
 ## Visualization
 
@@ -282,12 +291,22 @@ class ZScanDataManager:
     def list_scan_files() -> list
 ```
 
+### UnifiedScanControlWidget
+```python
+class UnifiedScanControlWidget:
+    def __init__(scan_pattern, scan_points_manager, shapes, z_scan_controller)
+    def update_progress(percentage, status, time_remaining)
+    def reset()
+    def is_scanning() -> bool
+```
+
 ### ExtendedScanParametersWidget
 ```python
 class ExtendedScanParametersWidget:
     def get_parameters() -> Dict
     def update_values(x_range, y_range, z_range, x_res, y_res, z_res, dwell_time)
     def apply_changes()
+    def on_scan_type_changed(scan_type)
 ```
 
 ## Contributing
