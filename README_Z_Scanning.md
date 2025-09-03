@@ -153,22 +153,34 @@ np.savez(filename,
 ### TIFF Files
 ImageJ-compatible format with metadata:
 - Individual Z-slices for 3D scans
-- Maximum intensity projections
+- Maximum Intensity Projection (MIP):
+  - Automatically generated for 3D scans
+  - Projects highest intensity values along Z-axis
+  - Useful for quick visualization of 3D features
+  - Saved as separate file with '_mip.tiff' suffix
 - Physical scale information
-- Scan parameters in metadata
+- Scan parameters in metadata including:
+  - Scan type (X-Y, X-Z, Y-Z, 3D, 3D_MIP)
+  - Z position for individual slices
+  - Dwell time and other scan settings
 
 ### Data Organization
 ```
 z_scan_data/
-├── xz_scan_20241201-143022.npz
-├── xz_scan_20241201-143022.tiff
-├── yz_scan_20241201-143156.npz
-├── yz_scan_20241201-143156.tiff
-├── 3d_scan_20241201-143245.npz
-├── 3d_scan_20241201-143245_z0.00.tiff
-├── 3d_scan_20241201-143245_z0.50.tiff
-├── 3d_scan_20241201-143245_z1.00.tiff
-└── 3d_scan_20241201-143245_mip.tiff
+├── xz_scan_20241201-143022.npz       # Complete X-Z scan data with metadata
+├── xz_scan_20241201-143022.tiff      # ImageJ-compatible X-Z image
+├── yz_scan_20241201-143156.npz       # Complete Y-Z scan data with metadata
+├── yz_scan_20241201-143156.tiff      # ImageJ-compatible Y-Z image
+├── 3d_scan_20241201-143245.npz       # Complete 3D volume data with metadata
+├── 3d_scan_20241201-143245_z0.00.tiff  # First Z-slice
+├── 3d_scan_20241201-143245_z0.50.tiff  # Middle Z-slice
+├── 3d_scan_20241201-143245_z1.00.tiff  # Last Z-slice
+└── 3d_scan_20241201-143245_mip.tiff    # Maximum Intensity Projection
+
+File naming convention:
+- Base name: scan_type_YYYYMMDD-HHMMSS
+- Z-slices: _zXX.XX.tiff (XX.XX = Z position in µm)
+- MIP: _mip.tiff suffix for maximum intensity projections
 ```
 
 ## Performance Considerations
@@ -193,16 +205,28 @@ Typical scan durations:
 ## Error Handling
 
 ### Common Issues
-1. **Piezo Connection**: Verify piezo controller is connected
-2. **Travel Limits**: Z range must be within piezo limits (0-20 µm)
-3. **Memory Limits**: Large 3D scans may exceed available memory
-4. **Hardware Errors**: Check galvo and piezo communication
+1. **Piezo Connection**:
+   - Automatic connection check before each scan
+   - Runtime error if piezo is disconnected
+   - Error message: "Piezo controller not connected"
+   - Solution: Check USB connection and restart if needed
+2. **User-Initiated Stops**:
+   - Safe scan interruption via Stop button
+   - Graceful shutdown of scanning process
+   - Progress saved up to interruption point
+   - Status messages with 🛑 indicator
+3. **Travel Limits**: Z range must be within piezo limits (0-20 µm)
+4. **Memory Limits**: Large 3D scans may exceed available memory
+5. **Hardware Errors**: Check galvo and piezo communication
 
 ### Recovery Procedures
 1. **Scan Interruption**: Use "Stop Scan" button to stop any scan type
 2. **Hardware Reset**: Restart piezo controller if needed
 3. **Data Recovery**: Partial scans are saved automatically
-4. **Progress Recovery**: Scan progress is tracked and displayed in real-time
+4. **Progress Recovery**: Scan progress is tracked and displayed in real-time with percentage updates
+   - X-Z/Y-Z scans: Progress updates every 10% of completion
+   - 3D scans: Updates for each Z step with percentage and step count
+   - User-friendly progress messages with emoji indicators
 
 ## Visualization
 
@@ -291,13 +315,13 @@ class ZScanDataManager:
     def list_scan_files() -> list
 ```
 
-### UnifiedScanControlWidget
+### UnifiedScanProgressWidget
 ```python
-class UnifiedScanControlWidget:
+class UnifiedScanProgressWidget:
     def __init__(scan_pattern, scan_points_manager, shapes, z_scan_controller)
     def update_progress(percentage, status, time_remaining)
     def reset()
-    def is_scanning() -> bool
+    def is_scanning: bool  # Instance variable for tracking scan state
 ```
 
 ### Scan Parameter Controls (unified_scan_controls.py)
