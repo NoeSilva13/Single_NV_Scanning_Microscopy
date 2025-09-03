@@ -424,11 +424,26 @@ def get_data_path():
 new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes)
 close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
-update_scan_parameters_widget = create_update_scan_parameters(scan_params_manager, scan_points_manager)
-update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, scan_params_manager)
+
+# Create extended scan parameters widget that handles both XY and Z scanning
+scan_parameters_widget = ExtendedScanParametersWidget(scan_params_manager, scan_points_manager)
+scan_params_manager.set_widget_instance(scan_parameters_widget)
+
+# Create function to update widget values
+def update_widget_func():
+    """Update widget values from current parameters"""
+    params = scan_params_manager.get_params()
+    scan_parameters_widget.update_values(
+        x_range=params['scan_range']['x'],
+        y_range=params['scan_range']['y'],
+        z_range=params['scan_range']['z'],
+        x_res=params['resolution']['x'],
+        y_res=params['resolution']['y'],
+        z_res=params['resolution']['z'],
+        dwell_time=params['dwell_time']
+    )
 
 # Create Z scan control widgets
-z_scan_parameters_widget = ExtendedScanParametersWidget(scan_params_manager, scan_points_manager)
 z_scan_widget = create_z_scan_widget(z_scan_controller, scan_params_manager, scan_points_manager)
 stop_z_scan_widget = create_stop_z_scan_widget(z_scan_controller)
 
@@ -570,14 +585,12 @@ viewer.window.add_dock_widget(z_scan_widget, area="bottom")
 viewer.window.add_dock_widget(stop_z_scan_widget, area="bottom")
 
 # Add parameter widgets
-update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
-z_scan_parameters_dock = viewer.window.add_dock_widget(z_scan_parameters_widget, area="left", name="Z Scan Parameters")
+scan_parameters_dock = viewer.window.add_dock_widget(scan_parameters_widget, area="left", name="Scan Parameters")
 camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
 viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
 
 # Tabify dock widgets
-viewer.window._qt_window.tabifyDockWidget(update_scan_parameters_dock, z_scan_parameters_dock)
-viewer.window._qt_window.tabifyDockWidget(z_scan_parameters_dock, camera_control_dock)
+viewer.window._qt_window.tabifyDockWidget(scan_parameters_dock, camera_control_dock)
 
 
 # Initialize empty auto-focus plot
