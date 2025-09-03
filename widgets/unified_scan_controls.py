@@ -276,7 +276,7 @@ class ExtendedScanParametersWidget(QWidget):
                 y_res=params['resolution']['y']
             )
             
-            show_info('✅ Z scan parameters updated successfully!')
+            show_info('✅ Scan parameters updated successfully!')
             
     def update_values(self, x_range, y_range, z_range, x_res, y_res, z_res, dwell_time=None):
         """Update all widget values"""
