@@ -67,7 +67,7 @@ Unified scan control for all scan types:
 
 #### `widgets/z_scan_controls.py`
 Extended scan parameter controls:
-- `ExtendedScanParametersWidget` class
+- Scan parameter controls (moved to unified_scan_controls.py)
 - Comprehensive parameter management (X-Y-Z)
 - Scan type selection
 - Real-time parameter validation
@@ -300,7 +300,7 @@ class UnifiedScanControlWidget:
     def is_scanning() -> bool
 ```
 
-### ExtendedScanParametersWidget
+### Scan Parameter Controls (unified_scan_controls.py)
 ```python
 class ExtendedScanParametersWidget:
     def get_parameters() -> Dict

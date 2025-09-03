@@ -58,7 +58,7 @@ from widgets.auto_focus import (
 )
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan as create_load_scan
-from widgets.z_scan_controls import ExtendedScanParametersWidget
+from widgets.unified_scan_controls import ExtendedScanParametersWidget
 from widgets.unified_scan_controls import (
     create_unified_scan_widget,
     create_unified_stop_scan_widget
