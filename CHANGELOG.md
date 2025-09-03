@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) guidelines.
 
+## [1.2.0] - 2024-12-01
+### Added
+- **Z-Axis Scanning Functionality**: Complete 3D imaging capabilities
+  - X-Z scanning (X vs Z at fixed Y position)
+  - Y-Z scanning (Y vs Z at fixed X position)
+  - 3D volumetric scanning (X-Y scans over Z steps)
+  - Integration with Thorlabs piezo controller for Z-axis control
+- **New Modules**:
+  - `z_scan_controller.py`: Main controller for Z-axis scanning operations
+  - `z_scan_data_manager.py`: Data management for 3D scan results
+  - `widgets/z_scan_controls.py`: GUI components for Z scanning
+- **Extended GUI**: New Z scan parameter controls and scan type selection
+- **3D Data Management**: Multiple export formats (NPZ, TIFF, MIP)
+- **Progress Tracking**: Real-time progress updates for long Z scans
+- **Test Suite**: `test_z_scanning.py` for functionality verification
+
+### Changed
+- Extended main confocal control with Z scanning capabilities
+- Enhanced scan parameters widget to include Z-axis controls
+- Updated data management to handle 3D volumetric data
+- Improved Napari viewer integration for 3D visualization
+- Extended hardware requirements to include piezo controller
+
+### Documentation
+- Added comprehensive `README_Z_Scanning.md` with detailed usage guide
+- Updated main README to include Z scanning features
+- Added hardware requirements for piezo controller
+- Enhanced quick start guide with Z scanning instructions
+- Added API reference and troubleshooting sections
+
 ## [1.1.0] - 2024-03-21
 ### Added
 - Comprehensive spectrometer application documentation in main README
@@ -50,5 +80,6 @@ All notable changes to this project will be documented in this file following [K
 - None.
 
 
+[1.2.0]: https://github.com/NoeSilva13/Single_NV_Scannig_Microscopy/releases/tag/v1.2.0
 [1.1.0]: https://github.com/NoeSilva13/Single_NV_Scannig_Microscopy/releases/tag/v1.1.0
 [1.0.0]: https://github.com/NoeSilva13/Single_NV_Scannig_Microscopy/releases/tag/v1.0.0 

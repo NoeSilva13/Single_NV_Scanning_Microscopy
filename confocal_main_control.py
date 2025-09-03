@@ -36,6 +36,11 @@ from utils import (
 )
 from qtpy.QtWidgets import QWidget
 
+# Import Z scanning modules
+from z_scan_controller import ZScanController
+from z_scan_data_manager import ZScanDataManager
+from piezo_controller import PiezoController
+
 # Import extracted widgets
 from widgets.scan_controls import (
     new_scan as create_new_scan,
@@ -55,7 +60,11 @@ from widgets.auto_focus import (
 )
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan as create_load_scan
-from widgets.piezo_controls import PiezoControlWidget
+from widgets.z_scan_controls import (
+    ExtendedScanParametersWidget,
+    create_z_scan_widget,
+    create_stop_z_scan_widget
+)
 
 # --------------------- SCAN PARAMETERS MANAGER CLASS ---------------------
 class ScanParametersManager:
@@ -164,10 +173,15 @@ zoom_manager = ZoomLevelManager()
 galvo_controller = GalvoScannerController()
 data_manager = DataManager()
 
-# Initialize piezo controller
+# Initialize Z scanning components
 piezo_controller = PiezoController()
-if not piezo_controller.connect():
-    show_info("⚠️ Failed to connect to piezo controller")
+z_scan_data_manager = ZScanDataManager()
+
+# Initialize Z scanning components
+piezo_controller = PiezoController()
+z_scan_data_manager = ZScanDataManager()
+
+
 
 # Extract scan parameters for initial setup (using defaults)
 x_res = 50  # Default resolution
@@ -190,6 +204,9 @@ output_task = nidaqmx.Task()
 output_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
 output_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
 output_task.start()
+
+# Initialize Z scan controller
+z_scan_controller = ZScanController(piezo_controller, output_task, counter, binwidth)
 
 # --------------------- NAPARI VIEWER SETUP ---------------------
 viewer = napari.Viewer(title="NV Scanning Microscopy")
@@ -410,6 +427,11 @@ save_image_widget = create_save_image(viewer, get_data_path)
 update_scan_parameters_widget = create_update_scan_parameters(scan_params_manager, scan_points_manager)
 update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, scan_params_manager)
 
+# Create Z scan control widgets
+z_scan_parameters_widget = ExtendedScanParametersWidget(scan_params_manager, scan_points_manager)
+z_scan_widget = create_z_scan_widget(z_scan_controller, scan_params_manager, scan_points_manager)
+stop_z_scan_widget = create_stop_z_scan_widget(z_scan_controller)
+
 # Update scan points manager with initial parameters from the widget
 scan_points_manager._update_points_from_params()
 
@@ -532,6 +554,8 @@ reset_zoom_widget.native.setFixedSize(150, 50)
 close_scanner_widget.native.setFixedSize(150, 50)
 auto_focus_widget.native.setFixedSize(150, 50)
 load_scan_widget.native.setFixedSize(150, 50)
+z_scan_widget.native.setFixedSize(150, 50)
+stop_z_scan_widget.native.setFixedSize(150, 50)
 
 # Add widgets to viewer
 viewer.window.add_dock_widget(new_scan_widget, area="bottom")
@@ -542,10 +566,18 @@ viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
 viewer.window.add_dock_widget(piezo_control_widget, area="bottom")
+viewer.window.add_dock_widget(z_scan_widget, area="bottom")
+viewer.window.add_dock_widget(stop_z_scan_widget, area="bottom")
+
+# Add parameter widgets
 update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
+z_scan_parameters_dock = viewer.window.add_dock_widget(z_scan_parameters_widget, area="left", name="Z Scan Parameters")
 camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
 viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
-viewer.window._qt_window.tabifyDockWidget(update_scan_parameters_dock, camera_control_dock)
+
+# Tabify dock widgets
+viewer.window._qt_window.tabifyDockWidget(update_scan_parameters_dock, z_scan_parameters_dock)
+viewer.window._qt_window.tabifyDockWidget(z_scan_parameters_dock, camera_control_dock)
 
 
 # Initialize empty auto-focus plot

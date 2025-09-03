@@ -18,11 +18,13 @@ All programs share a common codebase and are designed to run out-of-the-box with
 
 ### Confocal Scan GUI
 - Live **XY raster scanning** with dwell-time control.
-- **Napari** based viewer (zoom, pan, 2-D colormaps).
+- **Z-axis scanning** with X-Z, Y-Z, and 3D volumetric imaging capabilities.
+- **Napari** based viewer (zoom, pan, 2-D colormaps, 3D volume rendering).
 - **Click-to-move** galvo positioning and ROI (**rectangle zoom**) with history.
 - Integrated **auto-focus** routine and **single-axis line scans**.
 - Real-time photon-count **histogram panel** driven by a Swabian TimeTagger.
 - Automatic data saving (`.csv` + `.npz` + `.tiff`) and figure export after every scan.
+- **3D data management** with multiple export formats and visualization options.
 
 ### ODMR Control Center
 - **Continuous-wave ODMR sweeps** with live spectral plot.
@@ -51,7 +53,11 @@ Mandatory for confocal scans
 - Thorlabs **LSKGG4** galvo-galvo scanner
 - NI **USB-6453** (static AO for galvos)
 - **Single-photon detector** (Excelitas SPCM-AQRH-10-FC)
-- **Swabian TimeTagger** 
+- **Swabian TimeTagger**
+
+Additional for Z-axis scanning
+- Thorlabs **Benchtop Precision Piezo Controller** (serial: 44506104)
+- Piezo stage with 0-20 µm travel range 
 
 Additional for ODMR / advanced timing
 - **Swabian Pulse Streamer 8/2**
@@ -82,7 +88,8 @@ $ pip install -r requirements.txt
 - NI-DAQmx  (USB-6453)          https://www.ni.com/en/support/downloads/drivers/download.ni-daqmx.html
 - Swabian **TimeTagger** SDK    https://www.swabianinstruments.com/time-tagger/downloads/
 - Swabian **Pulse Streamer**    https://www.swabianinstruments.com/pulse-streamer/downloads/
-- Rigol **DSG836** Ethernet SCPI interface (no driver)  
+- Rigol **DSG836** Ethernet SCPI interface (no driver)
+- Thorlabs **Kinesis** (piezo controller) https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=Motion_Control  
 ```
 
 ---
@@ -94,9 +101,11 @@ python confocal_main_control.py
 ```
 Actions inside the Napari window:
 - "🔄 New Scan" ⇒ run full raster scan.
+- "🔬 Start Z Scan" ⇒ run Z-axis scans (X-Z, Y-Z, 3D).
 - **Drag rectangle** ⇒ zoom into ROI (up to 3 levels).
 - "🎯 Set to Zero" ⇒ return galvos to (0,0) V.
-- "⚙️ Scan Parameters" dock ⇒ adjust range / resolution on-the-fly.
+- "⚙️ Scan Parameters" dock ⇒ adjust X-Y range / resolution on-the-fly.
+- "⚙️ Z Scan Parameters" dock ⇒ configure Z-axis parameters and scan types.
 
 ### 2. ODMR (continuous wave or Rabi)
 ```bash
