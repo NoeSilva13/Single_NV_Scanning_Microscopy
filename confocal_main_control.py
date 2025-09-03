@@ -43,13 +43,11 @@ from piezo_controller import PiezoController
 
 # Import extracted widgets
 from widgets.scan_controls import (
-    new_scan as create_new_scan,
     close_scanner as create_close_scanner,
     save_image as create_save_image,
     reset_zoom as create_reset_zoom,
     update_scan_parameters as create_update_scan_parameters,
-    update_scan_parameters_widget as create_update_scan_parameters_widget,
-    stop_scan as create_stop_scan
+    update_scan_parameters_widget as create_update_scan_parameters_widget
 )
 from widgets.camera_controls import (
     create_camera_control_widget
@@ -60,10 +58,10 @@ from widgets.auto_focus import (
 )
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan as create_load_scan
-from widgets.z_scan_controls import (
-    ExtendedScanParametersWidget,
-    create_z_scan_widget,
-    create_stop_z_scan_widget
+from widgets.z_scan_controls import ExtendedScanParametersWidget
+from widgets.unified_scan_controls import (
+    create_unified_scan_widget,
+    create_unified_stop_scan_widget
 )
 
 # --------------------- SCAN PARAMETERS MANAGER CLASS ---------------------
@@ -421,7 +419,6 @@ def get_data_path():
 # --------------------- CREATE WIDGETS USING FACTORIES ---------------------
 
 # Create scan control widgets
-new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes)
 close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
 
@@ -443,15 +440,15 @@ def update_widget_func():
         dwell_time=params['dwell_time']
     )
 
-# Create Z scan control widgets
-z_scan_widget = create_z_scan_widget(z_scan_controller, scan_params_manager, scan_points_manager)
-stop_z_scan_widget = create_stop_z_scan_widget(z_scan_controller)
+# Create unified scan control widgets
+scan_widget = create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan_controller, scan_params_manager)
+stop_scan_widget = create_unified_stop_scan_widget(scan_in_progress, stop_scan_requested, z_scan_controller)
 
 # Update scan points manager with initial parameters from the widget
 scan_points_manager._update_points_from_params()
 
-# Create stop scan widget
-stop_scan_widget = create_stop_scan(scan_in_progress, stop_scan_requested)
+# Set fixed sizes for scan control buttons
+scan_widget.native.setFixedSize(150, 50)
 stop_scan_widget.native.setFixedSize(150, 50)
 
 reset_zoom_widget = create_reset_zoom(
@@ -563,26 +560,22 @@ def on_shape_added(event):
 # --------------------- ADD WIDGETS TO VIEWER ---------------------
 
 # Set fixed sizes for widget buttons
-new_scan_widget.native.setFixedSize(150, 50)
+scan_widget.native.setFixedSize(150, 50)
+stop_scan_widget.native.setFixedSize(150, 50)
 save_image_widget.native.setFixedSize(150, 50)
 reset_zoom_widget.native.setFixedSize(150, 50)
 close_scanner_widget.native.setFixedSize(150, 50)
 auto_focus_widget.native.setFixedSize(150, 50)
 load_scan_widget.native.setFixedSize(150, 50)
-z_scan_widget.native.setFixedSize(150, 50)
-stop_z_scan_widget.native.setFixedSize(150, 50)
 
 # Add widgets to viewer
-viewer.window.add_dock_widget(new_scan_widget, area="bottom")
+viewer.window.add_dock_widget(scan_widget, area="bottom")
 viewer.window.add_dock_widget(stop_scan_widget, area="bottom")
 viewer.window.add_dock_widget(save_image_widget, area="bottom")
 viewer.window.add_dock_widget(reset_zoom_widget, area="bottom")
 viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
-viewer.window.add_dock_widget(piezo_control_widget, area="bottom")
-viewer.window.add_dock_widget(z_scan_widget, area="bottom")
-viewer.window.add_dock_widget(stop_z_scan_widget, area="bottom")
 
 # Add parameter widgets
 scan_parameters_dock = viewer.window.add_dock_widget(scan_parameters_widget, area="left", name="Scan Parameters")
