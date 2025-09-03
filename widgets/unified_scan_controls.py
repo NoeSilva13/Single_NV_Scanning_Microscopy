@@ -64,7 +64,7 @@ class UnifiedScanControlWidget(QWidget):
         self.is_scanning = False
 
 
-def create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan_controller, scan_params_manager):
+def create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan_controller, scan_params_manager, z_scan_data_manager):
     """Factory function to create unified scan control widget"""
     
     progress_widget = UnifiedScanControlWidget(scan_pattern, scan_points_manager, shapes, z_scan_controller)
@@ -101,9 +101,11 @@ def create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan
                                        params['resolution']['z'])
                     y_fixed = params['fixed_positions']['y']
                     
-                    z_scan_controller.scan_xz(
+                    image, metadata = z_scan_controller.scan_xz(
                         x_points, z_points, y_fixed, params['dwell_time']
                     )
+                    # Save the scan data
+                    z_scan_data_manager.save_xz_scan(image, metadata)
                     
                 elif scan_type == "Y-Z":
                     y_points = np.linspace(params['scan_range']['y'][0], 
@@ -114,9 +116,11 @@ def create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan
                                        params['resolution']['z'])
                     x_fixed = params['fixed_positions']['x']
                     
-                    z_scan_controller.scan_yz(
+                    image, metadata = z_scan_controller.scan_yz(
                         y_points, z_points, x_fixed, params['dwell_time']
                     )
+                    # Save the scan data
+                    z_scan_data_manager.save_yz_scan(image, metadata)
                     
                 elif scan_type == "3D":
                     x_points = np.linspace(params['scan_range']['x'][0], 
@@ -129,9 +133,11 @@ def create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan
                                        params['scan_range']['z'][1], 
                                        params['resolution']['z'])
                     
-                    z_scan_controller.scan_3d(
+                    volume, metadata = z_scan_controller.scan_3d(
                         x_points, y_points, z_points, params['dwell_time']
                     )
+                    # Save the scan data
+                    z_scan_data_manager.save_3d_scan(volume, metadata)
                 
                 show_info(f"✅ {scan_type} scan completed successfully")
                 
