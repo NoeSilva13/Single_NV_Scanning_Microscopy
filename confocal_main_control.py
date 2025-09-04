@@ -173,13 +173,25 @@ data_manager = DataManager()
 
 # Initialize Z scanning components
 piezo_controller = PiezoController()
+try:
+    if not piezo_controller.connect():
+        show_info('⚠️ Failed to connect to piezo stage. Z-scanning features may be limited.')
+    else:
+        show_info('✅ Successfully connected to piezo stage')
+except Exception as e:
+    show_info(f'⚠️ Error connecting to piezo stage: {str(e)}. Z-scanning features may be limited.')
 z_scan_data_manager = ZScanDataManager()
 
 # Initialize Z scanning components
 piezo_controller = PiezoController()
+try:
+    if not piezo_controller.connect():
+        show_info('⚠️ Failed to connect to piezo stage. Z-scanning features may be limited.')
+    else:
+        show_info('✅ Successfully connected to piezo stage')
+except Exception as e:
+    show_info(f'⚠️ Error connecting to piezo stage: {str(e)}. Z-scanning features may be limited.')
 z_scan_data_manager = ZScanDataManager()
-
-
 
 # Extract scan parameters for initial setup (using defaults)
 x_res = 50  # Default resolution
@@ -593,16 +605,16 @@ signal_bridge.update_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto
 
 # --------------------- CLEANUP ON CLOSE ---------------------
 def _on_close():
-    """Clean up hardware resources when closing the app"""
+    """Clean up hardware connections when closing the app"""
     try:
         # Set scanner to zero position before closing
         output_task.write([0, 0])
         show_info("🎯 Scanner set to zero position")
         
-        # Clean up piezo controller
-        if piezo_controller and piezo_controller._is_connected:
+        # Disconnect piezo controller
+        if piezo_controller._is_connected:
             piezo_controller.disconnect()
-            show_info("✓ Piezo controller disconnected")
+            show_info("✅ Piezo controller disconnected")
     except Exception as e:
         show_info(f"❌ Error during app closure: {str(e)}")
 
