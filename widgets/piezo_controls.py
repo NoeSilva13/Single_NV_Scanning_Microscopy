@@ -24,7 +24,11 @@ class PiezoControlWidget(QWidget):
         super().__init__(parent)
         self.piezo = piezo_controller if piezo_controller else PiezoController()
         self.setup_ui()
-        if not piezo_controller:
+        if piezo_controller and piezo_controller._is_connected:
+            # If we got an already connected controller, update the UI
+            self._update_ui_with_current_position()
+        else:
+            # Otherwise try to connect
             self._connect_piezo()
         
     def setup_ui(self):
@@ -77,11 +81,7 @@ class PiezoControlWidget(QWidget):
         """Connect to the piezo controller in a separate thread"""
         def connect():
             if self.piezo.connect():
-                self.status_label.setText("Connected")
-                # Get and display initial position
-                current_pos = float(str(self.piezo.channel.GetPosition()))
-                self.pos_spinbox.setValue(current_pos)
-                self.pos_slider.setValue(int(current_pos * 10))
+                self._update_ui_with_current_position()
             else:
                 self.status_label.setText("Connection Failed")
                 show_info("❌ Failed to connect to piezo controller")
@@ -130,6 +130,20 @@ class PiezoControlWidget(QWidget):
                 show_info(f"❌ Error: {str(e)}")
         
         threading.Thread(target=move, daemon=True).start()
+    
+    def _update_ui_with_current_position(self):
+        """Update UI elements with current piezo position"""
+        try:
+            if self.piezo._is_connected:
+                self.status_label.setText("Connected")
+                current_pos = float(str(self.piezo.channel.GetPosition()))
+                self.pos_spinbox.setValue(current_pos)
+                self.pos_slider.setValue(int(current_pos * 10))
+            else:
+                self.status_label.setText("Not Connected")
+        except Exception as e:
+            self.status_label.setText("Error")
+            show_info(f"❌ Error getting piezo position: {str(e)}")
     
     def cleanup(self):
         """Cleanup resources when closing"""
