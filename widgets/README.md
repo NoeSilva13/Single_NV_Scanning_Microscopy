@@ -12,6 +12,7 @@ widgets/
 ├── auto_focus.py           # Auto-focus functionality and signal bridge
 ├── single_axis_scan.py     # Single axis scan widget
 ├── file_operations.py      # File loading/saving widgets
+├── piezo_controls.py      # Z-axis piezo stage control widget
 └── README.md               # This file
 ```
 
@@ -41,6 +42,7 @@ from widgets.auto_focus import (
 
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan
+from widgets.piezo_controls import PiezoControlWidget
 ```
 
 ### Widget Factory Functions
@@ -161,6 +163,25 @@ class ZoomLevelManager:
   - Creates "Load Scan" button widget
   - Opens file dialog for .npz files
   - Adds loaded scan as new layer
+
+### Piezo Controls (`piezo_controls.py`)
+
+- **`PiezoControlWidget`**
+  - Complete widget for Z-axis piezo stage control
+  - Features:
+    - Position control via spinbox (1 nm resolution)
+    - Slider for quick adjustments (0.1 µm resolution)
+    - Current position display in micrometers
+    - Connection status indicator
+  - Specifications:
+    - Travel range: 0-450 µm
+    - Resolution: 1 nm (0.001 µm)
+    - Settling time: 25ms for 1-100µm steps, 50ms for larger steps
+  - Size: 400x80 pixels
+  - Thread-safe operation with background tasks for:
+    - Initial connection
+    - Position updates
+    - Hardware cleanup
 
 ## Migration from Original Code
 
