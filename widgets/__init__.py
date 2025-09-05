@@ -29,6 +29,7 @@ from .auto_focus import (
 from .single_axis_scan import SingleAxisScanWidget
 
 from .file_operations import load_scan
+from .piezo_controls import PiezoControlWidget
 
 __all__ = [
     # Scan controls
@@ -54,5 +55,8 @@ __all__ = [
     'SingleAxisScanWidget',
     
     # File operations
-    'load_scan'
+    'load_scan',
+    
+    # Piezo controls
+    'PiezoControlWidget'
 ] 
