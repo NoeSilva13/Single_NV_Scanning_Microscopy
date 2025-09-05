@@ -369,8 +369,8 @@ class SpectrometerMainWindow(QMainWindow):
         
         roi_layout.addWidget(QLabel("Start Y:"), 1, 0)
         self.roi_start_spinbox = QSpinBox()
-        self.roi_start_spinbox.setRange(0, 1080)
-        self.roi_start_spinbox.setValue(500)
+        self.roi_start_spinbox.setRange(0, 1920)  # Swapped from 1080 due to rotation
+        self.roi_start_spinbox.setValue(900)  # Adjusted for rotation
         roi_layout.addWidget(self.roi_start_spinbox, 1, 1)
         
         roi_layout.addWidget(QLabel("Height:"), 2, 0)
@@ -381,14 +381,14 @@ class SpectrometerMainWindow(QMainWindow):
         
         roi_layout.addWidget(QLabel("Start X:"), 3, 0)
         self.roi_start_x_spinbox = QSpinBox()
-        self.roi_start_x_spinbox.setRange(0, 1920)
+        self.roi_start_x_spinbox.setRange(0, 1080)  # Swapped from 1920 due to rotation
         self.roi_start_x_spinbox.setValue(0)
         roi_layout.addWidget(self.roi_start_x_spinbox, 3, 1)
         
         roi_layout.addWidget(QLabel("Width:"), 4, 0)
         self.roi_width_spinbox = QSpinBox()
-        self.roi_width_spinbox.setRange(1, 1920)
-        self.roi_width_spinbox.setValue(1920)
+        self.roi_width_spinbox.setRange(1, 1080)  # Swapped from 1920 due to rotation
+        self.roi_width_spinbox.setValue(1080)  # Adjusted for rotation
         roi_layout.addWidget(self.roi_width_spinbox, 4, 1)
         
         # Add the ROI button after it's created
@@ -609,11 +609,14 @@ class SpectrometerMainWindow(QMainWindow):
         """Update camera view and process spectrum"""
         self.current_frame = frame
         
-        # Display frame in camera view
-        self.camera_view.setImage(frame.T)
+        # Rotate frame 90 degrees clockwise to compensate for camera rotation
+        rotated_frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
         
-        # Process spectrum
-        wavelengths, intensities = self.spectrum_processor.process_frame(frame)
+        # Display frame in camera view
+        self.camera_view.setImage(rotated_frame.T)
+        
+        # Process spectrum using the rotated frame
+        wavelengths, intensities = self.spectrum_processor.process_frame(rotated_frame)
         
         # Update spectrum plot
         self.spectrum_plot.clear()
@@ -772,12 +775,14 @@ class SpectrometerMainWindow(QMainWindow):
                 # Get image dimensions for proper sizing
                 if self.current_frame is not None:
                     if len(self.current_frame.shape) == 3:
-                        img_height, img_width = self.current_frame.shape[:2]
+                        # After 90-degree rotation, width and height are swapped
+                        img_width, img_height = self.current_frame.shape[:2]
                     else:
-                        img_height, img_width = self.current_frame.shape
+                        # After 90-degree rotation, width and height are swapped
+                        img_width, img_height = self.current_frame.shape
                 else:
-                    # Use defaults if no frame available
-                    img_width, img_height = 1920, 1080
+                    # Use defaults if no frame available (swapped for 90-degree rotation)
+                    img_height, img_width = 1920, 1080
                 
                 # Set ROI size from spinbox values
                 roi_width = width
