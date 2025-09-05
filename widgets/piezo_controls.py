@@ -39,19 +39,27 @@ class PiezoControlWidget(QWidget):
         # Create position display and controls in a horizontal layout
         controls_layout = QHBoxLayout()
         
+        # Position label and spinbox in a sub-layout
+        spinbox_layout = QHBoxLayout()
+        pos_label = QLabel("Position:")
+        spinbox_layout.addWidget(pos_label)
+        
         # Position spinbox (1 nm resolution = 0.001 µm)
         self.pos_spinbox = QDoubleSpinBox()
         self.pos_spinbox.setRange(0, 450)  # 0-450 µm range
         self.pos_spinbox.setDecimals(3)    # Show nm precision
         self.pos_spinbox.setSingleStep(0.1) # 100 nm step for fine control
-        self.pos_spinbox.setFixedWidth(100)
+        self.pos_spinbox.setFixedWidth(120)
         self.pos_spinbox.valueChanged.connect(self._on_spinbox_changed)
-        controls_layout.addWidget(self.pos_spinbox)
+        spinbox_layout.addWidget(self.pos_spinbox)
+        spinbox_layout.addStretch()
+        controls_layout.addLayout(spinbox_layout)
         
         # Position slider (0.1 µm resolution for smoother UI)
         self.pos_slider = QSlider(Qt.Horizontal)
         self.pos_slider.setRange(0, 4500)  # Range * 10 for 0.1 µm resolution
         self.pos_slider.valueChanged.connect(self._on_slider_changed)
+        self.pos_slider.setMinimumWidth(200)  # Make slider wider
         controls_layout.addWidget(self.pos_slider)
         
         layout.addLayout(controls_layout)
@@ -62,7 +70,7 @@ class PiezoControlWidget(QWidget):
         layout.addWidget(self.status_label)
         
         # Set widget size
-        self.setFixedSize(150, 80)
+        self.setFixedSize(400, 80)
         
     def _connect_piezo(self):
         """Connect to the piezo controller in a separate thread"""
