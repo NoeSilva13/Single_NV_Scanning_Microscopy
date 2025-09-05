@@ -54,6 +54,7 @@ from widgets.auto_focus import (
 )
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan as create_load_scan
+from widgets.piezo_controls import PiezoControlWidget
 
 # --------------------- SCAN PARAMETERS MANAGER CLASS ---------------------
 class ScanParametersManager:
@@ -440,6 +441,9 @@ load_scan_widget = create_load_scan(
     update_widget_func=update_widget_func
 )
 
+# Create piezo control widget
+piezo_control_widget = PiezoControlWidget()
+
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
 zoom_in_progress = False
@@ -528,6 +532,7 @@ viewer.window.add_dock_widget(reset_zoom_widget, area="bottom")
 viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
+viewer.window.add_dock_widget(piezo_control_widget, area="bottom")
 update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
 camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
 viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
@@ -541,11 +546,16 @@ signal_bridge.update_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto
 
 # --------------------- CLEANUP ON CLOSE ---------------------
 def _on_close():
-    """Set scanner to zero when closing the app"""
+    """Clean up hardware resources when closing the app"""
     try:
         # Set scanner to zero position before closing
         output_task.write([0, 0])
         show_info("🎯 Scanner set to zero position")
+        
+        # Clean up piezo controller
+        if piezo_control_widget:
+            piezo_control_widget.cleanup()
+            show_info("✓ Piezo controller disconnected")
     except Exception as e:
         show_info(f"❌ Error during app closure: {str(e)}")
 
