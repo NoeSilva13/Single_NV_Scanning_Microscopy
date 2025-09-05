@@ -74,8 +74,20 @@ class SignalBridge(QObject):
 
 
 
-def auto_focus(counter, binwidth, signal_bridge):
-    """Factory function to create auto_focus widget with dependencies"""
+def auto_focus(counter, binwidth, signal_bridge, piezo_controller=None):
+    """Factory function to create auto_focus widget with dependencies
+    
+    Parameters
+    ----------
+    counter : TimeTagger.Counter
+        Counter object for photon counting
+    binwidth : int
+        Bin width for photon counting
+    signal_bridge : SignalBridge
+        Bridge for thread-safe GUI updates
+    piezo_controller : PiezoController, optional
+        Existing piezo controller instance to use. If None, creates new one.
+    """
     
     @magicgui(call_button="🔍 Auto Focus")
     def _auto_focus():
@@ -85,12 +97,15 @@ def auto_focus(counter, binwidth, signal_bridge):
                 show_info('🔍 Starting Z scan...')
                 signal_bridge.show_progress_signal.emit()
                 
-                piezo = PiezoController()
+                # Use provided controller or create new one
+                piezo = piezo_controller if piezo_controller else PiezoController()
                 
-                if not piezo.connect():
-                    show_info('❌ Failed to connect to piezo stage')
-                    signal_bridge.hide_progress_signal.emit()
-                    return
+                # Only connect if we created a new controller
+                if not piezo_controller:
+                    if not piezo.connect():
+                        show_info('❌ Failed to connect to piezo stage')
+                        signal_bridge.hide_progress_signal.emit()
+                        return
                 
                 try:
                     # Create progress callback function
@@ -113,7 +128,9 @@ def auto_focus(counter, binwidth, signal_bridge):
                     signal_bridge.update_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot')
                     
                 finally:
-                    piezo.disconnect()
+                    # Only disconnect if we created our own controller
+                    if not piezo_controller:
+                        piezo.disconnect()
                     signal_bridge.hide_progress_signal.emit()
                 
             except Exception as e:

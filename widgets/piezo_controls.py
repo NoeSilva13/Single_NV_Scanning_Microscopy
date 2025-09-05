@@ -20,11 +20,12 @@ from piezo_controller import PiezoController
 class PiezoControlWidget(QWidget):
     """Widget for controlling the Z-axis piezo stage"""
     
-    def __init__(self, parent=None):
+    def __init__(self, piezo_controller=None, parent=None):
         super().__init__(parent)
-        self.piezo = PiezoController()
+        self.piezo = piezo_controller if piezo_controller else PiezoController()
         self.setup_ui()
-        self._connect_piezo()
+        if not piezo_controller:
+            self._connect_piezo()
         
     def setup_ui(self):
         """Set up the user interface"""

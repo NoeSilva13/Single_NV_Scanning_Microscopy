@@ -25,6 +25,7 @@ from magicgui import magicgui
 # Local imports
 from galvo_controller import GalvoScannerController
 from data_manager import DataManager
+from piezo_controller import PiezoController
 from plot_widgets.live_plot_napari_widget import live_plot
 from plot_scan_results import plot_scan_results
 from utils import (
@@ -162,6 +163,11 @@ zoom_manager = ZoomLevelManager()
 # Initialize hardware controllers
 galvo_controller = GalvoScannerController()
 data_manager = DataManager()
+
+# Initialize piezo controller
+piezo_controller = PiezoController()
+if not piezo_controller.connect():
+    show_info("⚠️ Failed to connect to piezo controller")
 
 # Extract scan parameters for initial setup (using defaults)
 x_res = 50  # Default resolution
@@ -423,7 +429,7 @@ camera_control_widget = create_camera_control_widget(viewer)
 
 # Create auto-focus widgets
 signal_bridge = SignalBridge(viewer)
-auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge)
+auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge, piezo_controller)
 
 # Create single axis scan widget
 single_axis_scan_widget = SingleAxisScanWidget(
@@ -442,7 +448,7 @@ load_scan_widget = create_load_scan(
 )
 
 # Create piezo control widget
-piezo_control_widget = PiezoControlWidget()
+piezo_control_widget = PiezoControlWidget(piezo_controller)
 
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
@@ -553,8 +559,8 @@ def _on_close():
         show_info("🎯 Scanner set to zero position")
         
         # Clean up piezo controller
-        if piezo_control_widget:
-            piezo_control_widget.cleanup()
+        if piezo_controller and piezo_controller._is_connected:
+            piezo_controller.disconnect()
             show_info("✓ Piezo controller disconnected")
     except Exception as e:
         show_info(f"❌ Error during app closure: {str(e)}")
