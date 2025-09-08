@@ -74,7 +74,7 @@ class SignalBridge(QObject):
 
 
 
-def auto_focus(counter, binwidth, signal_bridge, piezo_controller=None, piezo_widget=None):
+def auto_focus(counter, binwidth, signal_bridge, piezo_controller=None):
     """Factory function to create auto_focus widget with dependencies
     
     Parameters
@@ -87,8 +87,6 @@ def auto_focus(counter, binwidth, signal_bridge, piezo_controller=None, piezo_wi
         Bridge for thread-safe GUI updates
     piezo_controller : PiezoController, optional
         Existing piezo controller instance to use. If None, creates new one.
-    piezo_widget : PiezoControlWidget, optional
-        Widget to update after auto-focus completes
     """
     
     @magicgui(call_button="🔍 Auto Focus")
@@ -128,10 +126,6 @@ def auto_focus(counter, binwidth, signal_bridge, piezo_controller=None, piezo_wi
                     
                     show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
                     signal_bridge.update_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot')
-                    
-                    # Update piezo widget display if provided
-                    if piezo_widget:
-                        piezo_widget.update_display()
                     
                 finally:
                     # Only disconnect if we created our own controller

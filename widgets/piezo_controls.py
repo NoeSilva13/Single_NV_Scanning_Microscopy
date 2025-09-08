@@ -145,10 +145,6 @@ class PiezoControlWidget(QWidget):
             self.status_label.setText("Error")
             show_info(f"❌ Error getting piezo position: {str(e)}")
     
-    def update_display(self):
-        """Public method to update the widget display with current position"""
-        self._update_ui_with_current_position()
-    
     def cleanup(self):
         """Cleanup resources when closing"""
         if self.piezo._is_connected:
