@@ -153,10 +153,8 @@ class PiezoController:
         total_coarse_steps = len(positions)
         total_fine_steps = 0
         if fine_tune:
-            # Estimate fine steps
-            fine_start = max(0.0, 0.0 - fine_range/2)  # Rough estimate
-            fine_end = min(max_pos, 0.0 + fine_range/2)
-            total_fine_steps = int((fine_end - fine_start) / fine_step_size) + 1
+            # Estimate fine steps based on coarse scan range
+            total_fine_steps = int(fine_range / fine_step_size) + 1
         
         total_steps = total_coarse_steps + total_fine_steps
         current_step = 0
@@ -183,8 +181,20 @@ class PiezoController:
             print("Starting fine-tuning scan...")
             
             # Define fine scan range around the coarse optimal position
-            fine_start = max(0.0, coarse_optimal_pos - fine_range/2)
-            fine_end = min(max_pos, coarse_optimal_pos + fine_range/2)
+            # Ensure we stay within physical limits while maintaining the desired range
+            half_range = fine_range / 2
+            if coarse_optimal_pos < half_range:
+                # If too close to lower limit, shift range up
+                fine_start = 0.0
+                fine_end = min(max_pos, fine_range)
+            elif coarse_optimal_pos > max_pos - half_range:
+                # If too close to upper limit, shift range down
+                fine_start = max(0.0, max_pos - fine_range)
+                fine_end = max_pos
+            else:
+                # Normal case - center range around optimal position
+                fine_start = coarse_optimal_pos - half_range
+                fine_end = coarse_optimal_pos + half_range
             
             # Generate fine position list
             fine_positions = []
