@@ -427,12 +427,9 @@ reset_zoom_widget = create_reset_zoom(
 # Create camera control widgets
 camera_control_widget = create_camera_control_widget(viewer)
 
-# Create piezo control widget first
-piezo_control_widget = PiezoControlWidget(piezo_controller)
-
 # Create auto-focus widgets
 signal_bridge = SignalBridge(viewer)
-auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge, piezo_controller, piezo_control_widget)
+auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge, piezo_controller)
 
 # Create single axis scan widget
 single_axis_scan_widget = SingleAxisScanWidget(
@@ -449,6 +446,10 @@ load_scan_widget = create_load_scan(
     scan_points_manager=scan_points_manager,
     update_widget_func=update_widget_func
 )
+
+# Create piezo control widget
+piezo_control_widget = PiezoControlWidget(piezo_controller)
+
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
 zoom_in_progress = False
