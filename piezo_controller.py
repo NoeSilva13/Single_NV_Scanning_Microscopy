@@ -180,21 +180,27 @@ class PiezoController:
         if fine_tune:
             print("Starting fine-tuning scan...")
             
-            # Define fine scan range around the coarse optimal position
-            # Ensure we stay within physical limits while maintaining the desired range
-            half_range = fine_range / 2
-            if coarse_optimal_pos < half_range:
-                # If too close to lower limit, shift range up
+            # Special handling for optimal position at exactly 0
+            if coarse_optimal_pos == 0.0:
                 fine_start = 0.0
-                fine_end = min(max_pos, fine_range)
-            elif coarse_optimal_pos > max_pos - half_range:
-                # If too close to upper limit, shift range down
-                fine_start = max(0.0, max_pos - fine_range)
-                fine_end = max_pos
+                fine_end = min(max_pos, fine_step_size * 10)  # Just scan first few steps
+                print(f"Optimal position at 0.0 µm, scanning range: 0.0 to {fine_end:.3f} µm")
             else:
-                # Normal case - center range around optimal position
-                fine_start = coarse_optimal_pos - half_range
-                fine_end = coarse_optimal_pos + half_range
+                # Define fine scan range around the coarse optimal position
+                # Ensure we stay within physical limits while maintaining the desired range
+                half_range = fine_range / 2
+                if coarse_optimal_pos < half_range:
+                    # If too close to lower limit, shift range up
+                    fine_start = 0.0
+                    fine_end = min(max_pos, fine_range)
+                elif coarse_optimal_pos > max_pos - half_range:
+                    # If too close to upper limit, shift range down
+                    fine_start = max(0.0, max_pos - fine_range)
+                    fine_end = max_pos
+                else:
+                    # Normal case - center range around optimal position
+                    fine_start = coarse_optimal_pos - half_range
+                    fine_end = coarse_optimal_pos + half_range
             
             # Generate fine position list
             fine_positions = []
@@ -222,15 +228,26 @@ class PiezoController:
                 
                 print(f'Fine scan - Position: {pos:.2f} µm, counts: {count}')
             
-            # Find optimal position from fine scan
-            fine_optimal_idx = np.argmax(fine_counts)
-            optimal_pos = fine_positions[fine_optimal_idx]
+            # Find optimal positions and counts from both scans
+            coarse_max_count = max(counts)
+            fine_max_count = max(fine_counts)
+            
+            # Compare coarse and fine scan results
+            if coarse_max_count >= fine_max_count:
+                # If coarse scan found better or equal signal, use its position
+                optimal_pos = coarse_optimal_pos
+                print(f"Fine scan did not improve signal. Using coarse position: {optimal_pos:.3f} µm")
+            else:
+                # If fine scan found better signal, use its position
+                fine_optimal_idx = np.argmax(fine_counts)
+                optimal_pos = fine_positions[fine_optimal_idx]
+                print(f"Fine scan improved signal. Refined position: {optimal_pos:.3f} µm")
             
             # Combine coarse and fine scan results for return
             all_positions = positions + fine_positions
             all_counts = counts + fine_counts
             
-            print(f"Fine scan complete. Refined peak found at {optimal_pos:.2f} µm")
+            print(f"Fine scan complete. Best position: {optimal_pos:.3f} µm")
         else:
             optimal_pos = coarse_optimal_pos
             all_positions = positions
