@@ -23,6 +23,7 @@ class SignalBridge(QObject):
     update_progress_signal = pyqtSignal(int, str)
     show_progress_signal = pyqtSignal()
     hide_progress_signal = pyqtSignal()
+    update_z_control_signal = pyqtSignal()  # New signal for updating Z control
     
     def __init__(self, viewer):
         super().__init__()
@@ -31,8 +32,10 @@ class SignalBridge(QObject):
         self.update_progress_signal.connect(self._update_progress)
         self.show_progress_signal.connect(self._show_progress)
         self.hide_progress_signal.connect(self._hide_progress)
+        self.update_z_control_signal.connect(self._update_z_control)
         self.focus_plot_widget = None
         self.focus_dock_widget = None
+        self.z_control_widget = None  # Reference to Z control widget
     
     def _update_focus_plot(self, positions, counts, name):
         """Update the focus plot widget from the main thread"""
@@ -69,6 +72,11 @@ class SignalBridge(QObject):
         """Hide the progress bar from the main thread"""
         if self.focus_plot_widget and hasattr(self.focus_plot_widget, 'hide_progress'):
             self.focus_plot_widget.hide_progress()
+    
+    def _update_z_control(self):
+        """Update the Z control widget from the main thread"""
+        if self.z_control_widget:
+            self.z_control_widget._update_ui_with_current_position()
 
 
 
@@ -126,6 +134,7 @@ def auto_focus(counter, binwidth, signal_bridge, piezo_controller=None):
                     
                     show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
                     signal_bridge.update_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot')
+                    signal_bridge.update_z_control_signal.emit()  # Update Z control widget
                     
                 finally:
                     # Only disconnect if we created our own controller
