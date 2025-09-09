@@ -450,6 +450,9 @@ load_scan_widget = create_load_scan(
 # Create piezo control widget
 piezo_control_widget = PiezoControlWidget(piezo_controller)
 
+# Set the Z control widget reference in the signal bridge
+signal_bridge.z_control_widget = piezo_control_widget
+
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
 zoom_in_progress = False
