@@ -1,5 +1,5 @@
 """
-Scan Control Widgets for Napari Scanning SPD Application
+UnifiedScan Control Widget
 -----------------------------------------------------
 This module contains widgets for scan control including:
 - Unified scan control (XY and Z scanning)
