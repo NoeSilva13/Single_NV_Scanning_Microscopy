@@ -132,9 +132,7 @@ def auto_focus(counter, binwidth, signal_bridge, piezo_controller):
                     signal_bridge.update_z_control_signal.emit()  # Update Z control widget
                     
                 finally:
-                    # Only disconnect if we created our own controller
-                    # The piezo_controller is now passed as an argument, so no explicit disconnect here
-                    pass
+                    signal_bridge.hide_progress_signal.emit()
                 
             except Exception as e:
                 show_info(f'❌ Auto-focus error: {str(e)}')
