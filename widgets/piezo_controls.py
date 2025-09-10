@@ -106,22 +106,21 @@ class PiezoControlWidget(QWidget):
         self.pos_spinbox.blockSignals(False)
         self._move_piezo(pos_um)
     
-    def _move_piezo(self, position_um):
-        """Move the piezo to the specified position with proper settling time"""
+    def _move_piezo(self, position_um: float, settling_time: float = 0.1):
+        """Move the piezo to the specified position with fixed settling time
+        
+        Args:
+            position_um (float): Target position in micrometers
+            settling_time (float): Time to wait for the piezo to settle after movement, in seconds
+        """
         def move():
             if not self.piezo._is_connected:
                 show_info("❌ Piezo not connected")
                 return
                 
             try:
-                # Get current position for calculating step size
-                current_pos = float(str(self.piezo.channel.GetPosition()))
-                step_size = abs(position_um - current_pos)
-                
                 # Set position
                 if self.piezo.set_position(position_um):
-                    # Wait for settling (25ms typical for 1-100µm steps)
-                    settling_time = 0.025 if step_size <= 100 else 0.050
                     time.sleep(settling_time)
                     show_info(f"✓ Moved to {position_um:.3f} µm")
                 else:
