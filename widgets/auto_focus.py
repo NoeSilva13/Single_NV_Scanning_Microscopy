@@ -82,7 +82,7 @@ class SignalBridge(QObject):
 
 
 
-def auto_focus(counter, binwidth, signal_bridge, piezo_controller=None):
+def auto_focus(counter, binwidth, signal_bridge, piezo_controller):
     """Factory function to create auto_focus widget with dependencies
     
     Parameters
@@ -93,8 +93,8 @@ def auto_focus(counter, binwidth, signal_bridge, piezo_controller=None):
         Bin width for photon counting
     signal_bridge : SignalBridge
         Bridge for thread-safe GUI updates
-    piezo_controller : PiezoController, optional
-        Existing piezo controller instance to use. If None, creates new one.
+    piezo_controller : PiezoController
+        Piezo controller instance (required)
     """
     
     @magicgui(call_button="🔍 Auto Focus")
@@ -105,15 +105,10 @@ def auto_focus(counter, binwidth, signal_bridge, piezo_controller=None):
                 show_info('🔍 Starting Z scan...')
                 signal_bridge.show_progress_signal.emit()
                 
-                # Use provided controller or create new one
-                piezo = piezo_controller if piezo_controller else PiezoController()
-                
-                # Only connect if we created a new controller
-                if not piezo_controller:
-                    if not piezo.connect():
-                        show_info('❌ Failed to connect to piezo stage')
-                        signal_bridge.hide_progress_signal.emit()
-                        return
+                if not piezo_controller._is_connected:
+                    show_info('❌ Piezo stage not connected')
+                    signal_bridge.hide_progress_signal.emit()
+                    return
                 
                 try:
                     # Create progress callback function
@@ -127,7 +122,7 @@ def auto_focus(counter, binwidth, signal_bridge, piezo_controller=None):
                     
                     # Get count data using the counter
                     count_function = lambda: counter.getData()[0][0]/(binwidth/1e12)
-                    positions, counts, optimal_pos = piezo.perform_auto_focus(
+                    positions, counts, optimal_pos = piezo_controller.perform_auto_focus(
                         count_function, 
                         progress_callback=progress_callback
                     )
@@ -138,9 +133,8 @@ def auto_focus(counter, binwidth, signal_bridge, piezo_controller=None):
                     
                 finally:
                     # Only disconnect if we created our own controller
-                    if not piezo_controller:
-                        piezo.disconnect()
-                    signal_bridge.hide_progress_signal.emit()
+                    # The piezo_controller is now passed as an argument, so no explicit disconnect here
+                    pass
                 
             except Exception as e:
                 show_info(f'❌ Auto-focus error: {str(e)}')
