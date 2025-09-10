@@ -137,8 +137,13 @@ class PiezoControlWidget(QWidget):
             if self.piezo._is_connected:
                 self.status_label.setText("Connected")
                 current_pos = float(str(self.piezo.channel.GetPosition()))
+                # Block signals to prevent triggering movement callbacks
+                self.pos_spinbox.blockSignals(True)
+                self.pos_slider.blockSignals(True)
                 self.pos_spinbox.setValue(current_pos)
                 self.pos_slider.setValue(int(current_pos * 10))
+                self.pos_spinbox.blockSignals(False)
+                self.pos_slider.blockSignals(False)
             else:
                 self.status_label.setText("Not Connected")
         except Exception as e:
