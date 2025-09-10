@@ -135,7 +135,9 @@ class PiezoControlWidget(QWidget):
         try:
             if self.piezo._is_connected:
                 self.status_label.setText("Connected")
+                time.sleep(0.5)
                 current_pos = float(str(self.piezo.channel.GetPosition()))
+                print(f"Current position: {current_pos} µm")
                 # Block signals to prevent triggering movement callbacks
                 self.pos_spinbox.blockSignals(True)
                 self.pos_slider.blockSignals(True)
