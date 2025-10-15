@@ -558,7 +558,13 @@ class ODMRExperiments:
         
         delays = []
         count_rates = []
-        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
+        self.counter = TimeTagger.CountBetweenMarkers(
+            tagger=self.tagger,
+            click_channel=1,
+            begin_channel=2,
+            end_channel=-2,
+            n_values=repetitions
+        )
         
         for delay_time in delay_times:
             print(f"⏱️ Delay time: {delay_time} ns")
@@ -587,7 +593,8 @@ class ODMRExperiments:
                 self.pulse_controller.stop_sequence()
                 
                 # Get real count rate from TimeTagger
-                count_rate = np.mean(self.counter.getData())
+                counts = self.counter.getData()
+                count_rate = np.mean(counts) / (detection_duration * 1e-9)
                 print(f"Count rate: {count_rate} Hz")
                 
                 delays.append(delay_time)
