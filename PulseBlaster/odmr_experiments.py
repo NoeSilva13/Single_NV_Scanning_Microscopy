@@ -590,10 +590,13 @@ class ODMRExperiments:
                 self.counter.clear()
                 self.pulse_controller.run_sequence(sequence)
                 time.sleep(total_duration/1e9)
-                self.pulse_controller.stop_sequence()
+                #self.pulse_controller.stop_sequence()
                 
                 # Get real count rate from TimeTagger
                 counts = self.counter.getData()
+                print(counts)
+                print(len(counts))
+                print(np.mean(counts))
                 count_rate = np.mean(counts) / (detection_duration * 1e-9)
                 print(f"Count rate: {count_rate} Hz")
                 
@@ -609,6 +612,7 @@ class ODMRExperiments:
         
         print("✅ T1 decay measurement completed")
         return self.results['t1_decay']
+    
     
     def _create_t1_sequence(self, 
                            init_laser_duration: int,
@@ -701,6 +705,7 @@ class ODMRExperiments:
             # Set patterns for each channel (no MW needed for T1)
             sequence.setDigital(self.pulse_controller.CHANNEL_AOM, aom_pattern)
             sequence.setDigital(self.pulse_controller.CHANNEL_SPD, spd_pattern)
+            sequence.setDigital(self.pulse_controller.CHANNEL_TT, spd_pattern)
             
             print(f"✅ T1 sequence created: delay={delay_time}ns, {repetitions} reps, {total_duration} ns total")
             return sequence, total_duration

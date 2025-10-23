@@ -35,6 +35,7 @@ class SwabianPulseController:
     CHANNEL_AOM = 0      # AOM Laser
     CHANNEL_MW = 1       # Microwave
     CHANNEL_SPD = 2      # SPD Gate
+    CHANNEL_TT = 3      # TimeTagger
     
     # Pulse Streamer timing constants
     TIMING_RESOLUTION = 8  # 8 ns minimum timing resolution
@@ -145,7 +146,7 @@ class SwabianPulseController:
             
         try:
             # Turn off all channels
-            self.pulse_streamer.constant(OutputState.ZERO())
+            self.pulse_streamer.constant(OutputState([0], 0, 0))
             print("🔄 Pulse Streamer reset to OFF state")
         except Exception as e:
             print(f"❌ Error resetting device: {e}")
@@ -382,7 +383,7 @@ class SwabianPulseController:
             return
         
         try:
-            self.pulse_streamer.constant(OutputState.ZERO())
+            self.pulse_streamer.constant(OutputState([0], 0, 0))
             print("🛑 Pulse sequence stopped")
         except Exception as e:
             print(f"❌ Error stopping sequence: {e}")
