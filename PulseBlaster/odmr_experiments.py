@@ -533,7 +533,8 @@ class ODMRExperiments:
                  readout_laser_delay: Optional[int] = None,
                  detection_delay: Optional[int] = None,
                  sequence_interval: int = 10000,
-                 repetitions: int = 1000) -> Dict:
+                 repetitions: int = 1000,
+                 progress_callback: Optional[callable] = None) -> Dict:
         """
         Perform T1 decay time measurement.
         
@@ -566,14 +567,47 @@ class ODMRExperiments:
             n_values=repetitions
         )
         
-        for delay_time in delay_times:
-            print(f"⏱️ Delay time: {delay_time} ns")
+        # Pre-calculate the maximum sequence duration to maintain constant repetition period
+        max_delay = max(delay_times)
+        max_readout_delay = readout_laser_delay if readout_laser_delay is not None else init_laser_delay + init_laser_duration + max_delay
+        max_detection_delay = detection_delay if detection_delay is not None else max_readout_delay
+        
+        # Calculate maximum sequence duration (aligned to 8ns)
+        max_seq_duration = self.pulse_controller.align_timing(
+            max(
+                init_laser_delay + init_laser_duration,
+                max_readout_delay + readout_laser_duration,
+                max_detection_delay + detection_duration
+            )
+        )
+        
+        # Calculate the constant total period (sequence + interval) that will be used for all delays
+        constant_total_period = max_seq_duration + self.pulse_controller.align_timing(sequence_interval)
+        
+        print(f"📏 Maximum sequence duration: {max_seq_duration} ns (for delay={max_delay} ns)")
+        print(f"📏 Constant total period per repetition: {constant_total_period} ns")
+        
+        total_delays = len(delay_times)
+        for idx, delay_time in enumerate(delay_times):
+            print(f"⏱️ Delay time: {delay_time} ns ({idx+1}/{total_delays})")
+            
+            # Call progress callback if provided
+            if progress_callback:
+                progress = int((idx / total_delays) * 100)
+                progress_callback(progress, delay_time, idx, total_delays)
             
             # Calculate readout laser delay if not provided
             local_readout_delay = readout_laser_delay if readout_laser_delay is not None else init_laser_delay + init_laser_duration + delay_time
             local_detection_delay = detection_delay if detection_delay is not None else local_readout_delay
             
-            # Create T1 decay sequence
+            # For shorter delays, we need to add extra waiting time to maintain constant period
+            # The total period = max_seq_duration + adjusted_interval should always be constant
+            adjusted_interval = constant_total_period - max_seq_duration
+            adjusted_interval = self.pulse_controller.align_timing(adjusted_interval)
+            
+            print(f"  Using fixed seq duration: {max_seq_duration} ns, Interval: {adjusted_interval} ns, Total period: {max_seq_duration + adjusted_interval} ns")
+            
+            # Create T1 decay sequence with fixed sequence duration
             sequence, total_duration = self._create_t1_sequence(
                 init_laser_duration=init_laser_duration,
                 readout_laser_duration=readout_laser_duration,
@@ -582,8 +616,9 @@ class ODMRExperiments:
                 init_laser_delay=init_laser_delay,
                 readout_laser_delay=local_readout_delay,
                 detection_delay=local_detection_delay,
-                sequence_interval=sequence_interval,
-                repetitions=repetitions
+                sequence_interval=adjusted_interval,
+                repetitions=repetitions,
+                fixed_seq_duration=max_seq_duration
             )
             
             if sequence:
@@ -623,7 +658,8 @@ class ODMRExperiments:
                            readout_laser_delay: int,
                            detection_delay: int,
                            sequence_interval: int,
-                           repetitions: int) -> Optional[Tuple]:
+                           repetitions: int,
+                           fixed_seq_duration: Optional[int] = None) -> Optional[Tuple]:
         """
         Create T1 decay pulse sequence.
         
@@ -632,6 +668,10 @@ class ODMRExperiments:
         - Delay period: delay_time between end of init laser and start of readout
         - Readout laser: starts at readout_laser_delay, duration readout_laser_duration  
         - Detection: starts at detection_delay (typically same as readout), duration detection_duration
+        
+        Args:
+            fixed_seq_duration: If provided, use this as the sequence duration instead of calculating it.
+                               This ensures constant period across different delay values.
         """
         try:
             # Align all timing parameters to 8 ns boundaries
@@ -644,15 +684,18 @@ class ODMRExperiments:
             detection_delay = self.pulse_controller.align_timing(detection_delay)
             sequence_interval = self.pulse_controller.align_timing(sequence_interval)
             
-            # Calculate total sequence duration per repetition
-            single_seq_duration = max(
-                init_laser_delay + init_laser_duration,
-                readout_laser_delay + readout_laser_duration,
-                detection_delay + detection_duration
-            )
-            
-            # Ensure single sequence duration is 8ns aligned
-            single_seq_duration = self.pulse_controller.align_timing(single_seq_duration)
+            # Use fixed sequence duration if provided, otherwise calculate it
+            if fixed_seq_duration is not None:
+                single_seq_duration = self.pulse_controller.align_timing(fixed_seq_duration)
+            else:
+                # Calculate total sequence duration per repetition
+                single_seq_duration = max(
+                    init_laser_delay + init_laser_duration,
+                    readout_laser_delay + readout_laser_duration,
+                    detection_delay + detection_duration
+                )
+                # Ensure single sequence duration is 8ns aligned
+                single_seq_duration = self.pulse_controller.align_timing(single_seq_duration)
             
             # Create pattern arrays for each channel
             aom_pattern = []

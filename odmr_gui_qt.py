@@ -232,37 +232,35 @@ class T1Worker(QThread):
             delay_times = self.parameters['delay_times']
             total_points = len(delay_times)
             
-            all_delays = []
-            all_count_rates = []
+            # Run T1 measurement with all delays at once to maintain constant period
+            self.status_updated.emit(f"Running T1 decay measurement with {total_points} delay values...")
+            self.progress_updated.emit(0)
             
-            for i, delay in enumerate(delay_times):
-                if not self.is_running:
-                    break
+            # Define progress callback
+            def progress_cb(progress, delay, idx, total):
+                if self.is_running:
+                    self.progress_updated.emit(progress)
+                    self.status_updated.emit(f"Measuring {delay} ns delay ({idx+1}/{total})")
+            
+            result = self.experiments.t1_decay(
+                delay_times=delay_times,
+                init_laser_duration=self.parameters['init_laser_duration'],
+                readout_laser_duration=self.parameters['readout_laser_duration'],
+                detection_duration=self.parameters['detection_duration'],
+                init_laser_delay=self.parameters['init_laser_delay'],
+                readout_laser_delay=self.parameters.get('readout_laser_delay'),
+                detection_delay=self.parameters.get('detection_delay'),
+                sequence_interval=self.parameters['sequence_interval'],
+                repetitions=self.parameters['repetitions'],
+                progress_callback=progress_cb
+            )
+            
+            if result and 'delays' in result and 'count_rates' in result:
+                all_delays = result['delays']
+                all_count_rates = result['count_rates']
                 
-                # Update progress and status
-                progress = int((i / total_points) * 100)
-                self.progress_updated.emit(progress)
-                self.status_updated.emit(f"Measuring {delay} ns delay ({i+1}/{total_points})")
-                
-                # Run single delay measurement
-                result = self.experiments.t1_decay(
-                    delay_times=[delay],
-                    init_laser_duration=self.parameters['init_laser_duration'],
-                    readout_laser_duration=self.parameters['readout_laser_duration'],
-                    detection_duration=self.parameters['detection_duration'],
-                    init_laser_delay=self.parameters['init_laser_delay'],
-                    readout_laser_delay=self.parameters.get('readout_laser_delay'),
-                    detection_delay=self.parameters.get('detection_delay'),
-                    sequence_interval=self.parameters['sequence_interval'],
-                    repetitions=self.parameters['repetitions']
-                )
-                
-                if result and 'count_rates' in result and len(result['count_rates']) > 0:
-                    all_delays.append(delay)
-                    all_count_rates.append(result['count_rates'][0])
-                    
-                    # Emit data update for real-time plotting
-                    self.data_updated.emit(all_delays.copy(), all_count_rates.copy())
+                # Emit final data update for plotting
+                self.data_updated.emit(all_delays, all_count_rates)
             
             if self.is_running:
                 self.progress_updated.emit(100)
