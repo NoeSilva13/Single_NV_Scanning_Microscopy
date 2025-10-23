@@ -534,7 +534,8 @@ class ODMRExperiments:
                  detection_delay: Optional[int] = None,
                  sequence_interval: int = 10000,
                  repetitions: int = 1000,
-                 progress_callback: Optional[callable] = None) -> Dict:
+                 progress_callback: Optional[callable] = None,
+                 data_callback: Optional[callable] = None) -> Dict:
         """
         Perform T1 decay time measurement.
         
@@ -637,6 +638,10 @@ class ODMRExperiments:
                 
                 delays.append(delay_time)
                 count_rates.append(count_rate)
+                
+                # Call data callback if provided for live plot updates
+                if data_callback:
+                    data_callback(delays.copy(), count_rates.copy())
                 
                 time.sleep(0.05)
         

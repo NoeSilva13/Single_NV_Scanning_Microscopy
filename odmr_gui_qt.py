@@ -242,6 +242,11 @@ class T1Worker(QThread):
                     self.progress_updated.emit(progress)
                     self.status_updated.emit(f"Measuring {delay} ns delay ({idx+1}/{total})")
             
+            # Define data callback for live plot updates
+            def data_cb(delays, count_rates):
+                if self.is_running:
+                    self.data_updated.emit(delays, count_rates)
+            
             result = self.experiments.t1_decay(
                 delay_times=delay_times,
                 init_laser_duration=self.parameters['init_laser_duration'],
@@ -252,7 +257,8 @@ class T1Worker(QThread):
                 detection_delay=self.parameters.get('detection_delay'),
                 sequence_interval=self.parameters['sequence_interval'],
                 repetitions=self.parameters['repetitions'],
-                progress_callback=progress_cb
+                progress_callback=progress_cb,
+                data_callback=data_cb
             )
             
             if result and 'delays' in result and 'count_rates' in result:
