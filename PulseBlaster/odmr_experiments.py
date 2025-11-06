@@ -106,11 +106,11 @@ class ODMRExperiments:
         count_rates = []
         
         # Initialize TimeTagger counter
-        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
+        self.counter = TimeTagger.Counter(tagger=self.tagger, channels=[1], binwidth=acquisition_time*1e12, n_values=1)
         
         # Turn on laser (AOM)
         self.pulse_controller.pulse_streamer.constant(OutputState([0, 1, 2], 0, 0))
-        time.sleep(0.1)  # Let laser stabilize
+        time.sleep(5)  # Let laser stabilize
         print("Laser on")
 
         # Set initial MW power
@@ -128,14 +128,14 @@ class ODMRExperiments:
                     
                 # Clear counter and wait for acquisition
                 self.counter.clear()
-                time.sleep(acquisition_time)
+                self.counter.startFor(acquisition_time*1e12)
+                self.counter.waitUntilFinished(timeout=-1)
                 
-                # Get count rate
-                count_rate = np.mean(self.counter.getData())
-                print(f"Count rate: {count_rate} Hz")
+                counts = self.counter.getDataNormalized()[0][0]
+                print(f"Counts: {counts}")
                 
                 frequencies.append(freq)
-                count_rates.append(count_rate)
+                count_rates.append(counts)
                 
         finally:
             # Clean up: turn off MW and laser
@@ -212,8 +212,8 @@ class ODMRExperiments:
             sequence_interval=sequence_interval,
             repetitions=repetitions
             )
-        #self.counter = CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=3, end_channel=-3, n_values=repetitions)
-        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
+        self.counter = TimeTagger.CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=2, end_channel=-2, n_values=repetitions)
+        #self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
         if self.mw_generator:
             self.mw_generator.set_rf_output(True)
         for freq in mw_frequencies:
@@ -222,10 +222,15 @@ class ODMRExperiments:
             if self.mw_generator:
                 self.mw_generator.set_odmr_frequency(freq / 1e9)  # Convert Hz to GHz
                 
-            self.counter.clear() 
+            self.counter.start()
             self.pulse_controller.run_sequence(sequence)
-            time.sleep(total_duration/1e9)  # Let sequence complete
-            self.pulse_controller.stop_sequence()
+            
+            ready=False
+            while ready is False:
+                time.sleep(.2)
+                ready = self.counter.ready()
+                counts = self.counter.getData()
+                print(f"Counts: {counts}")
                 
             # Get real count rate from TimeTagger
             count_rate = np.mean(self.counter.getData())
@@ -898,7 +903,7 @@ def run_example_experiments():
     
     # Initialize RIGOL signal generator
     try:
-        rigol = RigolDSG836Controller("192.168.0.224")
+        rigol = RigolDSG836Controller("192.168.0.223")
         if rigol.connect():
             print("✅ RIGOL DSG836 connected successfully")
         else:
@@ -914,11 +919,11 @@ def run_example_experiments():
     try:
         #1. Continuous Wave ODMR
         print("\n" + "="*50)
-        frequencies = np.linspace(2.7e9, 3e9, 3)  # 2.85-2.89 GHz
+        frequencies = np.linspace(2.7e9, 3e9, 100)  # 2.85-2.89 GHz
         cw_odmr_result = experiments.cw_odmr(
             mw_frequencies=frequencies,
-            acquisition_time=10,  # 1 seconds per point
-            mw_power=-10.0  # -10 dBm
+            acquisition_time=0.5,  # 1 seconds per point
+            mw_power=0  # -10 dBm
         )
         
         # Save data using odmr_data_manager

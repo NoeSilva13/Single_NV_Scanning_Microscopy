@@ -397,7 +397,7 @@ class DeviceStatusWidget(QGroupBox):
         # Pulse Streamer status
         ps_layout = QHBoxLayout()
         ps_layout.addWidget(QLabel("Pulse Streamer:"))
-        self.ps_ip = QLineEdit("192.168.0.201")
+        self.ps_ip = QLineEdit("192.168.0.203")
         self.ps_ip.setPlaceholderText("IP address")
         self.ps_ip.setToolTip("Enter IP address for Pulse Streamer network connection")
         ps_layout.addWidget(self.ps_ip)
@@ -412,7 +412,7 @@ class DeviceStatusWidget(QGroupBox):
         # RIGOL status
         rigol_layout = QHBoxLayout()
         rigol_layout.addWidget(QLabel("RIGOL DSG836:"))
-        self.rigol_ip = QLineEdit("192.168.0.222")
+        self.rigol_ip = QLineEdit("192.168.0.223")
         rigol_layout.addWidget(self.rigol_ip)
         self.rigol_status = QLabel("Disconnected")
         self.rigol_status.setStyleSheet("color: red; font-weight: bold;")
