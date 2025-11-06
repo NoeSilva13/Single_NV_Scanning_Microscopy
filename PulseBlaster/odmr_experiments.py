@@ -209,8 +209,7 @@ class ODMRExperiments:
             laser_delay=laser_delay,
             mw_delay=mw_delay,  # MW after laser
             detection_delay=detection_delay,
-            sequence_interval=sequence_interval,
-            repetitions=repetitions
+            sequence_interval=sequence_interval
             )
         self.counter = TimeTagger.CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=2, end_channel=-2, n_values=repetitions)
         #self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
@@ -222,22 +221,24 @@ class ODMRExperiments:
             if self.mw_generator:
                 self.mw_generator.set_odmr_frequency(freq / 1e9)  # Convert Hz to GHz
                 
-            self.counter.start()
-            self.pulse_controller.run_sequence(sequence)
             
-            ready=False
+            self.counter.start()
+            ready = False
+            self.pulse_controller.run_sequence(sequence, repetitions)
+        
             while ready is False:
                 time.sleep(.2)
                 ready = self.counter.ready()
+                information = self.counter.getBinWidths()
+                print(f"Information: {information}")
+                print(f"Ready: {ready}")
                 counts = self.counter.getData()
-                print(f"Counts: {counts}")
-                
-            # Get real count rate from TimeTagger
-            count_rate = np.mean(self.counter.getData())
-            print(f"Count rate: {count_rate} Hz")
+                print(f"Counts: {counts}") 
+            
+            self.counter.clear()    
                 
             frequencies.append(freq)
-            count_rates.append(count_rate)
+            count_rates.append(counts)
         # Turn off RF output after measurement
         if self.mw_generator:
                     self.mw_generator.set_rf_output(False)
@@ -245,7 +246,8 @@ class ODMRExperiments:
             'frequencies': frequencies,
             'count_rates': count_rates
         }
-        
+        print(f"Count rates: {count_rates}")
+        print(f"Frequencies: {frequencies}")
         print("✅ ODMR measurement completed")
         return self.results['odmr']
     
@@ -301,18 +303,17 @@ class ODMRExperiments:
                 laser_delay=laser_delay,
                 mw_delay=local_mw_delay,
                 detection_delay=local_detection_delay,
-                sequence_interval=sequence_interval,
-                repetitions=repetitions
+                sequence_interval=sequence_interval
             )
             
             if sequence:
                 # Enable RF output for this measurement
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(True)
-                
+
                 self.counter.clear()
-                self.pulse_controller.run_sequence(sequence)
-                time.sleep(total_duration/1e9)
+                self.pulse_controller.run_sequence(sequence, n_runs=repetitions)
+                time.sleep(total_duration/1e9 * repetitions)
                 self.pulse_controller.stop_sequence()
                 # Get real count rate from TimeTagger
                 count_rate = np.mean(self.counter.getData())
@@ -478,14 +479,13 @@ class ODMRExperiments:
         )
         
         # Create ODMR sequence for each frequency point
-        sequence = self.pulse_controller.create_odmr_sequence(
+        sequence, total_duration = self.pulse_controller.create_odmr_sequence(
             laser_duration=laser_duration,
             mw_duration=detection_duration,
             detection_duration=detection_duration,
             laser_delay=0,
             mw_delay=laser_duration + 100,
-            detection_delay=laser_duration + 100,
-            repetitions=measurements_per_point
+            detection_delay=laser_duration + 100
         )
         
         frequencies = []
@@ -501,11 +501,11 @@ class ODMRExperiments:
             # Get current frequency for logging
             current_freq = start_freq_ghz + (stop_freq_ghz - start_freq_ghz) * i / (num_points - 1)
             print(f"📡 Point {i+1}/{num_points}: {current_freq:.4f} GHz")
-            
+
             if sequence:
-                self.pulse_controller.run_sequence(sequence)
-                time.sleep(0.1)
-                
+                self.pulse_controller.run_sequence(sequence, n_runs=measurements_per_point)
+                time.sleep(total_duration/1e9 * measurements_per_point)
+
                 # Get real count rate from TimeTagger
                 count_rate = self._get_count_rate()
                 
@@ -581,13 +581,12 @@ class ODMRExperiments:
                 init_laser_delay=init_laser_delay,
                 readout_laser_delay=local_readout_delay,
                 detection_delay=local_detection_delay,
-                sequence_interval=sequence_interval,
-                repetitions=repetitions
+                sequence_interval=sequence_interval
             )
             
             if sequence:
                 self.counter.clear()
-                self.pulse_controller.run_sequence(sequence)
+                self.pulse_controller.run_sequence(sequence, n_runs=repetitions)
                 time.sleep(total_duration/1e9)
                 self.pulse_controller.stop_sequence()
                 
@@ -608,7 +607,7 @@ class ODMRExperiments:
         print("✅ T1 decay measurement completed")
         return self.results['t1_decay']
     
-    def _create_t1_sequence(self, 
+    def _create_t1_sequence(self,
                            init_laser_duration: int,
                            readout_laser_duration: int,
                            detection_duration: int,
@@ -616,8 +615,7 @@ class ODMRExperiments:
                            init_laser_delay: int,
                            readout_laser_delay: int,
                            detection_delay: int,
-                           sequence_interval: int,
-                           repetitions: int) -> Optional[Tuple]:
+                           sequence_interval: int) -> Optional[Tuple]:
         """
         Create T1 decay pulse sequence.
         
@@ -648,44 +646,38 @@ class ODMRExperiments:
             # Ensure single sequence duration is 8ns aligned
             single_seq_duration = self.pulse_controller.align_timing(single_seq_duration)
             
-            # Create pattern arrays for each channel
+            # Create pattern arrays for each channel (single repetition)
             aom_pattern = []
             spd_pattern = []
-            
-            for rep in range(repetitions):
-                # Add inter-sequence delay if not first repetition
-                if rep > 0:
-                    aom_pattern.append((sequence_interval, 0))
-                    spd_pattern.append((sequence_interval, 0))
-                
-                # AOM pattern: init laser -> off during delay -> readout laser
-                if init_laser_delay > 0:
-                    aom_pattern.append((init_laser_delay, 0))
-                aom_pattern.append((init_laser_duration, 1))  # Init laser ON
-                
-                # Calculate time until readout laser
-                time_to_readout = readout_laser_delay - (init_laser_delay + init_laser_duration)
-                if time_to_readout > 0:
-                    aom_pattern.append((time_to_readout, 0))
-                
-                aom_pattern.append((readout_laser_duration, 1))  # Readout laser ON
-                
-                # Fill remaining time to complete sequence
-                used_time = readout_laser_delay + readout_laser_duration
-                remaining_time = single_seq_duration - used_time
-                if remaining_time > 0:
-                    aom_pattern.append((remaining_time, 0))
-                
-                # SPD pattern: off during init laser and delay -> detection during readout
-                if detection_delay > 0:
-                    spd_pattern.append((detection_delay, 0))
-                spd_pattern.append((detection_duration, 1))  # SPD ON for detection
-                
-                # Fill remaining time to complete sequence
-                used_time_spd = detection_delay + detection_duration
-                remaining_time_spd = single_seq_duration - used_time_spd
-                if remaining_time_spd > 0:
-                    spd_pattern.append((remaining_time_spd, 0))
+
+            # AOM pattern: init laser -> off during delay -> readout laser
+            if init_laser_delay > 0:
+                aom_pattern.append((init_laser_delay, 0))
+            aom_pattern.append((init_laser_duration, 1))  # Init laser ON
+
+            # Calculate time until readout laser
+            time_to_readout = readout_laser_delay - (init_laser_delay + init_laser_duration)
+            if time_to_readout > 0:
+                aom_pattern.append((time_to_readout, 0))
+
+            aom_pattern.append((readout_laser_duration, 1))  # Readout laser ON
+
+            # Fill remaining time to complete sequence
+            used_time = readout_laser_delay + readout_laser_duration
+            remaining_time = single_seq_duration - used_time
+            if remaining_time > 0:
+                aom_pattern.append((remaining_time, 0))
+
+            # SPD pattern: off during init laser and delay -> detection during readout
+            if detection_delay > 0:
+                spd_pattern.append((detection_delay, 0))
+            spd_pattern.append((detection_duration, 1))  # SPD ON for detection
+
+            # Fill remaining time to complete sequence
+            used_time_spd = detection_delay + detection_duration
+            remaining_time_spd = single_seq_duration - used_time_spd
+            if remaining_time_spd > 0:
+                spd_pattern.append((remaining_time_spd, 0))
             
             # Validate total pattern duration is 8ns aligned
             total_duration = sum(duration for duration, _ in aom_pattern)
@@ -918,36 +910,36 @@ def run_example_experiments():
     
     try:
         #1. Continuous Wave ODMR
+        # print("\n" + "="*50)
+        # frequencies = np.linspace(2.7e9, 3e9, 100)  # 2.85-2.89 GHz
+        # cw_odmr_result = experiments.cw_odmr(
+        #     mw_frequencies=frequencies,
+        #     acquisition_time=0.5,  # 1 seconds per point
+        #     mw_power=0  # -10 dBm
+        # )
+        
+        # # Save data using odmr_data_manager
+        # import sys
+        # import os
+        # # Add parent directory to path to import odmr_data_manager
+        # sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        # from odmr_data_manager import ODMRDataManager
+        # data_manager = ODMRDataManager()
+        # saved_file = data_manager.save_experiment_data(
+        #     experiment_type='odmr',
+        #     x_data=cw_odmr_result['frequencies'],
+        #     count_rates=cw_odmr_result['count_rates'],
+        #     parameters=cw_odmr_result['parameters']
+        # )
+        # print(f"✅ Data saved to: {saved_file}")
+        
+        # experiments.plot_results('cw_odmr')
+        
+        # 2. ODMR
         print("\n" + "="*50)
-        frequencies = np.linspace(2.7e9, 3e9, 100)  # 2.85-2.89 GHz
-        cw_odmr_result = experiments.cw_odmr(
-            mw_frequencies=frequencies,
-            acquisition_time=0.5,  # 1 seconds per point
-            mw_power=0  # -10 dBm
-        )
-        
-        # Save data using odmr_data_manager
-        import sys
-        import os
-        # Add parent directory to path to import odmr_data_manager
-        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        from odmr_data_manager import ODMRDataManager
-        data_manager = ODMRDataManager()
-        saved_file = data_manager.save_experiment_data(
-            experiment_type='odmr',
-            x_data=cw_odmr_result['frequencies'],
-            count_rates=cw_odmr_result['count_rates'],
-            parameters=cw_odmr_result['parameters']
-        )
-        print(f"✅ Data saved to: {saved_file}")
-        
-        experiments.plot_results('cw_odmr')
-        
-        #2. ODMR
-        #print("\n" + "="*50)
-        #frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        #odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=1000, laser_delay=0, mw_delay=6000, detection_delay=2000, sequence_interval=10000, repetitions=2)
-        #experiments.plot_results('odmr')
+        frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
+        odmr_result = experiments.odmr(frequencies, laser_duration=50000, mw_duration=50000, detection_duration=50000, laser_delay=10000, mw_delay=0, detection_delay=0, sequence_interval=10000, repetitions=1000)
+        experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
         #print("\n" + "="*50)
