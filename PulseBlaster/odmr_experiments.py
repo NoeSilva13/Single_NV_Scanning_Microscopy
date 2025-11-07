@@ -263,18 +263,19 @@ class ODMRExperiments:
             Dictionary containing MW durations and count rates
         """
         print("🔬 Starting Rabi oscillation measurement...")
-        
+
         durations = []
         count_rates = []
-        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
+        # Set up TimeTagger counter for Rabi measurements
+        self.counter = TimeTagger.CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=2, end_channel=-2, n_values=repetitions)
         # Set MW frequency and power for Rabi oscillation
         if self.mw_generator:
             self.mw_generator.set_odmr_frequency(mw_frequency / 1e9)  # Convert Hz to GHz
             self.mw_generator.prepare_for_odmr(mw_frequency / 1e9, -10.0)
-        
+
         for mw_duration in mw_durations:
             print(f"⏱️ MW duration: {mw_duration} ns")
-            
+
             # Calculate default delays for this duration if not provided
             local_mw_delay = mw_delay if mw_delay is not None else laser_duration + 1000
             local_detection_delay = detection_delay if detection_delay is not None else local_mw_delay + mw_duration + 100
@@ -289,29 +290,38 @@ class ODMRExperiments:
                 detection_delay=local_detection_delay,
                 sequence_interval=sequence_interval
             )
-            
+
             if sequence:
                 # Enable RF output for this measurement
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(True)
 
+                self.counter.start()
+                ready = False
+                self.pulse_controller.run_sequence(sequence, repetitions)
+
+                while ready is False:
+                    time.sleep(.2)
+                    ready = self.counter.ready()
+                    information = self.counter.getBinWidths()
+                    print(f"Information: {information}")
+                    print(f"Ready: {ready}")
+                    counts = self.counter.getData()
+                    print(f"Counts: {counts}")
+
                 self.counter.clear()
-                self.pulse_controller.run_sequence(sequence, n_runs=repetitions)
-                time.sleep(total_duration/1e9 * repetitions)
-                self.pulse_controller.stop_sequence()
+
                 # Get real count rate from TimeTagger
-                count_rate = np.mean(self.counter.getData())
+                count_rate = np.mean(counts)/np.mean(information)
                 print(f"Count rate: {count_rate} Hz")
-                
+
                 durations.append(mw_duration)
                 count_rates.append(count_rate)
-                
-                
-                
+
                 # Turn off RF output after measurement
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(False)
-                    
+
                 time.sleep(0.05)
         
         self.results['rabi'] = {
@@ -926,16 +936,16 @@ def run_example_experiments():
         # experiments.plot_results('cw_odmr')
         
         # 2. ODMR
-        print("\n" + "="*50)
-        frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=100)
-        experiments.plot_results('odmr')
+        # print("\n" + "="*50)
+        # frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
+        # odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=100)
+        # experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
-        #print("\n" + "="*50)
-        #mw_durations = np.arange(0, 200, 5)  # 0-200 ns in 5 ns steps
-        #rabi_result = experiments.rabi_oscillation(mw_durations)
-        #experiments.plot_results('rabi')
+        print("\n" + "="*50)
+        mw_durations = np.arange(0, 10000, 500)  # 0-200 ns in 5 ns steps
+        rabi_result = experiments.rabi_oscillation(mw_durations, 2.87e9, 5000, 5000, 0, 6000, 0, 1000, 1000)
+        experiments.plot_results('rabi')
         
         # 3. Ramsey experiment
         #print("\n" + "="*50)
