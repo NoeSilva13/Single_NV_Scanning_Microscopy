@@ -662,22 +662,28 @@ class ODMRExperiments:
 
             aom_pattern.append((readout_laser_duration, 1))  # Readout laser ON
 
-            # Fill remaining time to complete sequence
+            # Fill remaining time to complete sequence (excluding interval)
             used_time = readout_laser_delay + readout_laser_duration
             remaining_time = single_seq_duration - used_time
             if remaining_time > 0:
                 aom_pattern.append((remaining_time, 0))
+
+            # Append sequence interval at the end
+            aom_pattern.append((sequence_interval, 0))
 
             # SPD pattern: off during init laser and delay -> detection during readout
             if detection_delay > 0:
                 spd_pattern.append((detection_delay, 0))
             spd_pattern.append((detection_duration, 1))  # SPD ON for detection
 
-            # Fill remaining time to complete sequence
+            # Fill remaining time to complete sequence (excluding interval)
             used_time_spd = detection_delay + detection_duration
             remaining_time_spd = single_seq_duration - used_time_spd
             if remaining_time_spd > 0:
                 spd_pattern.append((remaining_time_spd, 0))
+
+            # Append sequence interval at the end
+            spd_pattern.append((sequence_interval, 0))
             
             # Validate total pattern duration is 8ns aligned
             total_duration = sum(duration for duration, _ in aom_pattern)
@@ -938,7 +944,7 @@ def run_example_experiments():
         # 2. ODMR
         print("\n" + "="*50)
         frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        odmr_result = experiments.odmr(frequencies, laser_duration=50000, mw_duration=50000, detection_duration=50000, laser_delay=10000, mw_delay=0, detection_delay=0, sequence_interval=10000, repetitions=10)
+        odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=100)
         experiments.plot_results('odmr')
         
         # 2. Rabi oscillation

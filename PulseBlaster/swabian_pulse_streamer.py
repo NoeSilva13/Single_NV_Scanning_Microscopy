@@ -242,11 +242,14 @@ class SwabianPulseController:
             pattern.append((params['laser_delay'], 0))
         pattern.append((params['laser_duration'], 1))
 
-        # Calculate remaining time to fill sequence duration
+        # Fill remaining time to sequence duration (excluding interval)
         used_time = params['laser_delay'] + params['laser_duration']
         remaining_time = seq_duration - used_time
         if remaining_time > 0:
             pattern.append((remaining_time, 0))
+
+        # Append sequence interval at the end
+        pattern.append((params['sequence_interval'], 0))
 
         return pattern
     
@@ -259,11 +262,14 @@ class SwabianPulseController:
             pattern.append((params['mw_delay'], 0))
         pattern.append((params['mw_duration'], 1))
 
-        # Calculate remaining time to fill sequence duration
+        # Fill remaining time to sequence duration (excluding interval)
         used_time = params['mw_delay'] + params['mw_duration']
         remaining_time = seq_duration - used_time
         if remaining_time > 0:
             pattern.append((remaining_time, 0))
+
+        # Append sequence interval at the end
+        pattern.append((params['sequence_interval'], 0))
 
         return pattern
     
@@ -276,11 +282,14 @@ class SwabianPulseController:
             pattern.append((params['detection_delay'], 0))
         pattern.append((params['detection_duration'], 1))
 
-        # Calculate remaining time to fill sequence duration
+        # Fill remaining time to sequence duration (excluding interval)
         used_time = params['detection_delay'] + params['detection_duration']
         remaining_time = seq_duration - used_time
         if remaining_time > 0:
             pattern.append((remaining_time, 0))
+
+        # Append sequence interval at the end
+        pattern.append((params['sequence_interval'], 0))
 
         return pattern
     
