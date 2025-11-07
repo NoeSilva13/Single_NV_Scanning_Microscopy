@@ -238,7 +238,7 @@ class ODMRExperiments:
             self.counter.clear()    
                 
             frequencies.append(freq)
-            count_rates.append(counts)
+            count_rates.append(np.mean(counts)/np.mean(information))
         # Turn off RF output after measurement
         if self.mw_generator:
                     self.mw_generator.set_rf_output(False)
@@ -938,7 +938,7 @@ def run_example_experiments():
         # 2. ODMR
         print("\n" + "="*50)
         frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        odmr_result = experiments.odmr(frequencies, laser_duration=50000, mw_duration=50000, detection_duration=50000, laser_delay=10000, mw_delay=0, detection_delay=0, sequence_interval=10000, repetitions=1000)
+        odmr_result = experiments.odmr(frequencies, laser_duration=50000, mw_duration=50000, detection_duration=50000, laser_delay=10000, mw_delay=0, detection_delay=0, sequence_interval=10000, repetitions=10)
         experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
