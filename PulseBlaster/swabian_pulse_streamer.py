@@ -17,6 +17,7 @@ Date: 2025
 
 import numpy as np
 import time
+import threading
 from typing import List, Tuple, Optional, Dict
 try:
     from pulsestreamer import PulseStreamer, OutputState, Sequence
@@ -226,7 +227,11 @@ class SwabianPulseController:
             sequence.setDigital(self.CHANNEL_SPD, spd_pattern)
 
             print(f"✅ ODMR sequence created: single repetition, {total_duration} ns duration (8ns aligned)")
-            sequence.plot()
+
+            # Only plot sequence when running in main thread (not in GUI worker threads)
+            if threading.current_thread() is threading.main_thread():
+                sequence.plot()
+
             return sequence, total_duration
             
         except Exception as e:
