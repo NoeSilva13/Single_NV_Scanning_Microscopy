@@ -64,22 +64,6 @@ class ODMRExperiments:
                 self.tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
                 self.tagger.run()
                 print("✅ Virtual TimeTagger started")
-        
-        # Set bin width to 5 ns and initialize counter
-        #self.binwidth = int(5e9)  # 5 ns in ps
-        #n_values = 1
-        #self.counter = Counter(self.tagger, [1], self.binwidth, n_values)
-    
-    def _get_count_rate(self) -> float:
-        """
-        Get count rate from TimeTagger.
-        
-        Returns:
-            Count rate in Hz
-        """
-        #counts = self.counter.getData()[0][0]/(self.binwidth/1e12)
-        #return counts
-        return 0
     
     def cw_odmr(self, 
                   mw_frequencies: List[float],
