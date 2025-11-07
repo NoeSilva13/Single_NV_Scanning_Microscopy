@@ -65,6 +65,15 @@ class ODMRExperiments:
                 self.tagger.run()
                 print("✅ Virtual TimeTagger started")
     
+    def cleanup(self):
+        """
+        Clean up TimeTagger resources.
+        Call this when done with experiments.
+        """
+        if hasattr(self, 'tagger'):
+            self.tagger.reset()
+            print("✅ TimeTagger resources cleaned up")
+    
     def cw_odmr(self, 
                   mw_frequencies: List[float],
                   acquisition_time: float = 1.0,  # Time per point in seconds
@@ -139,15 +148,6 @@ class ODMRExperiments:
         
         print("✅ CW-ODMR measurement completed")
         return self.results['cw_odmr']
-
-    def cleanup(self):
-        """
-        Clean up TimeTagger resources.
-        Call this when done with experiments.
-        """
-        if hasattr(self, 'tagger'):
-            self.tagger.reset()
-            print("✅ TimeTagger resources cleaned up")
     
     def odmr(self, 
                            mw_frequencies: List[float],
