@@ -17,6 +17,7 @@ Date: 2025
 
 import numpy as np
 import time
+import threading
 from typing import List, Tuple, Optional, Dict
 try:
     from pulsestreamer import PulseStreamer, OutputState, Sequence
@@ -150,15 +151,14 @@ class SwabianPulseController:
         except Exception as e:
             print(f"❌ Error resetting device: {e}")
     
-    def create_odmr_sequence(self, 
+    def create_odmr_sequence(self,
                            laser_duration: int = None,
                            mw_duration: int = None,
                            detection_duration: int = None,
                            laser_delay: int = None,
                            mw_delay: int = None,
                            detection_delay: int = None,
-                           sequence_interval: int = None,
-                           repetitions: int = 1) -> Optional[Sequence]:
+                           sequence_interval: int = None) -> Optional[Sequence]:
         """
         Create an ODMR pulse sequence following proper 8ns pattern building.
         
@@ -208,9 +208,9 @@ class SwabianPulseController:
             single_seq_duration = self.align_timing(single_seq_duration)
             
             # Create pattern arrays following the working approach
-            aom_pattern = self._create_laser_pattern(params, single_seq_duration, repetitions)
-            mw_pattern = self._create_mw_pattern(params, single_seq_duration, repetitions)
-            spd_pattern = self._create_spd_pattern(params, single_seq_duration, repetitions)
+            aom_pattern = self._create_laser_pattern(params, single_seq_duration)
+            mw_pattern = self._create_mw_pattern(params, single_seq_duration)
+            spd_pattern = self._create_spd_pattern(params, single_seq_duration)
             
             # Validate total pattern duration is 8ns aligned
             total_duration = sum(duration for duration, _ in aom_pattern)
@@ -218,88 +218,84 @@ class SwabianPulseController:
                 print(f"❌ Error: Total sequence length ({total_duration} ns) not multiple of 8 ns")
                 return None
             
-            # Calculate actual experiment time including intervals
-            sequence_time = single_seq_duration * repetitions + params['sequence_interval'] * (repetitions - 1)
-            
             # Create sequence using createSequence method like in working code
             sequence = self.pulse_streamer.createSequence()
-            
+
             # Set patterns for each channel
             sequence.setDigital(self.CHANNEL_AOM, aom_pattern)
             sequence.setDigital(self.CHANNEL_MW, mw_pattern)
             sequence.setDigital(self.CHANNEL_SPD, spd_pattern)
-            
-            print(f"✅ ODMR sequence created: {repetitions} reps, {total_duration} ns total, {params['sequence_interval']} ns intervals (8ns aligned)")
+
+            print(f"✅ ODMR sequence created: single repetition, {total_duration} ns duration (8ns aligned)")
+
+            # Only plot sequence when running in main thread (not in GUI worker threads)
+            if threading.current_thread() is threading.main_thread():
+                sequence.plot()
+
             return sequence, total_duration
             
         except Exception as e:
             print(f"❌ Error creating ODMR sequence: {e}")
             return None
     
-    def _create_laser_pattern(self, params: Dict, seq_duration: int, repetitions: int) -> List[Tuple[int, int]]:
-        """Create laser (AOM) pattern array."""
+    def _create_laser_pattern(self, params: Dict, seq_duration: int) -> List[Tuple[int, int]]:
+        """Create laser (AOM) pattern array for a single repetition."""
         pattern = []
-        
-        for rep in range(repetitions):
-            # Add inter-sequence delay if not first repetition
-            if rep > 0:
-                pattern.append((params['sequence_interval'], 0))
-            
-            # Laser pulse timing
-            if params['laser_delay'] > 0:
-                pattern.append((params['laser_delay'], 0))
-            pattern.append((params['laser_duration'], 1))
-            
-            # Calculate remaining time to fill sequence duration
-            used_time = params['laser_delay'] + params['laser_duration']
-            remaining_time = seq_duration - used_time
-            if remaining_time > 0:
-                pattern.append((remaining_time, 0))
-        
+
+        # Laser pulse timing
+        if params['laser_delay'] > 0:
+            pattern.append((params['laser_delay'], 0))
+        pattern.append((params['laser_duration'], 1))
+
+        # Fill remaining time to sequence duration (excluding interval)
+        used_time = params['laser_delay'] + params['laser_duration']
+        remaining_time = seq_duration - used_time
+        if remaining_time > 0:
+            pattern.append((remaining_time, 0))
+
+        # Append sequence interval at the end
+        pattern.append((params['sequence_interval'], 0))
+
         return pattern
     
-    def _create_mw_pattern(self, params: Dict, seq_duration: int, repetitions: int) -> List[Tuple[int, int]]:
-        """Create microwave pattern array."""
+    def _create_mw_pattern(self, params: Dict, seq_duration: int) -> List[Tuple[int, int]]:
+        """Create microwave pattern array for a single repetition."""
         pattern = []
-        
-        for rep in range(repetitions):
-            # Add inter-sequence delay if not first repetition
-            if rep > 0:
-                pattern.append((params['sequence_interval'], 0))
-            
-            # MW pulse timing
-            if params['mw_delay'] > 0:
-                pattern.append((params['mw_delay'], 0))
-            pattern.append((params['mw_duration'], 1))
-            
-            # Calculate remaining time to fill sequence duration
-            used_time = params['mw_delay'] + params['mw_duration']
-            remaining_time = seq_duration - used_time
-            if remaining_time > 0:
-                pattern.append((remaining_time, 0))
-        
+
+        # MW pulse timing
+        if params['mw_delay'] > 0:
+            pattern.append((params['mw_delay'], 0))
+        pattern.append((params['mw_duration'], 1))
+
+        # Fill remaining time to sequence duration (excluding interval)
+        used_time = params['mw_delay'] + params['mw_duration']
+        remaining_time = seq_duration - used_time
+        if remaining_time > 0:
+            pattern.append((remaining_time, 0))
+
+        # Append sequence interval at the end
+        pattern.append((params['sequence_interval'], 0))
+
         return pattern
     
-    def _create_spd_pattern(self, params: Dict, seq_duration: int, repetitions: int) -> List[Tuple[int, int]]:
-        """Create SPD gate pattern array."""
+    def _create_spd_pattern(self, params: Dict, seq_duration: int) -> List[Tuple[int, int]]:
+        """Create SPD gate pattern array for a single repetition."""
         pattern = []
-        
-        for rep in range(repetitions):
-            # Add inter-sequence delay if not first repetition
-            if rep > 0:
-                pattern.append((params['sequence_interval'], 0))
-            
-            # SPD gate timing
-            if params['detection_delay'] > 0:
-                pattern.append((params['detection_delay'], 0))
-            pattern.append((params['detection_duration'], 1))
-            
-            # Calculate remaining time to fill sequence duration
-            used_time = params['detection_delay'] + params['detection_duration']
-            remaining_time = seq_duration - used_time
-            if remaining_time > 0:
-                pattern.append((remaining_time, 0))
-        
+
+        # SPD gate timing
+        if params['detection_delay'] > 0:
+            pattern.append((params['detection_delay'], 0))
+        pattern.append((params['detection_duration'], 1))
+
+        # Fill remaining time to sequence duration (excluding interval)
+        used_time = params['detection_delay'] + params['detection_duration']
+        remaining_time = seq_duration - used_time
+        if remaining_time > 0:
+            pattern.append((remaining_time, 0))
+
+        # Append sequence interval at the end
+        pattern.append((params['sequence_interval'], 0))
+
         return pattern
     
     def _create_overlapping_sequence(self, params: Dict, repetitions: int) -> Optional[Sequence]:
@@ -358,21 +354,27 @@ class SwabianPulseController:
             print(f"❌ Error creating overlapping sequence: {e}")
             return None
     
-    def run_sequence(self, sequence: Sequence, start_immediately: bool = True):
+    def run_sequence(self, sequence: Sequence, n_runs: int = None):
         """
         Upload and run a pulse sequence.
-        
+
         Args:
             sequence: The pulse sequence to run
-            start_immediately: Whether to start the sequence immediately
+            n_runs: Number of times to repeat the sequence. If None, runs infinitely.
         """
         if not self.is_connected or sequence is None:
             print("❌ Cannot run sequence: device not connected or sequence is None")
             return
-        
+
         try:
-            self.pulse_streamer.stream(sequence, start_immediately)
-            print("🚀 Pulse sequence started")
+            if n_runs is None:
+                # Run infinitely by default
+                self.pulse_streamer.stream(sequence, PulseStreamer.REPEAT_INFINITELY)
+                print("🚀 Pulse sequence started (infinite repetitions)")
+            else:
+                # Run specified number of times
+                self.pulse_streamer.stream(sequence, n_runs)
+                print(f"🚀 Pulse sequence started ({n_runs} repetitions)")
         except Exception as e:
             print(f"❌ Error running sequence: {e}")
     

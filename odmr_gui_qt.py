@@ -72,50 +72,50 @@ class ODMRWorker(QThread):
         try:
             frequencies = self.parameters['mw_frequencies']
             total_points = len(frequencies)
-            
+
             all_frequencies = []
             all_count_rates = []
-            
+
             for i, freq in enumerate(frequencies):
                 if not self.is_running:
                     break
-                
+
                 # Update progress and status
                 progress = int((i / total_points) * 100)
                 self.progress_updated.emit(progress)
                 self.status_updated.emit(f"Measuring {freq/1e9:.4f} GHz ({i+1}/{total_points})")
-                
+
                 # Run single frequency measurement
                 single_params = self.parameters.copy()
                 single_params['mw_frequencies'] = [freq]
-                
+
                 result = self.experiments.odmr(**single_params)
-                
+
                 if result and 'count_rates' in result and len(result['count_rates']) > 0:
                     all_frequencies.append(freq)
                     all_count_rates.append(result['count_rates'][0])
-                    
+
                     # Emit data update for real-time plotting
                     self.data_updated.emit(all_frequencies.copy(), all_count_rates.copy())
-            
+
             if self.is_running:
                 self.progress_updated.emit(100)
                 self.status_updated.emit("ODMR measurement completed!")
-                
+
                 # Automatically save the data
                 try:
                     # Prepare parameters for saving (remove the frequencies list to avoid redundancy)
                     save_params = self.parameters.copy()
                     if 'mw_frequencies' in save_params:
                         del save_params['mw_frequencies']
-                    
+
                     # Save the data
                     filename = self.data_manager.save_experiment_data('odmr', all_frequencies, all_count_rates, save_params)
                     self.data_saved.emit(filename)
                     self.status_updated.emit(f"💾 Data automatically saved to {filename}")
                 except Exception as save_error:
                     self.status_updated.emit(f"⚠️ Warning: Could not save data automatically: {save_error}")
-            
+
         except Exception as e:
             self.error_occurred.emit(str(e))
         finally:
@@ -397,7 +397,7 @@ class DeviceStatusWidget(QGroupBox):
         # Pulse Streamer status
         ps_layout = QHBoxLayout()
         ps_layout.addWidget(QLabel("Pulse Streamer:"))
-        self.ps_ip = QLineEdit("192.168.0.201")
+        self.ps_ip = QLineEdit("192.168.0.203")
         self.ps_ip.setPlaceholderText("IP address")
         self.ps_ip.setToolTip("Enter IP address for Pulse Streamer network connection")
         ps_layout.addWidget(self.ps_ip)
@@ -412,7 +412,7 @@ class DeviceStatusWidget(QGroupBox):
         # RIGOL status
         rigol_layout = QHBoxLayout()
         rigol_layout.addWidget(QLabel("RIGOL DSG836:"))
-        self.rigol_ip = QLineEdit("192.168.0.222")
+        self.rigol_ip = QLineEdit("192.168.0.223")
         rigol_layout.addWidget(self.rigol_ip)
         self.rigol_status = QLabel("Disconnected")
         self.rigol_status.setStyleSheet("color: red; font-weight: bold;")
