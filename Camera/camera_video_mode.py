@@ -170,7 +170,7 @@ class POACameraController:
         Returns:
             bool: True if successful, False otherwise
         """
-        self.exposure = max(1000, min(1000000, exposure_us))  # Clamp between 1ms and 1s
+        self.exposure = max(100, min(10000000, exposure_us))  # Clamp between 0.1ms and 10s
         if self.is_connected and self.camera_id is not None:
             error = pyPOACamera.SetExp(self.camera_id, self.exposure, False)
             return error == pyPOACamera.POAErrors.POA_OK

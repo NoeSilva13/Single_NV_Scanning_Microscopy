@@ -409,7 +409,7 @@ class SpectrometerMainWindow(QMainWindow):
         camera_layout.addWidget(self.exposure_label, 0, 1)
         
         self.exposure_slider = QSlider(Qt.Horizontal)
-        self.exposure_slider.setRange(1, 10000)  # 0.1ms to 10000ms (will divide by 10)
+        self.exposure_slider.setRange(1, 100000)  # 0.1ms to 10000ms (10s, will divide by 10)
         self.exposure_slider.setValue(500)  # 50ms default
         self.exposure_slider.setToolTip("Exposure time in milliseconds")
         camera_layout.addWidget(self.exposure_slider, 0, 2)
