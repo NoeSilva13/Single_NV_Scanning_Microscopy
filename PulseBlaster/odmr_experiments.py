@@ -222,7 +222,7 @@ class ODMRExperiments:
             self.counter.clear()    
                 
             frequencies.append(freq)
-            count_rates.append(np.mean(counts)/np.mean(information))
+            count_rates.append(np.mean(counts)/(np.mean(information)*1e-12))
         # Turn off RF output after measurement
         if self.mw_generator:
                     self.mw_generator.set_rf_output(False)
@@ -331,8 +331,8 @@ class ODMRExperiments:
             
             # Calculate average count rates
             bin_width = np.mean(information)
-            mw_off_rate = np.mean(mw_off_counts) / bin_width
-            mw_on_rate = np.mean(mw_on_counts) / bin_width
+            mw_off_rate = np.mean(mw_off_counts) / (bin_width*1e-12)
+            mw_on_rate = np.mean(mw_on_counts) / (bin_width*1e-12)
             
             # Calculate ODMR contrast: (MW_off - MW_on) / MW_off
             contrast = (mw_off_rate - mw_on_rate) / mw_off_rate if mw_off_rate > 0 else 0
@@ -342,8 +342,8 @@ class ODMRExperiments:
             mw_off_rates.append(mw_off_rate)
             mw_on_rates.append(mw_on_rate)
             
-            print(f"  MW off rate: {mw_off_rate:.2f} Hz")
-            print(f"  MW on rate: {mw_on_rate:.2f} Hz")
+            print(f"  MW off rate: {mw_off_rate:.10f} Hz")
+            print(f"  MW on rate: {mw_on_rate:.10f} Hz")
             print(f"  Contrast: {contrast:.6f}")
         
         # Turn off RF output after measurement
@@ -1046,43 +1046,43 @@ def run_example_experiments():
     experiments = ODMRExperiments(controller, rigol)
     
     try:
-        #1. Continuous Wave ODMR
-        # print("\n" + "="*50)
-        # frequencies = np.linspace(2.7e9, 3e9, 100)  # 2.85-2.89 GHz
-        # cw_odmr_result = experiments.cw_odmr(
-        #     mw_frequencies=frequencies,
-        #     acquisition_time=0.5,  # 1 seconds per point
-        #     mw_power=0  # -10 dBm
-        # )
+       # 1. Continuous Wave ODMR
+        print("\n" + "="*50)
+        frequencies = np.linspace(2.7e9, 3e9, 100)  # 2.85-2.89 GHz
+        cw_odmr_result = experiments.cw_odmr(
+            mw_frequencies=frequencies,
+            acquisition_time=3,  # 1 seconds per point
+            mw_power=0  # -10 dBm
+        )
         
-        # # Save data using odmr_data_manager
-        # import sys
-        # import os
-        # # Add parent directory to path to import odmr_data_manager
-        # sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        # from odmr_data_manager import ODMRDataManager
-        # data_manager = ODMRDataManager()
-        # saved_file = data_manager.save_experiment_data(
-        #     experiment_type='odmr',
-        #     x_data=cw_odmr_result['frequencies'],
-        #     count_rates=cw_odmr_result['count_rates'],
-        #     parameters=cw_odmr_result['parameters']
-        # )
-        # print(f"✅ Data saved to: {saved_file}")
+        # Save data using odmr_data_manager
+        import sys
+        import os
+        # Add parent directory to path to import odmr_data_manager
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from odmr_data_manager import ODMRDataManager
+        data_manager = ODMRDataManager()
+        saved_file = data_manager.save_experiment_data(
+            experiment_type='odmr',
+            x_data=cw_odmr_result['frequencies'],
+            count_rates=cw_odmr_result['count_rates'],
+            parameters=cw_odmr_result['parameters']
+        )
+        print(f"✅ Data saved to: {saved_file}")
         
-        # experiments.plot_results('cw_odmr')
+        experiments.plot_results('cw_odmr')
         
         # 2. ODMR
         # print("\n" + "="*50)
-        # frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        # odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=5)
+        # frequencies = np.linspace(2.7e9, 3e9, 100)  # 2.85-2.89 GHz
+        # odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=30000)
         # experiments.plot_results('odmr')
         
         # 2.5 ODMR Contrast
-        print("\n" + "="*50)
-        frequencies = np.linspace(2.7e9, 2.9e9, 20)  # 2.7-2.9 GHz
-        odmr_contrast_result = experiments.odmr_contrast(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=5)
-        experiments.plot_results('odmr_contrast')
+        # print("\n" + "="*50)
+        # frequencies = np.linspace(2.7e9, 3e9, 100)  # 2.7-2.9 GHz
+        # odmr_contrast_result = experiments.odmr_contrast(frequencies, laser_duration=50000, mw_duration=50000, detection_duration=50000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=50000, repetitions=30000)
+        # experiments.plot_results('odmr_contrast')
         
         # 2. Rabi oscillation
         # print("\n" + "="*50)
