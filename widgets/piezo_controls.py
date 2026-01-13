@@ -52,7 +52,7 @@ class PiezoControlWidget(QWidget):
         # Position spinbox (1 nm resolution = 0.001 µm)
         self.pos_spinbox = QDoubleSpinBox()
         self.pos_spinbox.setRange(0, 450)  # 0-450 µm range
-        self.pos_spinbox.setDecimals(3)    # Show nm precision
+        self.pos_spinbox.setDecimals(2)    # Show nm precision
         self.pos_spinbox.setSingleStep(0.1) # 100 nm step for fine control
         self.pos_spinbox.setFixedWidth(120)
         self.pos_spinbox.valueChanged.connect(self._on_spinbox_changed)
@@ -122,7 +122,7 @@ class PiezoControlWidget(QWidget):
                 # Set position
                 if self.piezo.set_position(position_um):
                     time.sleep(settling_time)
-                    show_info(f"✓ Moved to {position_um:.3f} µm")
+                    show_info(f"✓ Moved to {position_um:.2f} µm")
                 else:
                     show_info("❌ Failed to set position")
             except Exception as e:
@@ -137,7 +137,7 @@ class PiezoControlWidget(QWidget):
                 self.status_label.setText("Connected")
                 time.sleep(0.5)
                 current_pos = float(str(self.piezo.channel.GetPosition()))
-                print(f"Current position: {current_pos} µm")
+                print(f"Current position: {current_pos:.2f} µm")
                 # Block signals to prevent triggering movement callbacks
                 self.pos_spinbox.blockSignals(True)
                 self.pos_slider.blockSignals(True)
