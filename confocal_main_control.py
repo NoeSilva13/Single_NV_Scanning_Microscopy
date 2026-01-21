@@ -589,7 +589,7 @@ viewer.window.add_dock_widget(reset_zoom_widget, area="bottom")
 viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
-viewer.window.add_dock_widget(piezo_control_widget, area="bottom")
+
 # Add parameter widgets
 scan_parameters_dock = viewer.window.add_dock_widget(scan_parameters_widget, area="left", name="Scan Parameters")
 camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
@@ -603,7 +603,7 @@ viewer.window._qt_window.tabifyDockWidget(scan_parameters_dock, camera_control_d
 empty_positions = [0, 1]
 empty_counts = [0, 0]
 signal_bridge.update_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto-Focus Plot')
-
+viewer.window.add_dock_widget(piezo_control_widget, area="right")
 # --------------------- CLEANUP ON CLOSE ---------------------
 def _on_close():
     """Clean up hardware connections when closing the app"""
