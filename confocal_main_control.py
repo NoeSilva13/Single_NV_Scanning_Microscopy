@@ -63,6 +63,7 @@ from widgets.unified_scan_controls import (
     create_unified_scan_widget,
     create_unified_stop_scan_widget
 )
+from widgets.piezo_controls import PiezoControlWidget
 
 # --------------------- SCAN PARAMETERS MANAGER CLASS ---------------------
 class ScanParametersManager:
@@ -588,7 +589,7 @@ viewer.window.add_dock_widget(reset_zoom_widget, area="bottom")
 viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
-
+viewer.window.add_dock_widget(piezo_control_widget, area="bottom")
 # Add parameter widgets
 scan_parameters_dock = viewer.window.add_dock_widget(scan_parameters_widget, area="left", name="Scan Parameters")
 camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
