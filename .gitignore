@@ -3,7 +3,7 @@
 *.dat
 *.txt
 scan_data_*.csv
-
+z_scan_data/
 # Data folders (keep folder structure but ignore contents)
 [0-9][0-9][0-9][0-9][0-9][0-9]/
 [0-9][0-9][0-9][0-9][0-9][0-9]/*
