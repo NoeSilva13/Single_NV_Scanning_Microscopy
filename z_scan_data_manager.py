@@ -64,6 +64,7 @@ class ZScanDataManager:
                  timestamp=timestamp)
         
         # Save as TIFF with ImageJ metadata
+        # X points are in volts, Z points are already in micrometers
         save_tiff_with_imagej_metadata(
             image_data=image_data,
             filepath=f"{filepath}.tiff",
@@ -74,7 +75,11 @@ class ZScanDataManager:
                 'y_fixed': metadata['y_fixed'],
                 'dwell_time': metadata['dwell_time']
             },
-            timestamp=timestamp
+            timestamp=timestamp,
+            scale_x=metadata['scale_x'],  # Use pre-calculated scale
+            scale_y=metadata['scale_z'],  # Z scale (already in um/pixel)
+            x_in_volts=True,  # X is in volts
+            y_in_volts=False  # Z is already in micrometers
         )
         
         show_info(f"💾 X-Z scan data saved: {filepath}")
@@ -109,6 +114,7 @@ class ZScanDataManager:
                  timestamp=timestamp)
         
         # Save as TIFF with ImageJ metadata
+        # Y points are in volts, Z points are already in micrometers
         save_tiff_with_imagej_metadata(
             image_data=image_data,
             filepath=f"{filepath}.tiff",
@@ -119,7 +125,11 @@ class ZScanDataManager:
                 'x_fixed': metadata['x_fixed'],
                 'dwell_time': metadata['dwell_time']
             },
-            timestamp=timestamp
+            timestamp=timestamp,
+            scale_x=metadata['scale_y'],  # Y scale (in um/pixel after conversion)
+            scale_y=metadata['scale_z'],  # Z scale (already in um/pixel)
+            x_in_volts=True,  # Y is in volts
+            y_in_volts=False  # Z is already in micrometers
         )
         
         show_info(f"💾 Y-Z scan data saved: {filepath}")

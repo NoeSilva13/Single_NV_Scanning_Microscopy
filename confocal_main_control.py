@@ -443,7 +443,17 @@ def update_widget_func():
     )
 
 # Create unified scan control widgets
-scan_widget = create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan_controller, scan_params_manager, z_scan_data_manager)
+scan_widget = create_unified_scan_widget(
+    scan_pattern, 
+    scan_points_manager, 
+    shapes, 
+    z_scan_controller, 
+    scan_params_manager, 
+    z_scan_data_manager,
+    layer=layer,
+    viewer=viewer,
+    update_contrast_limits_func=update_contrast_limits
+)
 stop_scan_widget = create_unified_stop_scan_widget(scan_in_progress, stop_scan_requested, z_scan_controller)
 
 # Update scan points manager with initial parameters from the widget

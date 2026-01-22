@@ -24,6 +24,7 @@ PIEZO_FINE_RANGE = 10.0  # Range around peak for fine scan
 def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):
     """
     Calculate microns per pixel based on empirical calibration.
+    Used for X and Y axes which are in volts and need conversion.
     
     Args:
         V1 (float): Start voltage
@@ -36,26 +37,61 @@ def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):
     """
     voltage_span = abs(V2 - V1)
     scan_width_microns = voltage_span * microns_per_volt
-    return scan_width_microns / image_width_px 
+    return scan_width_microns / image_width_px
 
 
-def save_tiff_with_imagej_metadata(image_data, filepath, x_points, y_points, scan_config, timestamp=None):
+def calculate_scale_z(z1, z2, image_width_px):
+    """
+    Calculate microns per pixel for Z-axis.
+    Z-axis values are already in micrometers (no voltage conversion needed).
+    
+    Args:
+        z1 (float): Start Z position in micrometers
+        z2 (float): End Z position in micrometers
+        image_width_px (int): Image width in pixels
+        
+    Returns:
+        float: Scale in microns per pixel
+    """
+    z_span = abs(z2 - z1)
+    return z_span / image_width_px if image_width_px > 0 else 0.0 
+
+
+def save_tiff_with_imagej_metadata(image_data, filepath, x_points, y_points, scan_config, timestamp=None, 
+                                   scale_x=None, scale_y=None, x_in_volts=True, y_in_volts=True):
     """
     Save TIFF file with comprehensive metadata that ImageJ/Fiji can interpret.
     
     Args:
         image_data (np.ndarray): 2D image array
         filepath (str): Path to save the TIFF file
-        x_points (np.ndarray): X scan positions in volts
-        y_points (np.ndarray): Y scan positions in volts
+        x_points (np.ndarray): X scan positions (in volts if x_in_volts=True, else in micrometers)
+        y_points (np.ndarray): Y scan positions (in volts if y_in_volts=True, else in micrometers)
         scan_config (dict): Configuration dictionary with scan parameters
         timestamp (str): Optional timestamp string
+        scale_x (float): Optional pre-calculated X scale in um/pixel (overrides calculation)
+        scale_y (float): Optional pre-calculated Y scale in um/pixel (overrides calculation)
+        x_in_volts (bool): Whether x_points are in volts (True) or micrometers (False)
+        y_in_volts (bool): Whether y_points are in volts (True) or micrometers (False)
     """
     height, width = image_data.shape
     
-    # Calculate microns per pixel
-    microns_per_pixel_x = calculate_scale(x_points[0], x_points[-1], width)
-    microns_per_pixel_y = calculate_scale(y_points[0], y_points[-1], height)
+    # Calculate microns per pixel (use provided scales if available, otherwise calculate)
+    if scale_x is not None:
+        microns_per_pixel_x = scale_x
+    elif x_in_volts:
+        microns_per_pixel_x = calculate_scale(x_points[0], x_points[-1], width)
+    else:
+        # X points are already in micrometers
+        microns_per_pixel_x = calculate_scale_z(x_points[0], x_points[-1], width)
+    
+    if scale_y is not None:
+        microns_per_pixel_y = scale_y
+    elif y_in_volts:
+        microns_per_pixel_y = calculate_scale(y_points[0], y_points[-1], height)
+    else:
+        # Y points are already in micrometers
+        microns_per_pixel_y = calculate_scale_z(y_points[0], y_points[-1], height)
     
     # Convert to pixels per micron for ImageJ (resolution tags expect pixels per unit)
     pixels_per_micron_x = 1.0 / microns_per_pixel_x if microns_per_pixel_x > 0 else 1.0

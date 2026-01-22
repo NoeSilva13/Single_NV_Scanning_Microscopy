@@ -16,7 +16,7 @@ import numpy as np
 from typing import Tuple, List, Optional, Dict, Any
 from napari.utils.notifications import show_info
 from piezo_controller import PiezoController
-from utils import calculate_scale, save_tiff_with_imagej_metadata
+from utils import calculate_scale, calculate_scale_z, save_tiff_with_imagej_metadata
 
 
 class ZScanController:
@@ -40,7 +40,7 @@ class ZScanController:
         self.stop_scan_requested = False
         
     def scan_xz(self, x_points: np.ndarray, z_points: np.ndarray, 
-                y_fixed: float, dwell_time: float = 0.002) -> Tuple[np.ndarray, Dict[str, Any]]:
+                y_fixed: float, dwell_time: float = 0.002, layer=None) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
         Perform X-Z scan at fixed Y position
         
@@ -49,6 +49,7 @@ class ZScanController:
             z_points: Array of Z positions (micrometers)
             y_fixed: Fixed Y position (voltage value)
             dwell_time: Dwell time per pixel in seconds
+            layer: Optional napari layer to update during scanning for live display
             
         Returns:
             Tuple of (image_data, scan_metadata)
@@ -63,9 +64,17 @@ class ZScanController:
             height, width = len(z_points), len(x_points)
             image = np.zeros((height, width), dtype=np.float32)
             
+            # Initialize layer if provided
+            if layer is not None:
+                layer.data = image
+                scale_x = calculate_scale(x_points[0], x_points[-1], width)
+                scale_z = calculate_scale_z(z_points[0], z_points[-1], height)
+                layer.scale = (scale_z, scale_x)
+                layer.refresh()
+            
             # Calculate scales for metadata
             scale_x = calculate_scale(x_points[0], x_points[-1], width)
-            scale_z = calculate_scale(z_points[0], z_points[-1], height)
+            scale_z = calculate_scale_z(z_points[0], z_points[-1], height)
             
             start_time = time.time()
             
@@ -90,6 +99,11 @@ class ZScanController:
                     counts = self.counter.getData()[0][0]/(self.binwidth/1e12)
                     image[z_idx, x_idx] = counts
                     
+                # Update layer after each Z row for live display
+                if layer is not None:
+                    layer.data = image
+                    layer.refresh()
+                    
                 # Update progress
                 if z_idx % max(1, height // 10) == 0:  # Update every 10% of progress
                     progress = (z_idx / height) * 100
@@ -97,6 +111,11 @@ class ZScanController:
                     
             end_time = time.time()
             scan_time = end_time - start_time
+            
+            # Final layer update
+            if layer is not None:
+                layer.data = image
+                layer.refresh()
             
             # Prepare metadata
             metadata = {
@@ -118,7 +137,7 @@ class ZScanController:
             self.scan_in_progress = False
             
     def scan_yz(self, y_points: np.ndarray, z_points: np.ndarray,
-                x_fixed: float, dwell_time: float = 0.002) -> Tuple[np.ndarray, Dict[str, Any]]:
+                x_fixed: float, dwell_time: float = 0.002, layer=None) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
         Perform Y-Z scan at fixed X position
         
@@ -127,6 +146,7 @@ class ZScanController:
             z_points: Array of Z positions (micrometers)
             x_fixed: Fixed X position (voltage value)
             dwell_time: Dwell time per pixel in seconds
+            layer: Optional napari layer to update during scanning for live display
             
         Returns:
             Tuple of (image_data, scan_metadata)
@@ -141,9 +161,17 @@ class ZScanController:
             height, width = len(z_points), len(y_points)
             image = np.zeros((height, width), dtype=np.float32)
             
+            # Initialize layer if provided
+            if layer is not None:
+                layer.data = image
+                scale_y = calculate_scale(y_points[0], y_points[-1], width)
+                scale_z = calculate_scale_z(z_points[0], z_points[-1], height)
+                layer.scale = (scale_z, scale_y)
+                layer.refresh()
+            
             # Calculate scales for metadata
             scale_y = calculate_scale(y_points[0], y_points[-1], width)
-            scale_z = calculate_scale(z_points[0], z_points[-1], height)
+            scale_z = calculate_scale_z(z_points[0], z_points[-1], height)
             
             start_time = time.time()
             
@@ -168,6 +196,11 @@ class ZScanController:
                     counts = self.counter.getData()[0][0]/(self.binwidth/1e12)
                     image[z_idx, y_idx] = counts
                     
+                # Update layer after each Z row for live display
+                if layer is not None:
+                    layer.data = image
+                    layer.refresh()
+                    
                 # Update progress
                 if z_idx % max(1, height // 10) == 0:  # Update every 10% of progress
                     progress = (z_idx / height) * 100
@@ -175,6 +208,11 @@ class ZScanController:
                     
             end_time = time.time()
             scan_time = end_time - start_time
+            
+            # Final layer update
+            if layer is not None:
+                layer.data = image
+                layer.refresh()
             
             # Prepare metadata
             metadata = {
@@ -196,7 +234,7 @@ class ZScanController:
             self.scan_in_progress = False
             
     def scan_3d(self, x_points: np.ndarray, y_points: np.ndarray, z_points: np.ndarray,
-                dwell_time: float = 0.002) -> Tuple[np.ndarray, Dict[str, Any]]:
+                dwell_time: float = 0.002, viewer=None, layer=None) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
         Perform 3D volumetric scan (X-Y scans over Z steps)
         
@@ -205,6 +243,8 @@ class ZScanController:
             y_points: Array of Y positions (voltage values)
             z_points: Array of Z positions (micrometers)
             dwell_time: Dwell time per pixel in seconds
+            viewer: Optional napari viewer to update during scanning
+            layer: Optional napari layer to update with MIP during scanning
             
         Returns:
             Tuple of (volume_data, scan_metadata)
@@ -222,7 +262,18 @@ class ZScanController:
             # Calculate scales for metadata
             scale_x = calculate_scale(x_points[0], x_points[-1], width)
             scale_y = calculate_scale(y_points[0], y_points[-1], height)
-            scale_z = calculate_scale(z_points[0], z_points[-1], depth)
+            scale_z = calculate_scale_z(z_points[0], z_points[-1], depth)
+            
+            # Initialize MIP layer if provided
+            mip_layer = None
+            if layer is not None:
+                # Start with first slice as MIP
+                mip = np.zeros((height, width), dtype=np.float32)
+                layer.data = mip
+                layer.scale = (scale_y, scale_x)
+                layer.name = "3D Scan MIP (Live)"
+                layer.refresh()
+                mip_layer = layer
             
             start_time = time.time()
             total_z_steps = len(z_points)
@@ -252,6 +303,12 @@ class ZScanController:
                         # Get photon counts
                         counts = self.counter.getData()[0][0]/(self.binwidth/1e12)
                         volume[z_idx, y_idx, x_idx] = counts
+                
+                # Update MIP layer after each Z slice
+                if mip_layer is not None:
+                    mip = np.max(volume[:z_idx+1], axis=0)
+                    mip_layer.data = mip
+                    mip_layer.refresh()
                         
                 # Update progress
                 progress = (z_idx / total_z_steps) * 100

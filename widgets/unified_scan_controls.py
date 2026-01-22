@@ -16,7 +16,7 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QProgressBar, QLabel,
                             QComboBox, QGroupBox)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
-from utils import MICRONS_PER_VOLT
+from utils import MICRONS_PER_VOLT, calculate_scale, calculate_scale_z
 
 
 class ExtendedScanParametersWidget(QWidget):
@@ -354,7 +354,7 @@ class UnifiedScanProgressWidget(QWidget):
         self.is_scanning = False
 
 
-def create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan_controller, scan_params_manager, z_scan_data_manager):
+def create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan_controller, scan_params_manager, z_scan_data_manager, layer=None, viewer=None, update_contrast_limits_func=None):
     """Factory function to create unified scan control widget"""
     
     progress_widget = UnifiedScanProgressWidget(scan_pattern, scan_points_manager, shapes, z_scan_controller)
@@ -392,8 +392,22 @@ def create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan
                     y_fixed = params['fixed_positions']['y']
                     
                     image, metadata = z_scan_controller.scan_xz(
-                        x_points, z_points, y_fixed, params['dwell_time']
+                        x_points, z_points, y_fixed, params['dwell_time'], layer=layer
                     )
+                    
+                    # Display the image in napari layer
+                    if layer is not None:
+                        layer.data = image
+                        # Update scale for X-Z scan (X vs Z axes)
+                        # X is in volts, needs conversion; Z is already in micrometers
+                        scale_x = calculate_scale(x_points[0], x_points[-1], len(x_points))
+                        scale_z = calculate_scale_z(z_points[0], z_points[-1], len(z_points))
+                        layer.scale = (scale_z, scale_x)  # Z is vertical (first), X is horizontal (second)
+                        layer.name = f"X-Z Scan (Y={y_fixed:.3f}V)"
+                        layer.refresh()
+                        if update_contrast_limits_func:
+                            update_contrast_limits_func(layer, image)
+                    
                     # Save the scan data
                     z_scan_data_manager.save_xz_scan(image, metadata)
                     
@@ -407,8 +421,22 @@ def create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan
                     x_fixed = params['fixed_positions']['x']
                     
                     image, metadata = z_scan_controller.scan_yz(
-                        y_points, z_points, x_fixed, params['dwell_time']
+                        y_points, z_points, x_fixed, params['dwell_time'], layer=layer
                     )
+                    
+                    # Display the image in napari layer
+                    if layer is not None:
+                        layer.data = image
+                        # Update scale for Y-Z scan (Y vs Z axes)
+                        # Y is in volts, needs conversion; Z is already in micrometers
+                        scale_y = calculate_scale(y_points[0], y_points[-1], len(y_points))
+                        scale_z = calculate_scale_z(z_points[0], z_points[-1], len(z_points))
+                        layer.scale = (scale_z, scale_y)  # Z is vertical (first), Y is horizontal (second)
+                        layer.name = f"Y-Z Scan (X={x_fixed:.3f}V)"
+                        layer.refresh()
+                        if update_contrast_limits_func:
+                            update_contrast_limits_func(layer, image)
+                    
                     # Save the scan data
                     z_scan_data_manager.save_yz_scan(image, metadata)
                     
@@ -424,8 +452,40 @@ def create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan
                                        params['resolution']['z'])
                     
                     volume, metadata = z_scan_controller.scan_3d(
-                        x_points, y_points, z_points, params['dwell_time']
+                        x_points, y_points, z_points, params['dwell_time'], viewer=viewer, layer=layer
                     )
+                    
+                    # Display the volume in napari viewer
+                    if viewer is not None:
+                        # Remove old layer if it exists
+                        if layer is not None and layer in viewer.layers:
+                            viewer.layers.remove(layer)
+                        
+                        # Add volume as new layer (3D data)
+                        # X and Y are in volts, need conversion; Z is already in micrometers
+                        scale_x = calculate_scale(x_points[0], x_points[-1], len(x_points))
+                        scale_y = calculate_scale(y_points[0], y_points[-1], len(y_points))
+                        scale_z = calculate_scale_z(z_points[0], z_points[-1], len(z_points))
+                        
+                        # Add volume layer
+                        volume_layer = viewer.add_image(
+                            volume,
+                            name="3D Scan Volume",
+                            colormap="viridis",
+                            scale=(scale_z, scale_y, scale_x)  # Z, Y, X
+                        )
+                        
+                        # Also add maximum intensity projection as 2D layer
+                        mip = np.max(volume, axis=0)
+                        mip_layer = viewer.add_image(
+                            mip,
+                            name="3D Scan MIP",
+                            colormap="viridis",
+                            scale=(scale_y, scale_x)  # Y, X
+                        )
+                        if update_contrast_limits_func:
+                            update_contrast_limits_func(mip_layer, mip)
+                    
                     # Save the scan data
                     z_scan_data_manager.save_3d_scan(volume, metadata)
                 
@@ -433,6 +493,8 @@ def create_unified_scan_widget(scan_pattern, scan_points_manager, shapes, z_scan
                 
             except Exception as e:
                 show_info(f"❌ Error during {scan_type} scan: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 
             finally:
                 progress_widget.is_scanning = False
