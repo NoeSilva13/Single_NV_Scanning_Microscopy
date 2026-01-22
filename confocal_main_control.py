@@ -571,6 +571,11 @@ def on_shape_added(event):
 
 # --------------------- ADD WIDGETS TO VIEWER ---------------------
 
+# Reduce layer controls widget size
+layer_controls_dock = viewer.window.qt_viewer.dockLayerControls
+layer_controls_dock.setMaximumHeight(280)
+layer_controls_dock.setMinimumHeight(280)
+
 # Set fixed sizes for widget buttons
 scan_widget.native.setFixedSize(150, 50)
 stop_scan_widget.native.setFixedSize(150, 50)
