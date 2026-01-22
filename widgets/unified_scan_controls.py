@@ -132,17 +132,17 @@ class ExtendedScanParametersWidget(QWidget):
         
         # Z Min
         z_layout.addWidget(create_label("Z Min (µm):"), 0, 0)
-        self.z_min_spinbox = create_spinbox(0, 20, 0.1, 3, 0.0)
+        self.z_min_spinbox = create_spinbox(0, 450, 0.1, 3, 0.0)
         z_layout.addWidget(self.z_min_spinbox, 0, 1)
         
         # Z Max
         z_layout.addWidget(create_label("Z Max (µm):"), 1, 0)
-        self.z_max_spinbox = create_spinbox(0, 20, 0.1, 3, 5.0)
+        self.z_max_spinbox = create_spinbox(0, 450, 0.1, 3, 5.0)
         z_layout.addWidget(self.z_max_spinbox, 1, 1)
         
         # Z Resolution
         z_layout.addWidget(create_label("Z Resolution:"), 2, 0)
-        self.z_res_spinbox = create_spinbox(2, 100, 1, 0, 10, " steps")
+        self.z_res_spinbox = create_spinbox(2, 450, 1, 0, 10, " steps")
         z_layout.addWidget(self.z_res_spinbox, 2, 1)
         
         # Fixed position for X-Z and Y-Z scans

@@ -183,17 +183,6 @@ except Exception as e:
     show_info(f'⚠️ Error connecting to piezo stage: {str(e)}. Z-scanning features may be limited.')
 z_scan_data_manager = ZScanDataManager()
 
-# Initialize Z scanning components
-piezo_controller = PiezoController()
-try:
-    if not piezo_controller.connect():
-        show_info('⚠️ Failed to connect to piezo stage. Z-scanning features may be limited.')
-    else:
-        show_info('✅ Successfully connected to piezo stage')
-except Exception as e:
-    show_info(f'⚠️ Error connecting to piezo stage: {str(e)}. Z-scanning features may be limited.')
-z_scan_data_manager = ZScanDataManager()
-
 # Extract scan parameters for initial setup (using defaults)
 x_res = 50  # Default resolution
 y_res = 50  # Default resolution
