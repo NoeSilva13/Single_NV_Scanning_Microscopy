@@ -34,10 +34,10 @@ class CameraWorker(QThread):
         self.mutex = QMutex()
         
     def initialize_camera(self, camera_index: int = 0) -> bool:
-        """Initialize camera with 1920x1080 resolution"""
+        """Initialize camera with 2592x920 resolution (spectrometer)"""
         try:
-            # Connect with 1920x1080 resolution
-            success = self.camera.connect(camera_index, width=1920, height=1080)
+            # Connect with 2592x920 resolution for spectrometer
+            success = self.camera.connect(camera_index, width=2592, height=920)
             if success:
                 # Set image format to RAW8 for better performance
                 self.camera.image_format = pyPOACamera.POAImgFormat.POA_RAW8
@@ -125,11 +125,11 @@ class SpectrumProcessor:
         self.roi_start_y = 0
         self.roi_height = 50
         self.roi_start_x = 0
-        self.roi_width = 1920
+        self.roi_width = 2592
         self.dark_frame = None
         self.reference_frame = None
         
-    def set_roi(self, start_y: int, height: int, start_x: int = 0, width: int = 1920):
+    def set_roi(self, start_y: int, height: int, start_x: int = 0, width: int = 2592):
         """Set region of interest for spectrum extraction"""
         self.roi_start_y = start_y
         self.roi_height = height
@@ -369,8 +369,8 @@ class SpectrometerMainWindow(QMainWindow):
         
         roi_layout.addWidget(QLabel("Start Y:"), 1, 0)
         self.roi_start_spinbox = QSpinBox()
-        self.roi_start_spinbox.setRange(0, 1080)
-        self.roi_start_spinbox.setValue(500)
+        self.roi_start_spinbox.setRange(0, 920)
+        self.roi_start_spinbox.setValue(435)
         roi_layout.addWidget(self.roi_start_spinbox, 1, 1)
         
         roi_layout.addWidget(QLabel("Height:"), 2, 0)
@@ -381,14 +381,14 @@ class SpectrometerMainWindow(QMainWindow):
         
         roi_layout.addWidget(QLabel("Start X:"), 3, 0)
         self.roi_start_x_spinbox = QSpinBox()
-        self.roi_start_x_spinbox.setRange(0, 1920)
+        self.roi_start_x_spinbox.setRange(0, 2592)
         self.roi_start_x_spinbox.setValue(0)
         roi_layout.addWidget(self.roi_start_x_spinbox, 3, 1)
         
         roi_layout.addWidget(QLabel("Width:"), 4, 0)
         self.roi_width_spinbox = QSpinBox()
-        self.roi_width_spinbox.setRange(1, 1920)
-        self.roi_width_spinbox.setValue(1920)
+        self.roi_width_spinbox.setRange(1, 2592)
+        self.roi_width_spinbox.setValue(2592)
         roi_layout.addWidget(self.roi_width_spinbox, 4, 1)
         
         # Add the ROI button after it's created
@@ -647,9 +647,9 @@ class SpectrometerMainWindow(QMainWindow):
         start_wl = self.start_wavelength_spinbox.value()
         end_wl = self.end_wavelength_spinbox.value()
         
-        # Get camera width (assuming 1920 pixels)
+        # Get camera width (2592 pixels for spectrometer)
         info = self.camera_worker.get_camera_info()
-        width = info.get('width', 1920)
+        width = info.get('width', 2592)
         
         # Create linear calibration
         wavelengths = self.spectrum_processor.create_default_wavelength_calibration(
@@ -776,8 +776,8 @@ class SpectrometerMainWindow(QMainWindow):
                     else:
                         img_height, img_width = self.current_frame.shape
                 else:
-                    # Use defaults if no frame available
-                    img_width, img_height = 1920, 1080
+                    # Use defaults if no frame available (spectrometer: 2592x920)
+                    img_width, img_height = 2592, 920
                 
                 # Set ROI size from spinbox values
                 roi_width = width
@@ -825,9 +825,9 @@ class SpectrometerMainWindow(QMainWindow):
                 # Only update when resize is finished, not during
                 roi_item.sigRegionChangeFinished.connect(self._on_roi_resize_finished)
             
-            # Set reasonable bounds to prevent extreme resizing
+            # Set reasonable bounds to prevent extreme resizing (spectrometer: 2592x920)
             if hasattr(roi_item, 'maxBounds'):
-                roi_item.maxBounds = pg.QtCore.QRectF(0, 0, 1920, 1080)
+                roi_item.maxBounds = pg.QtCore.QRectF(0, 0, 2592, 920)
             
             # Disable real-time ROI statistics computation
             if hasattr(roi_item, 'setVisible'):
@@ -979,11 +979,11 @@ class SpectrometerMainWindow(QMainWindow):
                 width = int(size[0])
                 height = int(size[1])
                 
-                # Clamp values to valid ranges
-                start_x = max(0, min(start_x, 1919))
-                start_y = max(0, min(start_y, 1079))
-                width = max(1, min(width, 1920 - start_x))
-                height = max(1, min(height, 1080 - start_y))
+                # Clamp values to valid ranges (spectrometer: 2592x920)
+                start_x = max(0, min(start_x, 2591))
+                start_y = max(0, min(start_y, 919))
+                width = max(1, min(width, 2592 - start_x))
+                height = max(1, min(height, 920 - start_y))
                 
                 # Update our controls
                 self.roi_start_spinbox.setValue(start_y)
