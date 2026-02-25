@@ -204,6 +204,11 @@ class ODMRExperiments:
                 detection_delay=detection_delay,
                 sequence_interval=sequence_interval
             )
+            # Only plot sequence when running in main thread (not in GUI worker threads)
+            #if threading.current_thread() is threading.main_thread():
+            #    sequence.plot()
+            # Sleep time if not the while loop fails  
+            time.sleep(0.2)
             
             if sequence:
                 # Enable RF output for this measurement
@@ -303,6 +308,11 @@ class ODMRExperiments:
                 detection_delay=local_detection_delay,
                 sequence_interval=sequence_interval
             )
+            # Only plot sequence when running in main thread (not in GUI worker threads)
+            #if threading.current_thread() is threading.main_thread():
+            #    sequence.plot()
+            # Sleep time if not the while loop fails  
+            time.sleep(0.2)
 
             if sequence:
                 # Enable RF output for this measurement
@@ -429,6 +439,11 @@ class ODMRExperiments:
                 sequence_interval=adjusted_interval,
                 fixed_seq_duration=max_seq_duration
             )
+            # Only plot sequence when running in main thread (not in GUI worker threads)
+            #if threading.current_thread() is threading.main_thread():
+            #    sequence.plot()
+            # Sleep time if not the while loop fails  
+            time.sleep(0.2)
             
             if sequence:
                 
@@ -555,10 +570,10 @@ def run_example_experiments():
         # experiments.plot_results('cw_odmr')
         
         # 2. ODMR
-        print("\n" + "="*50)
-        frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=1000)
-        experiments.plot_results('odmr')
+        # print("\n" + "="*50)
+        # frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
+        # odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=1000)
+        # experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
         # print("\n" + "="*50)
@@ -567,10 +582,10 @@ def run_example_experiments():
         # experiments.plot_results('rabi')
         
         # 3. T1 decay
-        # print("\n" + "="*50)
-        # delay_times = np.linspace(0, 10000, 10)  # 0-10000 ns in 1000 ns steps
-        # t1_result = experiments.t1_decay(delay_times, 5000, 5000, 5000, 0, None, None, 1000, 10)
-        # experiments.plot_results('t1_decay')
+        print("\n" + "="*50)
+        delay_times = np.linspace(0, 10000, 10)  # 0-10000 ns in 1000 ns steps
+        t1_result = experiments.t1_decay(delay_times, 5000, 5000, 5000, 0, None, None, 1000, 10000)
+        experiments.plot_results('t1_decay')
         
         
         print("\n✅ All example experiments completed!")

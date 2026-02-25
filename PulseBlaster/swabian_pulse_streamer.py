@@ -200,10 +200,6 @@ class SwabianPulseController:
 
             print(f"✅ ODMR sequence created: single repetition, {total_duration} ns duration (8ns aligned)")
 
-            # Only plot sequence when running in main thread (not in GUI worker threads)
-            if threading.current_thread() is threading.main_thread():
-                sequence.plot()
-
             return sequence, total_duration
             
         except Exception as e:
@@ -393,7 +389,7 @@ class SwabianPulseController:
             sequence = self.pulse_streamer.createSequence()
             sequence.setDigital(self.CHANNEL_AOM, aom_pattern)
             sequence.setDigital(self.CHANNEL_SPD, spd_pattern)
-            sequence.plot()
+            
             print(f"✅ T1 sequence created: delay={delay_time}ns, {total_duration} ns total (interval={sequence_interval}ns)")
 
             return sequence, total_duration
