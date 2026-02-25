@@ -617,7 +617,7 @@ class ODMRExperiments:
                 readout_laser_delay=local_readout_delay,
                 detection_delay=local_detection_delay,
                 sequence_interval=adjusted_interval,
-                repetitions=repetitions,
+                repetitions=1,
                 fixed_seq_duration=max_seq_duration
             )
             
@@ -625,7 +625,7 @@ class ODMRExperiments:
                 
                 self.counter.start()
                 ready = False
-                self.pulse_controller.run_sequence(sequence, n_runs=1)
+                self.pulse_controller.run_sequence(sequence, n_runs=repetitions)
                 
                 while ready is False:
                     time.sleep(.2)
