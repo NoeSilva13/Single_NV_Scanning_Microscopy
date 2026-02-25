@@ -956,7 +956,7 @@ def run_example_experiments():
         
         # 2. Rabi oscillation
         print("\n" + "="*50)
-        mw_durations = np.arange(0, 10000, 500)  # 0-200 ns in 5 ns steps
+        mw_durations = np.linspace(0, 10000, 20)  # 0-10000 ns in 500 ns steps
         rabi_result = experiments.rabi_oscillation(mw_durations, 2.87e9, 5000, 5000, 0, 6000, 0, 1000, 1000)
         experiments.plot_results('rabi')
         
