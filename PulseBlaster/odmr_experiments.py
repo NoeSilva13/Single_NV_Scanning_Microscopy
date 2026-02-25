@@ -570,7 +570,8 @@ class ODMRExperiments:
         
         delays = []
         count_rates = []
-        self.counter = TimeTagger.Countrate(tagger=self.tagger, channels=[1])
+        # Set up TimeTagger counter for T1 decay measurements
+        self.counter = TimeTagger.CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=2, end_channel=-2, n_values=repetitions)
         
         for delay_time in delay_times:
             print(f"⏱️ Delay time: {delay_time} ns")
@@ -592,13 +593,24 @@ class ODMRExperiments:
             )
             
             if sequence:
+                
+                self.counter.start()
+                ready = False
+                self.pulse_controller.run_sequence(sequence, repetitions)
+                
+                while ready is False:
+                    time.sleep(.2)
+                    ready = self.counter.ready()
+                    information = self.counter.getBinWidths()
+                    print(f"Information: {information}")
+                    print(f"Ready: {ready}")
+                    counts = self.counter.getData()
+                    print(f"Counts: {counts}")
+                    
                 self.counter.clear()
-                self.pulse_controller.run_sequence(sequence, n_runs=repetitions)
-                time.sleep(total_duration/1e9)
-                self.pulse_controller.stop_sequence()
                 
                 # Get real count rate from TimeTagger
-                count_rate = np.mean(self.counter.getData())
+                count_rate = np.mean(counts)/(np.mean(information)*1e-12)
                 print(f"Count rate: {count_rate} Hz")
                 
                 delays.append(delay_time)
@@ -705,7 +717,8 @@ class ODMRExperiments:
             sequence.setDigital(self.pulse_controller.CHANNEL_AOM, aom_pattern)
             sequence.setDigital(self.pulse_controller.CHANNEL_SPD, spd_pattern)
             
-            print(f"✅ T1 sequence created: delay={delay_time}ns, {repetitions} reps, {total_duration} ns total")
+            print(f"✅ T1 sequence created: delay={delay_time}ns, {total_duration} ns total")
+            sequence.plot()
             return sequence, total_duration
             
         except Exception as e:
@@ -955,10 +968,16 @@ def run_example_experiments():
         # experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
+        # print("\n" + "="*50)
+        # mw_durations = np.linspace(0, 10000, 20)  # 0-10000 ns in 500 ns steps
+        # rabi_result = experiments.rabi_oscillation(mw_durations, 2.87e9, 5000, 5000, 0, 6000, 0, 1000, 1000)
+        # experiments.plot_results('rabi')
+        
+        # 3. T1 decay
         print("\n" + "="*50)
-        mw_durations = np.linspace(0, 10000, 20)  # 0-10000 ns in 500 ns steps
-        rabi_result = experiments.rabi_oscillation(mw_durations, 2.87e9, 5000, 5000, 0, 6000, 0, 1000, 1000)
-        experiments.plot_results('rabi')
+        delay_times = np.arange(0, 10000, 500)  # 0-10000 ns in 500 ns steps
+        t1_result = experiments.t1_decay(delay_times, 5000, 5000, 5000, 0, 6000, 6000, 1000, 10)
+        experiments.plot_results('t1_decay')
         
         # 3. Ramsey experiment
         #print("\n" + "="*50)
