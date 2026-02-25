@@ -583,9 +583,9 @@ def run_example_experiments():
         
         # 3. T1 decay
         print("\n" + "="*50)
-        delay_times = np.linspace(0, 10000, 10)  # 0-10000 ns in 1000 ns steps
+        delay_times = np.linspace(0, 10000, 50)  # 0-10000 ns in 50 steps
         # Important: For T1 measurements, readout_laser_delay and detection_delay should be None, this allows to code to calculate the delays automatically otherwise the sequence will not be created correctly. 
-        t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=5000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=10000)
+        t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=5000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=1000)
         experiments.plot_results('t1_decay')
         
         
