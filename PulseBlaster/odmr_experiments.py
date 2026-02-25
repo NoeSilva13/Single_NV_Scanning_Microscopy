@@ -418,7 +418,7 @@ class ODMRExperiments:
             print(f"Using fixed seq duration: {max_seq_duration} ns, delay time: {delay_time} ns, Interval: {adjusted_interval} ns, Total period: {max_seq_duration + adjusted_interval} ns")
 
             # Create T1 decay sequence with fixed sequence duration
-            sequence, total_duration = self._create_t1_sequence(
+            sequence, total_duration = self.pulse_controller._create_t1_sequence(
                 init_laser_duration=init_laser_duration,
                 readout_laser_duration=readout_laser_duration,
                 detection_duration=detection_duration,
@@ -463,112 +463,6 @@ class ODMRExperiments:
         
         print("✅ T1 decay measurement completed")
         return self.results['t1_decay']
-    
-    def _create_t1_sequence(self, 
-                           init_laser_duration: int,
-                           readout_laser_duration: int,
-                           detection_duration: int,
-                           delay_time: int,
-                           init_laser_delay: int,
-                           readout_laser_delay: int,
-                           detection_delay: int,
-                           sequence_interval: int,
-                           fixed_seq_duration: Optional[int] = None) -> Optional[Tuple]:
-        """
-        Create T1 decay pulse sequence (single repetition).
-        
-        Sequence timing:
-        - Init laser: starts at init_laser_delay, duration init_laser_duration
-        - Delay period: delay_time between end of init laser and start of readout
-        - Readout laser: starts at readout_laser_delay, duration readout_laser_duration  
-        - Detection: starts at detection_delay (typically same as readout), duration detection_duration
-        - sequence_interval: idle time appended at the end of the sequence
-        
-        Args:
-            fixed_seq_duration: If provided, use this as the sequence duration instead of calculating it.
-                               This ensures constant period across different delay values.
-        """
-        try:
-            # Align all timing parameters to 8 ns boundaries
-            init_laser_duration = self.pulse_controller.align_timing(init_laser_duration)
-            readout_laser_duration = self.pulse_controller.align_timing(readout_laser_duration)
-            detection_duration = self.pulse_controller.align_timing(detection_duration)
-            delay_time = self.pulse_controller.align_timing(delay_time)
-            init_laser_delay = self.pulse_controller.align_timing(init_laser_delay)
-            readout_laser_delay = self.pulse_controller.align_timing(readout_laser_delay)
-            detection_delay = self.pulse_controller.align_timing(detection_delay)
-            sequence_interval = self.pulse_controller.align_timing(sequence_interval)
-            
-            # Use fixed sequence duration if provided, otherwise calculate it
-            if fixed_seq_duration is not None:
-                single_seq_duration = self.pulse_controller.align_timing(fixed_seq_duration)
-            else:
-                single_seq_duration = max(
-                    init_laser_delay + init_laser_duration,
-                    readout_laser_delay + readout_laser_duration,
-                    detection_delay + detection_duration
-                )
-                single_seq_duration = self.pulse_controller.align_timing(single_seq_duration)
-            
-            # Create pattern arrays for each channel
-            aom_pattern = []
-            spd_pattern = []
-            
-            # AOM pattern: init laser -> off during delay -> readout laser
-            if init_laser_delay > 0:
-                aom_pattern.append((init_laser_delay, 0))
-            aom_pattern.append((init_laser_duration, 1))  # Init laser ON
-            
-            # Calculate time until readout laser
-            time_to_readout = readout_laser_delay - (init_laser_delay + init_laser_duration)
-            if time_to_readout > 0:
-                aom_pattern.append((time_to_readout, 0))
-            
-            aom_pattern.append((readout_laser_duration, 1))  # Readout laser ON
-            
-            # Fill remaining time to complete sequence
-            used_time = readout_laser_delay + readout_laser_duration
-            remaining_time = single_seq_duration - used_time
-            if remaining_time > 0:
-                aom_pattern.append((remaining_time, 0))
-            
-            # SPD pattern: off during init laser and delay -> detection during readout
-            if detection_delay > 0:
-                spd_pattern.append((detection_delay, 0))
-            spd_pattern.append((detection_duration, 1))  # SPD ON for detection
-            
-            # Fill remaining time to complete sequence
-            used_time_spd = detection_delay + detection_duration
-            remaining_time_spd = single_seq_duration - used_time_spd
-            if remaining_time_spd > 0:
-                spd_pattern.append((remaining_time_spd, 0))
-
-            # Append sequence_interval at the end (idle time before next repetition)
-            if sequence_interval > 0:
-                aom_pattern.append((sequence_interval, 0))
-                spd_pattern.append((sequence_interval, 0))
-            
-            # Validate total pattern duration is 8ns aligned
-            total_duration = sum(duration for duration, _ in aom_pattern)
-            if total_duration % 8 != 0:
-                print(f"❌ Error: T1 sequence length ({total_duration} ns) not multiple of 8 ns")
-                return None
-            
-            # Create sequence using createSequence method
-            sequence = self.pulse_controller.pulse_streamer.createSequence()
-            
-            # Set patterns for each channel (no MW needed for T1)
-            sequence.setDigital(self.pulse_controller.CHANNEL_AOM, aom_pattern)
-            sequence.setDigital(self.pulse_controller.CHANNEL_SPD, spd_pattern)
-            sequence.plot()
-            print(f"✅ T1 sequence created: delay={delay_time}ns, {total_duration} ns total (interval={sequence_interval}ns)")
-            
-            return sequence, total_duration
-            
-        except Exception as e:
-            print(f"❌ Error creating T1 sequence: {e}")
-            return None
-    
     
     def plot_results(self, experiment_type: str):
         """Plot the results of a specific experiment"""
@@ -661,10 +555,10 @@ def run_example_experiments():
         # experiments.plot_results('cw_odmr')
         
         # 2. ODMR
-        # print("\n" + "="*50)
-        # frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        # odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=1000)
-        # experiments.plot_results('odmr')
+        print("\n" + "="*50)
+        frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
+        odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=1000)
+        experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
         # print("\n" + "="*50)
@@ -673,10 +567,10 @@ def run_example_experiments():
         # experiments.plot_results('rabi')
         
         # 3. T1 decay
-        print("\n" + "="*50)
-        delay_times = np.linspace(0, 10000, 10)  # 0-10000 ns in 1000 ns steps
-        t1_result = experiments.t1_decay(delay_times, 5000, 5000, 5000, 0, None, None, 1000, 10)
-        experiments.plot_results('t1_decay')
+        # print("\n" + "="*50)
+        # delay_times = np.linspace(0, 10000, 10)  # 0-10000 ns in 1000 ns steps
+        # t1_result = experiments.t1_decay(delay_times, 5000, 5000, 5000, 0, None, None, 1000, 10)
+        # experiments.plot_results('t1_decay')
         
         
         print("\n✅ All example experiments completed!")
