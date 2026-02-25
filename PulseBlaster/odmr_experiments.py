@@ -1015,8 +1015,8 @@ def run_example_experiments():
         
         # 3. T1 decay
         print("\n" + "="*50)
-        delay_times = np.arange(0, 10000, 500)  # 0-10000 ns in 500 ns steps
-        t1_result = experiments.t1_decay(delay_times, 5000, 5000, 5000, 0, 6000, 6000, 1000, 10)
+        delay_times = np.linspace(0, 10000, 10)  # 0-10000 ns in 1000 ns steps
+        t1_result = experiments.t1_decay(delay_times, 5000, 5000, 5000, 0, None, None, 1000, 10)
         experiments.plot_results('t1_decay')
         
         # 3. Ramsey experiment
