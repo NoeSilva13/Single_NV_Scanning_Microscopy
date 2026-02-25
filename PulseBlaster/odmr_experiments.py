@@ -545,9 +545,7 @@ class ODMRExperiments:
                  readout_laser_delay: Optional[int] = None,
                  detection_delay: Optional[int] = None,
                  sequence_interval: int = 10000,
-                 repetitions: int = 1000,
-                 progress_callback: Optional[callable] = None,
-                 data_callback: Optional[callable] = None) -> Dict:
+                 repetitions: int = 1000) -> Dict:
         """
         Perform T1 decay time measurement.
         
@@ -607,7 +605,7 @@ class ODMRExperiments:
             adjusted_interval = constant_total_period - max_seq_duration
             adjusted_interval = self.pulse_controller.align_timing(adjusted_interval)
             
-            print(f"  Using fixed seq duration: {max_seq_duration} ns, Interval: {adjusted_interval} ns, Total period: {max_seq_duration + adjusted_interval} ns")
+            print(f"Using fixed seq duration: {max_seq_duration} ns, delay time: {delay_time} ns, Interval: {adjusted_interval} ns, Total period: {max_seq_duration + adjusted_interval} ns")
 
             # Create T1 decay sequence with fixed sequence duration
             sequence, total_duration = self._create_t1_sequence(
@@ -627,7 +625,7 @@ class ODMRExperiments:
                 
                 self.counter.start()
                 ready = False
-                self.pulse_controller.run_sequence(sequence, repetitions)
+                self.pulse_controller.run_sequence(sequence, n_runs=1)
                 
                 while ready is False:
                     time.sleep(.2)
