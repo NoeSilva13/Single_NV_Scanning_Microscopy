@@ -572,19 +572,20 @@ def run_example_experiments():
         # 2. ODMR
         # print("\n" + "="*50)
         # frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        # odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=1000)
+        # odmr_result = experiments.odmr(frequencies=frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=1000)
         # experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
         # print("\n" + "="*50)
         # mw_durations = np.linspace(0, 10000, 20)  # 0-10000 ns in 500 ns steps
-        # rabi_result = experiments.rabi_oscillation(mw_durations, 2.87e9, 5000, 5000, 0, 6000, 0, 1000, 1000)
+        # rabi_result = experiments.rabi_oscillation(mw_durations=mw_durations, mw_frequency=2.87e9, laser_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=6000, detection_delay=0, sequence_interval=1000, repetitions=1000)
         # experiments.plot_results('rabi')
         
         # 3. T1 decay
         print("\n" + "="*50)
         delay_times = np.linspace(0, 10000, 10)  # 0-10000 ns in 1000 ns steps
-        t1_result = experiments.t1_decay(delay_times, 5000, 5000, 5000, 0, None, None, 1000, 10000)
+        # Important: For T1 measurements, readout_laser_delay and detection_delay should be None, this allows to code to calculate the delays automatically otherwise the sequence will not be created correctly. 
+        t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=5000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=10000)
         experiments.plot_results('t1_decay')
         
         
