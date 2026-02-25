@@ -227,7 +227,7 @@ class ODMRExperiments:
                 self.counter.clear()
                 
                 # Get real count rate from TimeTagger
-                count_rate = np.mean(counts)/np.mean(information)
+                count_rate = np.mean(counts)/(np.mean(information)*1e-12)
                 print(f"Count rate: {count_rate} Hz")
                 
                 frequencies.append(freq)
@@ -325,7 +325,7 @@ class ODMRExperiments:
                 self.counter.clear()
 
                 # Get real count rate from TimeTagger
-                count_rate = np.mean(counts)/np.mean(information)
+                count_rate = np.mean(counts)/(np.mean(information)*1e-12)
                 print(f"Count rate: {count_rate} Hz")
 
                 durations.append(mw_duration)
@@ -949,16 +949,16 @@ def run_example_experiments():
         # experiments.plot_results('cw_odmr')
         
         # 2. ODMR
-        print("\n" + "="*50)
-        frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=1000)
-        experiments.plot_results('odmr')
+        # print("\n" + "="*50)
+        # frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
+        # odmr_result = experiments.odmr(frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=1000)
+        # experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
-        # print("\n" + "="*50)
-        # mw_durations = np.arange(0, 10000, 500)  # 0-200 ns in 5 ns steps
-        # rabi_result = experiments.rabi_oscillation(mw_durations, 2.87e9, 5000, 5000, 0, 6000, 0, 1000, 1000)
-        # experiments.plot_results('rabi')
+        print("\n" + "="*50)
+        mw_durations = np.arange(0, 10000, 500)  # 0-200 ns in 5 ns steps
+        rabi_result = experiments.rabi_oscillation(mw_durations, 2.87e9, 5000, 5000, 0, 6000, 0, 1000, 1000)
+        experiments.plot_results('rabi')
         
         # 3. Ramsey experiment
         #print("\n" + "="*50)
