@@ -12,7 +12,6 @@ Lab: Burke Lab, Department of Electrical Engineering and Computer Science, Unive
 
 import sys
 import json
-import threading
 import time
 import os
 from typing import Dict, List, Optional
@@ -46,241 +45,52 @@ from odmr_data_manager import ODMRDataManager
 from plot_widgets import PulsePatternVisualizer
 
 
-class ODMRWorker(QThread):
-    """Worker thread for running ODMR measurements"""
+class ExperimentWorker(QThread):
+    """Worker thread that delegates experiment execution to odmr_experiments.py.
     
-    progress_updated = pyqtSignal(int)
+    Runs the full experiment sweep in a single call and emits the complete
+    result when done. No point-by-point iteration is done here.
+    """
+    
     status_updated = pyqtSignal(str)
-    data_updated = pyqtSignal(list, list)  # frequencies, count_rates
+    result_ready = pyqtSignal(dict)
     measurement_finished = pyqtSignal()
     error_occurred = pyqtSignal(str)
-    data_saved = pyqtSignal(str)  # Signal for when data is saved
+    data_saved = pyqtSignal(str)
     
-    def __init__(self, experiments, parameters):
+    def __init__(self, experiment_func, kwargs, experiment_type):
         super().__init__()
-        self.experiments = experiments
-        self.parameters = parameters
-        self.is_running = True
+        self.experiment_func = experiment_func
+        self.kwargs = kwargs
+        self.experiment_type = experiment_type
         self.data_manager = ODMRDataManager()
     
-    def stop(self):
-        """Stop the measurement"""
-        self.is_running = False
-    
     def run(self):
-        """Run the ODMR measurement"""
         try:
-            frequencies = self.parameters['mw_frequencies']
-            total_points = len(frequencies)
-
-            all_frequencies = []
-            all_count_rates = []
-
-            for i, freq in enumerate(frequencies):
-                if not self.is_running:
-                    break
-
-                # Update progress and status
-                progress = int((i / total_points) * 100)
-                self.progress_updated.emit(progress)
-                self.status_updated.emit(f"Measuring {freq/1e9:.4f} GHz ({i+1}/{total_points})")
-
-                # Run single frequency measurement
-                single_params = self.parameters.copy()
-                single_params['mw_frequencies'] = [freq]
-
-                result = self.experiments.odmr(**single_params)
-
-                if result and 'count_rates' in result and len(result['count_rates']) > 0:
-                    all_frequencies.append(freq)
-                    all_count_rates.append(result['count_rates'][0])
-
-                    # Emit data update for real-time plotting
-                    self.data_updated.emit(all_frequencies.copy(), all_count_rates.copy())
-
-            if self.is_running:
-                self.progress_updated.emit(100)
-                self.status_updated.emit("ODMR measurement completed!")
-
-                # Automatically save the data
-                try:
-                    # Prepare parameters for saving (remove the frequencies list to avoid redundancy)
-                    save_params = self.parameters.copy()
-                    if 'mw_frequencies' in save_params:
-                        del save_params['mw_frequencies']
-
-                    # Save the data
-                    filename = self.data_manager.save_experiment_data('odmr', all_frequencies, all_count_rates, save_params)
-                    self.data_saved.emit(filename)
-                    self.status_updated.emit(f"💾 Data automatically saved to {filename}")
-                except Exception as save_error:
-                    self.status_updated.emit(f"⚠️ Warning: Could not save data automatically: {save_error}")
-
-        except Exception as e:
-            self.error_occurred.emit(str(e))
-        finally:
-            self.measurement_finished.emit()
-
-
-class RabiWorker(QThread):
-    """Worker thread for running Rabi oscillation measurements"""
-    
-    progress_updated = pyqtSignal(int)
-    status_updated = pyqtSignal(str)
-    data_updated = pyqtSignal(list, list)  # durations, count_rates
-    measurement_finished = pyqtSignal()
-    error_occurred = pyqtSignal(str)
-    data_saved = pyqtSignal(str)  # Signal for when data is saved
-    
-    def __init__(self, experiments, parameters):
-        super().__init__()
-        self.experiments = experiments
-        self.parameters = parameters
-        self.is_running = True
-        self.data_manager = ODMRDataManager()
-    
-    def stop(self):
-        """Stop the measurement"""
-        self.is_running = False
-    
-    def run(self):
-        """Run the Rabi oscillation measurement"""
-        try:
-            mw_durations = self.parameters['mw_durations']
-            total_points = len(mw_durations)
+            self.status_updated.emit(f"Running {self.experiment_type} experiment...")
+            result = self.experiment_func(**self.kwargs)
+            self.result_ready.emit(result)
+            self.status_updated.emit(f"{self.experiment_type} measurement completed!")
             
-            all_durations = []
-            all_count_rates = []
-            
-            for i, duration in enumerate(mw_durations):
-                if not self.is_running:
-                    break
+            try:
+                if self.experiment_type == 'odmr':
+                    x_data = result['frequencies']
+                elif self.experiment_type == 'rabi':
+                    x_data = result['durations']
+                elif self.experiment_type == 't1':
+                    x_data = result['delays']
+                else:
+                    x_data = []
                 
-                # Update progress and status
-                progress = int((i / total_points) * 100)
-                self.progress_updated.emit(progress)
-                self.status_updated.emit(f"Measuring {duration} ns duration ({i+1}/{total_points})")
-                
-                # Run single duration measurement
-                result = self.experiments.rabi_oscillation(
-                    mw_durations=[duration],
-                    mw_frequency=self.parameters['mw_frequency'],
-                    laser_duration=self.parameters['laser_duration'],
-                    detection_duration=self.parameters['detection_duration'],
-                    laser_delay=self.parameters['laser_delay'],
-                    mw_delay=self.parameters['mw_delay'],
-                    detection_delay=self.parameters['detection_delay'],
-                    sequence_interval=self.parameters['sequence_interval'],
-                    repetitions=self.parameters['repetitions']
+                save_params = {k: v for k, v in self.kwargs.items()
+                               if not isinstance(v, (list, np.ndarray))}
+                filename = self.data_manager.save_experiment_data(
+                    self.experiment_type, x_data, result['count_rates'], save_params
                 )
-                
-                if result and 'count_rates' in result and len(result['count_rates']) > 0:
-                    all_durations.append(duration)
-                    all_count_rates.append(result['count_rates'][0])
-                    
-                    # Emit data update for real-time plotting
-                    self.data_updated.emit(all_durations.copy(), all_count_rates.copy())
-            
-            if self.is_running:
-                self.progress_updated.emit(100)
-                self.status_updated.emit("Rabi oscillation measurement completed!")
-                
-                # Automatically save the data
-                try:
-                    # Prepare parameters for saving (remove the durations list to avoid redundancy)
-                    save_params = self.parameters.copy()
-                    if 'mw_durations' in save_params:
-                        del save_params['mw_durations']
-                    
-                    # Save the data
-                    filename = self.data_manager.save_experiment_data('rabi', all_durations, all_count_rates, save_params)
-                    self.data_saved.emit(filename)
-                    self.status_updated.emit(f"💾 Data automatically saved to {filename}")
-                except Exception as save_error:
-                    self.status_updated.emit(f"⚠️ Warning: Could not save data automatically: {save_error}")
-            
-        except Exception as e:
-            self.error_occurred.emit(str(e))
-        finally:
-            self.measurement_finished.emit()
-
-
-class T1Worker(QThread):
-    """Worker thread for running T1 decay measurements"""
-    
-    progress_updated = pyqtSignal(int)
-    status_updated = pyqtSignal(str)
-    data_updated = pyqtSignal(list, list)  # delays, count_rates
-    measurement_finished = pyqtSignal()
-    error_occurred = pyqtSignal(str)
-    data_saved = pyqtSignal(str)  # Signal for when data is saved
-    
-    def __init__(self, experiments, parameters):
-        super().__init__()
-        self.experiments = experiments
-        self.parameters = parameters
-        self.is_running = True
-        self.data_manager = ODMRDataManager()
-    
-    def stop(self):
-        """Stop the measurement"""
-        self.is_running = False
-    
-    def run(self):
-        """Run the T1 decay measurement"""
-        try:
-            delay_times = self.parameters['delay_times']
-            total_points = len(delay_times)
-            
-            all_delays = []
-            all_count_rates = []
-            
-            for i, delay in enumerate(delay_times):
-                if not self.is_running:
-                    break
-                
-                # Update progress and status
-                progress = int((i / total_points) * 100)
-                self.progress_updated.emit(progress)
-                self.status_updated.emit(f"Measuring {delay} ns delay ({i+1}/{total_points})")
-                
-                # Run single delay measurement
-                result = self.experiments.t1_decay(
-                    delay_times=[delay],
-                    init_laser_duration=self.parameters['init_laser_duration'],
-                    readout_laser_duration=self.parameters['readout_laser_duration'],
-                    detection_duration=self.parameters['detection_duration'],
-                    init_laser_delay=self.parameters['init_laser_delay'],
-                    readout_laser_delay=self.parameters.get('readout_laser_delay'),
-                    detection_delay=self.parameters.get('detection_delay'),
-                    sequence_interval=self.parameters['sequence_interval'],
-                    repetitions=self.parameters['repetitions']
-                )
-                
-                if result and 'count_rates' in result and len(result['count_rates']) > 0:
-                    all_delays.append(delay)
-                    all_count_rates.append(result['count_rates'][0])
-                    
-                    # Emit data update for real-time plotting
-                    self.data_updated.emit(all_delays.copy(), all_count_rates.copy())
-            
-            if self.is_running:
-                self.progress_updated.emit(100)
-                self.status_updated.emit("T1 decay measurement completed!")
-                
-                # Automatically save the data
-                try:
-                    # Prepare parameters for saving (remove the delays list to avoid redundancy)
-                    save_params = self.parameters.copy()
-                    if 'delay_times' in save_params:
-                        del save_params['delay_times']
-                    
-                    # Save the data
-                    filename = self.data_manager.save_experiment_data('t1', all_delays, all_count_rates, save_params)
-                    self.data_saved.emit(filename)
-                    self.status_updated.emit(f"💾 Data automatically saved to {filename}")
-                except Exception as save_error:
-                    self.status_updated.emit(f"⚠️ Warning: Could not save data automatically: {save_error}")
+                self.data_saved.emit(filename)
+                self.status_updated.emit(f"💾 Data saved to {filename}")
+            except Exception as save_error:
+                self.status_updated.emit(f"⚠️ Could not save data: {save_error}")
             
         except Exception as e:
             self.error_occurred.emit(str(e))
@@ -881,9 +691,9 @@ class ODMRControlCenter(QMainWindow):
         
         # Delay Time parameters
         delay_group = ParameterGroupBox("Delay Time Parameters")
-        self.start_delay = delay_group.add_parameter("Start Delay (ns):", "500", "Starting delay time between init and readout")
-        self.stop_delay = delay_group.add_parameter("Stop Delay (ns):", "50000", "Ending delay time between init and readout")
-        self.delay_step = delay_group.add_parameter("Step Size (ns):", "100", "Step size for delay time sweep")
+        self.start_delay = delay_group.add_parameter("Start Delay (ns):", "0", "Starting delay time between init and readout")
+        self.stop_delay = delay_group.add_parameter("Stop Delay (ns):", "10000", "Ending delay time between init and readout")
+        self.delay_num_points = delay_group.add_parameter("Number of Points:", "50", "Number of delay time points")
         scroll_layout.addWidget(delay_group)
         
         # Laser parameters
@@ -903,7 +713,7 @@ class ODMRControlCenter(QMainWindow):
         # Sequence parameters
         seq_group = ParameterGroupBox("Sequence Parameters")
         self.t1_sequence_interval = seq_group.add_parameter("Sequence Interval (ns):", "1000", "Time between sequence repetitions")
-        self.t1_repetitions = seq_group.add_parameter("Repetitions:", "5000", "Number of sequence repetitions")
+        self.t1_repetitions = seq_group.add_parameter("Repetitions:", "1000", "Number of sequence repetitions")
         scroll_layout.addWidget(seq_group)
         
         # Connect parameter changes to pulse pattern updates
@@ -1306,7 +1116,7 @@ class ODMRControlCenter(QMainWindow):
         self.t1_repetitions.textChanged.connect(self.update_t1_pulse_pattern)
     
     def start_measurement(self):
-        """Start ODMR measurement"""
+        """Start ODMR measurement using odmr_experiments.py"""
         if not self.pulse_controller or not self.pulse_controller.is_connected:
             QMessageBox.warning(self, "Connection Error", "Pulse Streamer not connected!")
             return
@@ -1315,11 +1125,9 @@ class ODMRControlCenter(QMainWindow):
         if parameters is None:
             return
         
-        # Initialize experiments
         if not self.experiments:
             self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator)
         
-        # Set MW power
         if self.mw_generator:
             try:
                 power = float(self.mw_power_advanced.text())
@@ -1327,44 +1135,40 @@ class ODMRControlCenter(QMainWindow):
             except:
                 pass
         
-        # Update UI
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
         self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
+        self.progress_bar.setRange(0, 0)
         self.current_results = {'frequencies': [], 'count_rates': []}
         
-        # Start worker thread
-        self.worker = ODMRWorker(self.experiments, parameters)
-        self.worker.progress_updated.connect(self.progress_bar.setValue)
+        self.worker = ExperimentWorker(self.experiments.odmr, parameters, 'odmr')
         self.worker.status_updated.connect(self.log_message)
-        self.worker.data_updated.connect(self.update_plot)
+        self.worker.result_ready.connect(self.on_odmr_result)
         self.worker.measurement_finished.connect(self.measurement_finished)
         self.worker.error_occurred.connect(self.handle_error)
-        self.worker.data_saved.connect(self.on_data_saved)  # Connect data saved signal
+        self.worker.data_saved.connect(self.on_data_saved)
         self.worker.start()
         
         self.log_message("🚀 ODMR measurement started")
     
     def stop_measurement(self):
-        """Stop ODMR measurement"""
-        if self.worker:
-            self.worker.stop()
-            self.log_message("⏹️ Stopping measurement...")
+        """Stop ODMR measurement (waits for current sweep to finish)"""
+        if self.worker and self.worker.isRunning():
+            self.log_message("⏹️ Waiting for experiment to finish...")
+            self.stop_btn.setEnabled(False)
     
-    def update_plot(self, frequencies, count_rates):
-        """Update the real-time plot"""
-        self.current_results['frequencies'] = frequencies
-        self.current_results['count_rates'] = count_rates
-        self.plot_widget.update_plot(frequencies, count_rates)
+    def on_odmr_result(self, result):
+        """Handle completed ODMR result from odmr_experiments.py"""
+        self.current_results = result
+        self.plot_widget.update_plot(result['frequencies'], result['count_rates'])
     
     def measurement_finished(self):
         """Handle measurement completion"""
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self.progress_bar.setVisible(False)
+        self.progress_bar.setRange(0, 100)
         
-        # Turn off MW output
         if self.mw_generator:
             try:
                 self.mw_generator.set_rf_output(False)
@@ -1554,7 +1358,7 @@ class ODMRControlCenter(QMainWindow):
             return None
     
     def start_rabi_measurement(self):
-        """Start Rabi oscillation measurement"""
+        """Start Rabi oscillation measurement using odmr_experiments.py"""
         if not self.pulse_controller or not self.pulse_controller.is_connected:
             QMessageBox.warning(self, "Connection Error", "Pulse Streamer not connected!")
             return
@@ -1563,11 +1367,9 @@ class ODMRControlCenter(QMainWindow):
         if parameters is None:
             return
         
-        # Initialize experiments if needed
         if not self.experiments:
             self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator)
         
-        # Set MW power
         if self.mw_generator:
             try:
                 power = float(self.rabi_mw_power.text())
@@ -1575,54 +1377,50 @@ class ODMRControlCenter(QMainWindow):
             except:
                 pass
         
-        # Update UI
         self.start_rabi_btn.setEnabled(False)
         self.stop_rabi_btn.setEnabled(True)
         self.rabi_progress_bar.setVisible(True)
-        self.rabi_progress_bar.setValue(0)
+        self.rabi_progress_bar.setRange(0, 0)
         self.current_results = {'durations': [], 'count_rates': []}
         
-        # Start worker thread
-        self.worker = RabiWorker(self.experiments, parameters)
-        self.worker.progress_updated.connect(self.rabi_progress_bar.setValue)
+        self.worker = ExperimentWorker(
+            self.experiments.rabi_oscillation, parameters, 'rabi'
+        )
         self.worker.status_updated.connect(self.log_message)
-        self.worker.data_updated.connect(self.update_rabi_plot)
+        self.worker.result_ready.connect(self.on_rabi_result)
         self.worker.measurement_finished.connect(self.rabi_measurement_finished)
         self.worker.error_occurred.connect(self.handle_error)
-        self.worker.data_saved.connect(self.on_data_saved)  # Connect data saved signal
+        self.worker.data_saved.connect(self.on_data_saved)
         self.worker.start()
         
         self.log_message("🚀 Rabi oscillation measurement started")
     
     def stop_rabi_measurement(self):
-        """Stop Rabi oscillation measurement"""
-        if self.worker:
-            self.worker.stop()
-            self.log_message("⏹️ Stopping Rabi measurement...")
+        """Stop Rabi oscillation measurement (waits for current sweep to finish)"""
+        if self.worker and self.worker.isRunning():
+            self.log_message("⏹️ Waiting for Rabi experiment to finish...")
+            self.stop_rabi_btn.setEnabled(False)
     
-    def update_rabi_plot(self, durations, count_rates):
-        """Update the real-time plot with Rabi data"""
-        self.current_results['durations'] = durations
-        self.current_results['count_rates'] = count_rates
-        self.plot_widget.ax.clear()
+    def on_rabi_result(self, result):
+        """Handle completed Rabi result from odmr_experiments.py"""
+        self.current_results = result
+        durations = result['durations']
+        count_rates = result['count_rates']
         
-        # Plot data
+        self.plot_widget.ax.clear()
         self.plot_widget.ax.plot(durations, count_rates, 'o-', markersize=4, linewidth=2,
                                color='#00ff88', markerfacecolor='#00d4aa', markeredgecolor='#00ff88')
         
-        # Update labels and title
         self.plot_widget.ax.set_xlabel('MW Duration (ns)', fontsize=12, color='white')
         self.plot_widget.ax.set_ylabel('Count Rate (Hz)', fontsize=12, color='white')
-        self.plot_widget.ax.set_title('Rabi Oscillations (Live)', fontsize=14, fontweight='bold', color='white')
+        self.plot_widget.ax.set_title('Rabi Oscillations', fontsize=14, fontweight='bold', color='white')
         
-        # Re-apply dark theme styling
         self.plot_widget.ax.set_facecolor('#262930')
         self.plot_widget.ax.grid(True, alpha=0.3, color='#555555')
         self.plot_widget.ax.tick_params(colors='white')
         for spine in self.plot_widget.ax.spines.values():
             spine.set_color('white')
         
-        # Auto-scale with padding
         if len(durations) > 1:
             duration_range = max(durations) - min(durations)
             self.plot_widget.ax.set_xlim(min(durations) - 0.05*duration_range,
@@ -1642,8 +1440,8 @@ class ODMRControlCenter(QMainWindow):
         self.start_rabi_btn.setEnabled(True)
         self.stop_rabi_btn.setEnabled(False)
         self.rabi_progress_bar.setVisible(False)
+        self.rabi_progress_bar.setRange(0, 100)
         
-        # Turn off MW output
         if self.mw_generator:
             try:
                 self.mw_generator.set_rf_output(False)
@@ -1765,10 +1563,10 @@ class ODMRControlCenter(QMainWindow):
     def get_t1_parameters(self):
         """Get all parameters for T1 decay measurement"""
         try:
-            start_delay = int(self.start_delay.text())
-            stop_delay = int(self.stop_delay.text())
-            step_size = int(self.delay_step.text())
-            delay_times = list(range(start_delay, stop_delay + step_size, step_size))
+            start_delay = float(self.start_delay.text())
+            stop_delay = float(self.stop_delay.text())
+            num_points = int(self.delay_num_points.text())
+            delay_times = np.linspace(start_delay, stop_delay, num_points).tolist()
             
             # Handle auto-calculated delays
             readout_laser_delay = None
@@ -1796,7 +1594,7 @@ class ODMRControlCenter(QMainWindow):
             return None
     
     def start_t1_measurement(self):
-        """Start T1 decay measurement"""
+        """Start T1 decay measurement using odmr_experiments.py"""
         if not self.pulse_controller or not self.pulse_controller.is_connected:
             QMessageBox.warning(self, "Connection Error", "Pulse Streamer not connected!")
             return
@@ -1805,58 +1603,53 @@ class ODMRControlCenter(QMainWindow):
         if parameters is None:
             return
         
-        # Initialize experiments if needed
         if not self.experiments:
             self.experiments = ODMRExperiments(self.pulse_controller, self.mw_generator)
         
-        # Update UI
         self.start_t1_btn.setEnabled(False)
         self.stop_t1_btn.setEnabled(True)
         self.t1_progress_bar.setVisible(True)
-        self.t1_progress_bar.setValue(0)
+        self.t1_progress_bar.setRange(0, 0)
         self.current_results = {'delays': [], 'count_rates': []}
         
-        # Start worker thread
-        self.worker = T1Worker(self.experiments, parameters)
-        self.worker.progress_updated.connect(self.t1_progress_bar.setValue)
+        self.worker = ExperimentWorker(
+            self.experiments.t1_decay, parameters, 't1'
+        )
         self.worker.status_updated.connect(self.log_message)
-        self.worker.data_updated.connect(self.update_t1_plot)
+        self.worker.result_ready.connect(self.on_t1_result)
         self.worker.measurement_finished.connect(self.t1_measurement_finished)
         self.worker.error_occurred.connect(self.handle_error)
-        self.worker.data_saved.connect(self.on_data_saved)  # Connect data saved signal
+        self.worker.data_saved.connect(self.on_data_saved)
         self.worker.start()
         
         self.log_message("🚀 T1 decay measurement started")
     
     def stop_t1_measurement(self):
-        """Stop T1 decay measurement"""
-        if self.worker:
-            self.worker.stop()
-            self.log_message("⏹️ Stopping T1 measurement...")
+        """Stop T1 decay measurement (waits for current sweep to finish)"""
+        if self.worker and self.worker.isRunning():
+            self.log_message("⏹️ Waiting for T1 experiment to finish...")
+            self.stop_t1_btn.setEnabled(False)
     
-    def update_t1_plot(self, delays, count_rates):
-        """Update the real-time plot with T1 data"""
-        self.current_results['delays'] = delays
-        self.current_results['count_rates'] = count_rates
-        self.plot_widget.ax.clear()
+    def on_t1_result(self, result):
+        """Handle completed T1 result from odmr_experiments.py"""
+        self.current_results = result
+        delays = result['delays']
+        count_rates = result['count_rates']
         
-        # Plot data
+        self.plot_widget.ax.clear()
         self.plot_widget.ax.plot(np.array(delays)/1000, count_rates, 'o-', markersize=4, linewidth=2,
                                color='#00ff88', markerfacecolor='#00d4aa', markeredgecolor='#00ff88')
         
-        # Update labels and title
-        self.plot_widget.ax.set_xlabel('Delay Time (µs)', fontsize=12, color='white')
+        self.plot_widget.ax.set_xlabel('Delay Time (us)', fontsize=12, color='white')
         self.plot_widget.ax.set_ylabel('Count Rate (Hz)', fontsize=12, color='white')
-        self.plot_widget.ax.set_title('T1 Decay (Live)', fontsize=14, fontweight='bold', color='white')
+        self.plot_widget.ax.set_title('T1 Decay', fontsize=14, fontweight='bold', color='white')
         
-        # Re-apply dark theme styling
         self.plot_widget.ax.set_facecolor('#262930')
         self.plot_widget.ax.grid(True, alpha=0.3, color='#555555')
         self.plot_widget.ax.tick_params(colors='white')
         for spine in self.plot_widget.ax.spines.values():
             spine.set_color('white')
         
-        # Auto-scale with padding
         if len(delays) > 1:
             delay_range = max(delays) - min(delays)
             self.plot_widget.ax.set_xlim((min(delays) - 0.05*delay_range)/1000,
@@ -1876,6 +1669,7 @@ class ODMRControlCenter(QMainWindow):
         self.start_t1_btn.setEnabled(True)
         self.stop_t1_btn.setEnabled(False)
         self.t1_progress_bar.setVisible(False)
+        self.t1_progress_bar.setRange(0, 100)
     
     def save_t1_parameters(self):
         """Save current T1 parameters to JSON file"""
@@ -1885,9 +1679,9 @@ class ODMRControlCenter(QMainWindow):
                 return
             
             # Add UI-specific parameters
-            params['start_delay'] = int(self.start_delay.text())
-            params['stop_delay'] = int(self.stop_delay.text())
-            params['delay_step'] = int(self.delay_step.text())
+            params['start_delay'] = float(self.start_delay.text())
+            params['stop_delay'] = float(self.stop_delay.text())
+            params['delay_num_points'] = int(self.delay_num_points.text())
             params['readout_laser_delay_text'] = self.t1_readout_laser_delay.text()
             params['detection_delay_text'] = self.t1_detection_delay.text()
             
@@ -1919,8 +1713,8 @@ class ODMRControlCenter(QMainWindow):
                     self.start_delay.setText(str(params['start_delay']))
                 if 'stop_delay' in params:
                     self.stop_delay.setText(str(params['stop_delay']))
-                if 'delay_step' in params:
-                    self.delay_step.setText(str(params['delay_step']))
+                if 'delay_num_points' in params:
+                    self.delay_num_points.setText(str(params['delay_num_points']))
                 
                 # Set timing parameters
                 if 'init_laser_duration' in params:
@@ -1995,14 +1789,11 @@ class ODMRControlCenter(QMainWindow):
         """Handle application closing"""
         if self.worker and self.worker.isRunning():
             reply = QMessageBox.question(
-                self, "Quit", "Measurement in progress. Stop and quit?",
+                self, "Quit", "Experiment in progress. Wait for it to finish and quit?",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No
             )
             if reply == QMessageBox.Yes:
-                # Stop any running measurement
-                if hasattr(self.worker, 'stop'):
-                    self.worker.stop()
-                self.worker.wait(3000)  # Wait up to 3 seconds
+                self.worker.wait(30000)
             else:
                 event.ignore()
                 return
