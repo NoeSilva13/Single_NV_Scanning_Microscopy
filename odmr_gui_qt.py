@@ -48,11 +48,12 @@ from plot_widgets import PulsePatternVisualizer
 class ExperimentWorker(QThread):
     """Worker thread that delegates experiment execution to odmr_experiments.py.
     
-    Runs the full experiment sweep in a single call and emits the complete
-    result when done. No point-by-point iteration is done here.
+    Calls the experiment method with a progress_callback so the GUI receives
+    live data updates after each sweep point.
     """
     
     status_updated = pyqtSignal(str)
+    data_updated = pyqtSignal(list, list)
     result_ready = pyqtSignal(dict)
     measurement_finished = pyqtSignal()
     error_occurred = pyqtSignal(str)
@@ -65,9 +66,13 @@ class ExperimentWorker(QThread):
         self.experiment_type = experiment_type
         self.data_manager = ODMRDataManager()
     
+    def _on_progress(self, x_data, y_data):
+        self.data_updated.emit(x_data, y_data)
+    
     def run(self):
         try:
             self.status_updated.emit(f"Running {self.experiment_type} experiment...")
+            self.kwargs['progress_callback'] = self._on_progress
             result = self.experiment_func(**self.kwargs)
             self.result_ready.emit(result)
             self.status_updated.emit(f"{self.experiment_type} measurement completed!")
@@ -83,7 +88,8 @@ class ExperimentWorker(QThread):
                     x_data = []
                 
                 save_params = {k: v for k, v in self.kwargs.items()
-                               if not isinstance(v, (list, np.ndarray))}
+                               if not isinstance(v, (list, np.ndarray))
+                               and not callable(v)}
                 filename = self.data_manager.save_experiment_data(
                     self.experiment_type, x_data, result['count_rates'], save_params
                 )
@@ -1143,6 +1149,7 @@ class ODMRControlCenter(QMainWindow):
         
         self.worker = ExperimentWorker(self.experiments.odmr, parameters, 'odmr')
         self.worker.status_updated.connect(self.log_message)
+        self.worker.data_updated.connect(self.on_odmr_live_update)
         self.worker.result_ready.connect(self.on_odmr_result)
         self.worker.measurement_finished.connect(self.measurement_finished)
         self.worker.error_occurred.connect(self.handle_error)
@@ -1156,6 +1163,11 @@ class ODMRControlCenter(QMainWindow):
         if self.worker and self.worker.isRunning():
             self.log_message("⏹️ Waiting for experiment to finish...")
             self.stop_btn.setEnabled(False)
+    
+    def on_odmr_live_update(self, frequencies, count_rates):
+        """Live-update the plot as each ODMR frequency point completes"""
+        self.current_results = {'frequencies': frequencies, 'count_rates': count_rates}
+        self.plot_widget.update_plot(frequencies, count_rates)
     
     def on_odmr_result(self, result):
         """Handle completed ODMR result from odmr_experiments.py"""
@@ -1387,6 +1399,7 @@ class ODMRControlCenter(QMainWindow):
             self.experiments.rabi_oscillation, parameters, 'rabi'
         )
         self.worker.status_updated.connect(self.log_message)
+        self.worker.data_updated.connect(self.on_rabi_live_update)
         self.worker.result_ready.connect(self.on_rabi_result)
         self.worker.measurement_finished.connect(self.rabi_measurement_finished)
         self.worker.error_occurred.connect(self.handle_error)
@@ -1401,19 +1414,24 @@ class ODMRControlCenter(QMainWindow):
             self.log_message("⏹️ Waiting for Rabi experiment to finish...")
             self.stop_rabi_btn.setEnabled(False)
     
+    def on_rabi_live_update(self, durations, count_rates):
+        """Live-update the plot as each Rabi duration point completes"""
+        self.current_results = {'durations': durations, 'count_rates': count_rates}
+        self._draw_rabi_plot(durations, count_rates)
+    
     def on_rabi_result(self, result):
         """Handle completed Rabi result from odmr_experiments.py"""
         self.current_results = result
-        durations = result['durations']
-        count_rates = result['count_rates']
-        
+        self._draw_rabi_plot(result['durations'], result['count_rates'])
+    
+    def _draw_rabi_plot(self, durations, count_rates):
         self.plot_widget.ax.clear()
         self.plot_widget.ax.plot(durations, count_rates, 'o-', markersize=4, linewidth=2,
                                color='#00ff88', markerfacecolor='#00d4aa', markeredgecolor='#00ff88')
         
         self.plot_widget.ax.set_xlabel('MW Duration (ns)', fontsize=12, color='white')
         self.plot_widget.ax.set_ylabel('Count Rate (Hz)', fontsize=12, color='white')
-        self.plot_widget.ax.set_title('Rabi Oscillations', fontsize=14, fontweight='bold', color='white')
+        self.plot_widget.ax.set_title('Rabi Oscillations (Live)', fontsize=14, fontweight='bold', color='white')
         
         self.plot_widget.ax.set_facecolor('#262930')
         self.plot_widget.ax.grid(True, alpha=0.3, color='#555555')
@@ -1616,6 +1634,7 @@ class ODMRControlCenter(QMainWindow):
             self.experiments.t1_decay, parameters, 't1'
         )
         self.worker.status_updated.connect(self.log_message)
+        self.worker.data_updated.connect(self.on_t1_live_update)
         self.worker.result_ready.connect(self.on_t1_result)
         self.worker.measurement_finished.connect(self.t1_measurement_finished)
         self.worker.error_occurred.connect(self.handle_error)
@@ -1630,19 +1649,24 @@ class ODMRControlCenter(QMainWindow):
             self.log_message("⏹️ Waiting for T1 experiment to finish...")
             self.stop_t1_btn.setEnabled(False)
     
+    def on_t1_live_update(self, delays, count_rates):
+        """Live-update the plot as each T1 delay point completes"""
+        self.current_results = {'delays': delays, 'count_rates': count_rates}
+        self._draw_t1_plot(delays, count_rates)
+    
     def on_t1_result(self, result):
         """Handle completed T1 result from odmr_experiments.py"""
         self.current_results = result
-        delays = result['delays']
-        count_rates = result['count_rates']
-        
+        self._draw_t1_plot(result['delays'], result['count_rates'])
+    
+    def _draw_t1_plot(self, delays, count_rates):
         self.plot_widget.ax.clear()
         self.plot_widget.ax.plot(np.array(delays)/1000, count_rates, 'o-', markersize=4, linewidth=2,
                                color='#00ff88', markerfacecolor='#00d4aa', markeredgecolor='#00ff88')
         
         self.plot_widget.ax.set_xlabel('Delay Time (us)', fontsize=12, color='white')
         self.plot_widget.ax.set_ylabel('Count Rate (Hz)', fontsize=12, color='white')
-        self.plot_widget.ax.set_title('T1 Decay', fontsize=14, fontweight='bold', color='white')
+        self.plot_widget.ax.set_title('T1 Decay (Live)', fontsize=14, fontweight='bold', color='white')
         
         self.plot_widget.ax.set_facecolor('#262930')
         self.plot_widget.ax.grid(True, alpha=0.3, color='#555555')

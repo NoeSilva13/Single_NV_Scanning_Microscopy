@@ -13,7 +13,7 @@ Date: 2025
 import numpy as np
 import matplotlib.pyplot as plt
 import time
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Callable
 # Try relative imports first (when used as package)
 try:
     from .swabian_pulse_streamer import SwabianPulseController
@@ -158,7 +158,8 @@ class ODMRExperiments:
                            mw_delay: int = 0,
                            detection_delay: int = 0,
                            sequence_interval: int = 10000,
-                           repetitions: int = 100) -> Dict:
+                           repetitions: int = 100,
+                           progress_callback: Optional[Callable] = None) -> Dict:
         """
         Perform ODMR (Optically Detected Magnetic Resonance) measurement.
         
@@ -238,6 +239,9 @@ class ODMRExperiments:
                 frequencies.append(freq)
                 count_rates.append(count_rate)
                 
+                if progress_callback:
+                    progress_callback(frequencies.copy(), count_rates.copy())
+                
                 # Turn off RF output after measurement
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(False)
@@ -262,7 +266,8 @@ class ODMRExperiments:
                         mw_delay: Optional[int] = None,
                         detection_delay: Optional[int] = None,
                         sequence_interval: int = 10000,
-                        repetitions: int = 1000) -> Dict:
+                        repetitions: int = 1000,
+                        progress_callback: Optional[Callable] = None) -> Dict:
         """
         Perform Rabi oscillation measurement.
         
@@ -341,6 +346,9 @@ class ODMRExperiments:
                 durations.append(mw_duration)
                 count_rates.append(count_rate)
 
+                if progress_callback:
+                    progress_callback(durations.copy(), count_rates.copy())
+
                 # Turn off RF output after measurement
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(False)
@@ -365,7 +373,8 @@ class ODMRExperiments:
                  readout_laser_delay: Optional[int] = None,
                  detection_delay: Optional[int] = None,
                  sequence_interval: int = 10000,
-                 repetitions: int = 1000) -> Dict:
+                 repetitions: int = 1000,
+                 progress_callback: Optional[Callable] = None) -> Dict:
         """
         Perform T1 decay time measurement.
         
@@ -441,7 +450,7 @@ class ODMRExperiments:
             )
             # Only plot sequence when running in main thread (not in GUI worker threads)
             #if threading.current_thread() is threading.main_thread():
-            #    sequence.plot()
+            #sequence.plot()
             # Sleep time if not the while loop fails  
             time.sleep(0.2)
             
@@ -468,6 +477,9 @@ class ODMRExperiments:
                 
                 delays.append(delay_time)
                 count_rates.append(count_rate)
+                
+                if progress_callback:
+                    progress_callback(delays.copy(), count_rates.copy())
                 
                 time.sleep(0.05)
         
