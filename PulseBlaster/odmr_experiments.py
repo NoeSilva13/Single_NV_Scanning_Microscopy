@@ -634,23 +634,20 @@ def run_example_experiments():
     
     try:
         #1. Continuous Wave ODMR
-        # print("\n" + "="*50)
-        # frequencies = np.linspace(2.7e9, 3e9, 100)  # 2.85-2.89 GHz
-        # cw_odmr_result = experiments.cw_odmr(
-        #     mw_frequencies=frequencies,
-        #     acquisition_time=0.5,  # 1 seconds per point
-        #     mw_power=0  # -10 dBm
-        # )
-        
-        
-        
-        # experiments.plot_results('cw_odmr')
+        print("\n" + "="*50)
+        frequencies = np.linspace(2.6e9, 3.2e9, 50)  # 2.85-2.89 GHz
+        cw_odmr_result = experiments.cw_odmr(
+            mw_frequencies=frequencies,
+            acquisition_time=5,  # 1 seconds per point
+            mw_power=-10  # -10 dBm
+        )
+        experiments.plot_results('cw_odmr')
         
         # 2. ODMR
-        print("\n" + "="*50)
-        frequencies = np.linspace(2.5e9, 3e9, 50)  # 2.85-2.89 GHz
-        odmr_result = experiments.odmr(mw_frequencies=frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=2000)
-        experiments.plot_results('odmr')
+        # print("\n" + "="*50)
+        # frequencies = np.linspace(2.5e9, 3e9, 50)  # 2.85-2.89 GHz
+        # odmr_result = experiments.odmr(mw_frequencies=frequencies, laser_duration=10000, mw_duration=10000, detection_duration=10000, laser_delay=0, mw_delay=10000, detection_delay=0, sequence_interval=0, repetitions=50000)
+        # experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
         # print("\n" + "="*50)
@@ -660,9 +657,9 @@ def run_example_experiments():
         
         # 3. T1 decay
         # print("\n" + "="*50)
-        # delay_times = np.linspace(0, 3e6, 50)  # 0-3 microseconds in 50 steps
+        # delay_times = np.linspace(0, 5000, 100)  # 0-3 microseconds in 50 steps
         # # Important: For T1 measurements, readout_laser_delay and detection_delay should be None, this allows to code to calculate the delays automatically otherwise the sequence will not be created correctly. 
-        # t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=5000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=1000)
+        # t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=5000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=10000)
         # experiments.plot_results('t1_decay')
         
         
