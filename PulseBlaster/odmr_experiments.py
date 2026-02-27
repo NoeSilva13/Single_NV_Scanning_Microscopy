@@ -796,14 +796,30 @@ def run_example_experiments():
         # frequencies = np.linspace(2.5e9, 3e9, 50)  # 2.85-2.89 GHz
         # odmr_result = experiments.odmr(mw_frequencies=frequencies, laser_duration=10000, mw_duration=10000, detection_duration=10000, laser_delay=0, mw_delay=10000, detection_delay=0, sequence_interval=0, repetitions=50000)
         # experiments.plot_results('odmr')
+
+        # 3. ODMR Contrast
+        # print("\n" + "="*50)
+        # frequencies = np.linspace(2.6e9, 3.2e9, 50)
+        # odmr_contrast_result = experiments.odmr_contrast(
+        #     mw_frequencies=frequencies,
+        #     laser_duration=2000,
+        #     mw_duration=2000,
+        #     detection_duration=1000,
+        #     laser_delay=0,
+        #     mw_delay=0,
+        #     detection_delay=0,
+        #     sequence_interval=10000,
+        #     repetitions=100
+        # )
+        # experiments.plot_results('odmr_contrast')
         
-        # 2. Rabi oscillation
+        # 4. Rabi oscillation
         # print("\n" + "="*50)
         # mw_durations = np.linspace(0, 10000, 20)  # 0-10000 ns in 500 ns steps
         # rabi_result = experiments.rabi_oscillation(mw_durations=mw_durations, mw_frequency=2.87e9, laser_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=6000, detection_delay=0, sequence_interval=1000, repetitions=1000)
         # experiments.plot_results('rabi')
         
-        # 3. T1 decay
+        # 5. T1 decay
         # print("\n" + "="*50)
         # delay_times = np.linspace(0, 5000, 100)  # 0-3 microseconds in 50 steps
         # # Important: For T1 measurements, readout_laser_delay and detection_delay should be None, this allows to code to calculate the delays automatically otherwise the sequence will not be created correctly. 
