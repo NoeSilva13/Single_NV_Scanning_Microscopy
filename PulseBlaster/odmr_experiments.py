@@ -619,7 +619,7 @@ def run_example_experiments():
     
     # Initialize RIGOL signal generator
     try:
-        rigol = RigolDSG836Controller("192.168.0.223")
+        rigol = RigolDSG836Controller("192.168.0.222")
         if rigol.connect():
             print("✅ RIGOL DSG836 connected successfully")
         else:
@@ -647,10 +647,10 @@ def run_example_experiments():
         # experiments.plot_results('cw_odmr')
         
         # 2. ODMR
-        # print("\n" + "="*50)
-        # frequencies = np.linspace(1e9, 3e9, 50)  # 2.85-2.89 GHz
-        # odmr_result = experiments.odmr(frequencies=frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=1000)
-        # experiments.plot_results('odmr')
+        print("\n" + "="*50)
+        frequencies = np.linspace(2.5e9, 3e9, 50)  # 2.85-2.89 GHz
+        odmr_result = experiments.odmr(mw_frequencies=frequencies, laser_duration=5000, mw_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=0, detection_delay=0, sequence_interval=5000, repetitions=2000)
+        experiments.plot_results('odmr')
         
         # 2. Rabi oscillation
         # print("\n" + "="*50)
@@ -659,11 +659,11 @@ def run_example_experiments():
         # experiments.plot_results('rabi')
         
         # 3. T1 decay
-        print("\n" + "="*50)
-        delay_times = np.linspace(0, 3e6, 50)  # 0-3 microseconds in 50 steps
-        # Important: For T1 measurements, readout_laser_delay and detection_delay should be None, this allows to code to calculate the delays automatically otherwise the sequence will not be created correctly. 
-        t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=5000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=1000)
-        experiments.plot_results('t1_decay')
+        # print("\n" + "="*50)
+        # delay_times = np.linspace(0, 3e6, 50)  # 0-3 microseconds in 50 steps
+        # # Important: For T1 measurements, readout_laser_delay and detection_delay should be None, this allows to code to calculate the delays automatically otherwise the sequence will not be created correctly. 
+        # t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=5000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=1000)
+        # experiments.plot_results('t1_decay')
         
         
         print("\n✅ All example experiments completed!")
