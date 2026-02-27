@@ -12,6 +12,7 @@ Date: 2025
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.optimize import curve_fit
 import time
 import sys
 import os
@@ -578,7 +579,24 @@ class ODMRExperiments:
             plt.title('Rabi Oscillation')
             
         elif experiment_type == 't1_decay':
-            plt.plot(np.array(data['delays'])/1000, data['count_rates'], 'co-')
+            delays_us = np.array(data['delays']) / 1000  # ns -> µs
+            counts = np.array(data['count_rates'])
+            plt.plot(delays_us, counts, 'co', label='Data')
+
+            try:
+                exp_decay = lambda t, A, T1, C: A * np.exp(-t / T1) + C
+                p0 = [counts[0] - counts[-1], delays_us[-1] / 3, counts[-1]]
+                popt, pcov = curve_fit(exp_decay, delays_us, counts, p0=p0, maxfev=10000)
+                perr = np.sqrt(np.diag(pcov))
+
+                fit_t = np.linspace(delays_us[0], delays_us[-1], 500)
+                plt.plot(fit_t, exp_decay(fit_t, *popt), 'r-', linewidth=2,
+                         label=f'Fit: T1 = {popt[1]:.2f} ± {perr[1]:.2f} µs')
+                plt.legend()
+                print(f"T1 fit: A={popt[0]:.2f}, T1={popt[1]:.2f} ± {perr[1]:.2f} µs, C={popt[2]:.2f}")
+            except Exception as e:
+                print(f"Warning: T1 exponential fit failed: {e}")
+
             plt.xlabel('Delay (µs)')
             plt.ylabel('Count Rate (cps)')
             plt.title('T1 Decay')
