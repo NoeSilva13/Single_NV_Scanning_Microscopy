@@ -206,6 +206,93 @@ class SwabianPulseController:
             print(f"❌ Error creating ODMR sequence: {e}")
             return None
     
+    def create_odmr_sequence_contrast(self,
+                           laser_duration: int = None,
+                           mw_duration: int = None,
+                           detection_duration: int = None,
+                           laser_delay: int = None,
+                           mw_delay: int = None,
+                           detection_delay: int = None,
+                           sequence_interval: int = None) -> Optional[Sequence]:
+        """
+        Create an ODMR contrast pulse sequence following proper 8ns pattern building.
+
+        Each sequence run contains two sub-sequences back-to-back:
+          1. MW off sub-sequence  — reference measurement (even bins)
+          2. MW on  sub-sequence  — signal  measurement  (odd  bins)
+
+        The AOM and SPD patterns are identical in both halves so the laser
+        excitation and detection window are the same.  Only the MW channel
+        differs: off in the first half, on in the second half.
+
+        Args:
+            laser_duration: Duration of laser pulse in ns
+            mw_duration: Duration of MW pulse in ns
+            detection_duration: Duration of detection window in ns
+            laser_delay: Delay before laser pulse in ns
+            mw_delay: Delay before MW pulse in ns
+            detection_delay: Delay before detection in ns
+            sequence_interval: Dead time appended after each sub-sequence in ns
+
+        Returns:
+            Tuple (Sequence, total_duration_ns) or None if error
+        """
+        if not self.is_connected:
+            print("❌ Device not connected")
+            return None
+
+        params = self.default_params.copy()
+        if laser_duration is not None:
+            params['laser_duration'] = self.align_timing(laser_duration)
+        if mw_duration is not None:
+            params['mw_duration'] = self.align_timing(mw_duration)
+        if detection_duration is not None:
+            params['detection_duration'] = self.align_timing(detection_duration)
+        if laser_delay is not None:
+            params['laser_delay'] = self.align_timing(laser_delay)
+        if mw_delay is not None:
+            params['mw_delay'] = self.align_timing(mw_delay)
+        if detection_delay is not None:
+            params['detection_delay'] = self.align_timing(detection_delay)
+        if sequence_interval is not None:
+            params['sequence_interval'] = self.align_timing(sequence_interval)
+
+        try:
+            single_seq_duration = max(
+                params['laser_delay'] + params['laser_duration'],
+                params['mw_delay'] + params['mw_duration'],
+                params['detection_delay'] + params['detection_duration']
+            )
+            single_seq_duration = self.align_timing(single_seq_duration)
+
+            aom_pattern = self._create_laser_pattern(params, single_seq_duration)
+            mw_pattern = self._create_mw_pattern(params, single_seq_duration)
+            mw_pattern_off = self._create_mw_pattern_off(params, single_seq_duration)
+            spd_pattern = self._create_spd_pattern(params, single_seq_duration)
+
+            total_duration = sum(duration for duration, _ in aom_pattern)
+            if total_duration % 8 != 0:
+                print(f"❌ Error: Total sequence length ({total_duration} ns) not multiple of 8 ns")
+                return None
+
+            sequence = self.pulse_streamer.createSequence()
+            # Two sub-sequences concatenated: [MW off | MW on]
+            sequence.setDigital(self.CHANNEL_AOM, aom_pattern + aom_pattern)
+            sequence.setDigital(self.CHANNEL_MW, mw_pattern_off + mw_pattern)
+            sequence.setDigital(self.CHANNEL_SPD, spd_pattern + spd_pattern)
+
+            full_duration = total_duration * 2
+            print(f"✅ ODMR contrast sequence created: {full_duration} ns total ({total_duration} ns per sub-sequence, 8ns aligned)")
+
+            if threading.current_thread() is threading.main_thread():
+                sequence.plot()
+
+            return sequence, full_duration
+
+        except Exception as e:
+            print(f"❌ Error creating ODMR contrast sequence: {e}")
+            return None
+
     def _create_laser_pattern(self, params: Dict, seq_duration: int) -> List[Tuple[int, int]]:
         """Create laser (AOM) pattern array for a single repetition."""
         pattern = []
@@ -246,6 +333,23 @@ class SwabianPulseController:
 
         return pattern
     
+    def _create_mw_pattern_off(self, params: Dict, seq_duration: int) -> List[Tuple[int, int]]:
+        """Create microwave pattern array (always off) for a single repetition."""
+        pattern = []
+
+        if params['mw_delay'] > 0:
+            pattern.append((params['mw_delay'], 0))
+        pattern.append((params['mw_duration'], 0))
+
+        used_time = params['mw_delay'] + params['mw_duration']
+        remaining_time = seq_duration - used_time
+        if remaining_time > 0:
+            pattern.append((remaining_time, 0))
+
+        pattern.append((params['sequence_interval'], 0))
+
+        return pattern
+
     def _create_spd_pattern(self, params: Dict, seq_duration: int) -> List[Tuple[int, int]]:
         """Create SPD gate pattern array for a single repetition."""
         pattern = []

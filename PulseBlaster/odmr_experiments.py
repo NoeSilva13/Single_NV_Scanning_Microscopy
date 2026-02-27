@@ -83,10 +83,11 @@ class ODMRExperiments:
     
     # Maps internal result keys to ODMRDataManager experiment types and x-data keys
     _SAVE_MAP = {
-        'cw_odmr': ('odmr', 'frequencies'),
-        'odmr':    ('odmr', 'frequencies'),
-        'rabi':    ('rabi', 'durations'),
-        't1_decay': ('t1', 'delays'),
+        'cw_odmr':      ('odmr', 'frequencies'),
+        'odmr':         ('odmr', 'frequencies'),
+        'odmr_contrast': ('odmr', 'frequencies'),
+        'rabi':         ('rabi', 'durations'),
+        't1_decay':     ('t1', 'delays'),
     }
 
     def _save_results(self, result_key: str, result: Dict):
@@ -298,6 +299,148 @@ class ODMRExperiments:
         print("✅ ODMR measurement completed")
         return self.results['odmr']
     
+    def odmr_contrast(self,
+                      mw_frequencies: List[float],
+                      laser_duration: int = 2000,
+                      mw_duration: int = 2000,
+                      detection_duration: int = 1000,
+                      laser_delay: int = 0,
+                      mw_delay: int = 0,
+                      detection_delay: int = 0,
+                      sequence_interval: int = 10000,
+                      repetitions: int = 100,
+                      progress_callback: Optional[Callable] = None) -> Dict:
+        """
+        Perform ODMR contrast measurement.
+
+        This function performs ODMR measurements using the contrast method.
+        For each microwave frequency, the sequence alternates between MW off and MW on.
+        The ODMR contrast is defined as the differential photoluminescence signal between
+        measurements with and without applying microwave radiation: (PL_off - PL_on) / PL_off
+
+        The data array has length repetitions*2 where:
+        - Even bins (0,2,4,...): MW off measurements (reference)
+        - Odd bins (1,3,5,...): MW on measurements (signal)
+
+        Args:
+            mw_frequencies: List of microwave frequencies to sweep (Hz)
+            laser_duration: Duration of laser excitation pulse in ns
+            mw_duration: Duration of microwave pulse in ns
+            detection_duration: Duration of fluorescence detection window in ns
+            laser_delay: Delay before laser pulse in ns
+            mw_delay: Delay before microwave pulse in ns (relative to laser)
+            detection_delay: Delay before detection window in ns
+            sequence_interval: Interval between measurement sequences in ns
+            repetitions: Number of sequence repetitions per frequency point
+
+        Returns:
+            Dictionary containing frequencies, contrasts, and MW off/on rates
+        """
+        print("🔬 Starting ODMR contrast measurement...")
+
+        frequencies = []
+        contrasts = []
+        mw_off_rates = []
+        mw_on_rates = []
+
+        # Each contrast sequence run produces 2 detection windows (MW off then MW on)
+        self.counter = TimeTagger.CountBetweenMarkers(
+            tagger=self.tagger,
+            click_channel=1,
+            begin_channel=2,
+            end_channel=-2,
+            n_values=repetitions * 2
+        )
+
+        if self.mw_generator:
+            self.mw_generator.prepare_for_odmr(mw_frequencies[0] / 1e9, -10.0)
+
+        for freq in mw_frequencies:
+            print(f"📡 Measuring at {freq/1e6:.2f} MHz")
+
+            sequence, total_duration = self.pulse_controller.create_odmr_sequence_contrast(
+                laser_duration=laser_duration,
+                mw_duration=mw_duration,
+                detection_duration=detection_duration,
+                laser_delay=laser_delay,
+                mw_delay=mw_delay,
+                detection_delay=detection_delay,
+                sequence_interval=sequence_interval
+            )
+            time.sleep(0.2)
+
+            if sequence:
+                if self.mw_generator:
+                    self.mw_generator.set_odmr_frequency(freq / 1e9)
+                    self.mw_generator.set_rf_output(True)
+
+                self.counter.start()
+                ready = False
+                self.pulse_controller.run_sequence(sequence, repetitions)
+
+                while ready is False:
+                    time.sleep(0.2)
+                    ready = self.counter.ready()
+                    information = self.counter.getBinWidths()
+                    print(f"Information: {information}")
+                    print(f"Ready: {ready}")
+                    counts = self.counter.getData()
+                    print(f"Counts: {counts}")
+
+                self.counter.clear()
+
+                counts_arr = np.array(counts)
+                info_arr = np.array(information)
+
+                # Even bins → MW off reference; odd bins → MW on signal
+                counts_off = counts_arr[0::2]
+                counts_on  = counts_arr[1::2]
+                info_off   = info_arr[0::2]
+                info_on    = info_arr[1::2]
+
+                rate_off = np.mean(counts_off) / (np.mean(info_off) * 1e-12)
+                rate_on  = np.mean(counts_on)  / (np.mean(info_on)  * 1e-12)
+                contrast = (rate_off - rate_on) / rate_off if rate_off > 0 else 0.0
+
+                print(f"MW off: {rate_off:.2f} Hz | MW on: {rate_on:.2f} Hz | Contrast: {contrast:.4f}")
+
+                frequencies.append(freq)
+                contrasts.append(contrast)
+                mw_off_rates.append(rate_off)
+                mw_on_rates.append(rate_on)
+
+                if progress_callback:
+                    progress_callback(frequencies.copy(), contrasts.copy())
+
+                if self.mw_generator:
+                    self.mw_generator.set_rf_output(False)
+
+                time.sleep(0.05)
+
+        self.results['odmr_contrast'] = {
+            'frequencies': frequencies,
+            'contrasts': contrasts,
+            'mw_off_rates': mw_off_rates,
+            'mw_on_rates': mw_on_rates,
+            'count_rates': contrasts,  # alias used by _save_results
+            'parameters': {
+                'laser_duration': laser_duration,
+                'mw_duration': mw_duration,
+                'detection_duration': detection_duration,
+                'laser_delay': laser_delay,
+                'mw_delay': mw_delay,
+                'detection_delay': detection_delay,
+                'sequence_interval': sequence_interval,
+                'repetitions': repetitions
+            }
+        }
+
+        self._save_results('odmr_contrast', self.results['odmr_contrast'])
+        print(f"Contrasts: {contrasts}")
+        print(f"Frequencies: {frequencies}")
+        print("✅ ODMR contrast measurement completed")
+        return self.results['odmr_contrast']
+
     def rabi_oscillation(self,
                         mw_durations: List[int],
                         mw_frequency: float = 2.87e9,
@@ -562,15 +705,20 @@ class ODMRExperiments:
         
         plt.figure(figsize=(10, 6))
         
-        if experiment_type == 'odmr' or experiment_type == 'cw_odmr':
-            # All frequencies are stored in Hz, convert to GHz for plotting
-            freqs = np.array(data['frequencies']) / 1e9  # Convert Hz to GHz
-            title = 'ODMR'
-            
+        if experiment_type in ('odmr', 'cw_odmr'):
+            freqs = np.array(data['frequencies']) / 1e9
             plt.plot(freqs, data['count_rates'], 'bo-')
             plt.xlabel('Frequency (GHz)')
             plt.ylabel('Count Rate (cps)')
-            plt.title(title)
+            plt.title('ODMR')
+
+        elif experiment_type == 'odmr_contrast':
+            freqs = np.array(data['frequencies']) / 1e9
+            plt.plot(freqs, np.array(data['contrasts']) * 100, 'go-', label='Contrast')
+            plt.xlabel('Frequency (GHz)')
+            plt.ylabel('Contrast (%)')
+            plt.title('ODMR Contrast')
+            plt.legend()
             
         elif experiment_type == 'rabi':
             plt.plot(data['durations'], data['count_rates'], 'ro-')
