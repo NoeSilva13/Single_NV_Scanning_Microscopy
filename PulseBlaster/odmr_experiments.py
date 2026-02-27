@@ -13,6 +13,8 @@ Date: 2025
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import sys
+import os
 from typing import List, Tuple, Dict, Optional, Callable
 # Try relative imports first (when used as package)
 try:
@@ -24,6 +26,9 @@ except ImportError:
     from swabian_pulse_streamer import SwabianPulseController
     from rigol_dsg836 import RigolDSG836Controller
     from pulsestreamer import OutputState
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from odmr_data_manager import ODMRDataManager
 
 # TimeTagger imports for real data acquisition
 import TimeTagger
@@ -45,6 +50,7 @@ class ODMRExperiments:
         self.pulse_controller = pulse_controller
         self.mw_generator = mw_generator
         self.results = {}
+        self.data_manager = ODMRDataManager()
         
         # Initialize TimeTagger for real data acquisition
         try:
@@ -74,6 +80,28 @@ class ODMRExperiments:
             self.tagger.reset()
             print("✅ TimeTagger resources cleaned up")
     
+    # Maps internal result keys to ODMRDataManager experiment types and x-data keys
+    _SAVE_MAP = {
+        'cw_odmr': ('odmr', 'frequencies'),
+        'odmr':    ('odmr', 'frequencies'),
+        'rabi':    ('rabi', 'durations'),
+        't1_decay': ('t1', 'delays'),
+    }
+
+    def _save_results(self, result_key: str, result: Dict):
+        """Save experiment results using ODMRDataManager."""
+        dm_type, x_key = self._SAVE_MAP[result_key]
+        try:
+            saved_file = self.data_manager.save_experiment_data(
+                experiment_type=dm_type,
+                x_data=result[x_key],
+                count_rates=result['count_rates'],
+                parameters=result.get('parameters', {})
+            )
+            print(f"Data saved to: {saved_file}")
+        except Exception as e:
+            print(f"Warning: Could not save data: {e}")
+
     def cw_odmr(self, 
                   mw_frequencies: List[float],
                   acquisition_time: float = 1.0,  # Time per point in seconds
@@ -146,6 +174,7 @@ class ODMRExperiments:
             }
         }
         
+        self._save_results('cw_odmr', self.results['cw_odmr'])
         print("✅ CW-ODMR measurement completed")
         return self.results['cw_odmr']
     
@@ -250,8 +279,19 @@ class ODMRExperiments:
             
         self.results['odmr'] = {
             'frequencies': frequencies,
-            'count_rates': count_rates
+            'count_rates': count_rates,
+            'parameters': {
+                'laser_duration': laser_duration,
+                'mw_duration': mw_duration,
+                'detection_duration': detection_duration,
+                'laser_delay': laser_delay,
+                'mw_delay': mw_delay,
+                'detection_delay': detection_delay,
+                'sequence_interval': sequence_interval,
+                'repetitions': repetitions
+            }
         }
+        self._save_results('odmr', self.results['odmr'])
         print(f"Count rates: {count_rates}")
         print(f"Frequencies: {frequencies}")
         print("✅ ODMR measurement completed")
@@ -357,9 +397,19 @@ class ODMRExperiments:
         
         self.results['rabi'] = {
             'durations': durations,
-            'count_rates': count_rates
+            'count_rates': count_rates,
+            'parameters': {
+                'mw_frequency': mw_frequency,
+                'laser_duration': laser_duration,
+                'detection_duration': detection_duration,
+                'laser_delay': laser_delay,
+                'mw_delay': mw_delay,
+                'detection_delay': detection_delay,
+                'sequence_interval': sequence_interval,
+                'repetitions': repetitions
+            }
         }
-        
+        self._save_results('rabi', self.results['rabi'])
         print("✅ Rabi oscillation measurement completed")
         return self.results['rabi']
     
@@ -485,9 +535,19 @@ class ODMRExperiments:
         
         self.results['t1_decay'] = {
             'delays': delays,
-            'count_rates': count_rates
+            'count_rates': count_rates,
+            'parameters': {
+                'init_laser_duration': init_laser_duration,
+                'readout_laser_duration': readout_laser_duration,
+                'detection_duration': detection_duration,
+                'init_laser_delay': init_laser_delay,
+                'readout_laser_delay': readout_laser_delay,
+                'detection_delay': detection_delay,
+                'sequence_interval': sequence_interval,
+                'repetitions': repetitions
+            }
         }
-        
+        self._save_results('t1_decay', self.results['t1_decay'])
         print("✅ T1 decay measurement completed")
         return self.results['t1_decay']
     
@@ -564,20 +624,7 @@ def run_example_experiments():
         #     mw_power=0  # -10 dBm
         # )
         
-        # # Save data using odmr_data_manager
-        # import sys
-        # import os
-        # # Add parent directory to path to import odmr_data_manager
-        # sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        # from odmr_data_manager import ODMRDataManager
-        # data_manager = ODMRDataManager()
-        # saved_file = data_manager.save_experiment_data(
-        #     experiment_type='odmr',
-        #     x_data=cw_odmr_result['frequencies'],
-        #     count_rates=cw_odmr_result['count_rates'],
-        #     parameters=cw_odmr_result['parameters']
-        # )
-        # print(f"✅ Data saved to: {saved_file}")
+        
         
         # experiments.plot_results('cw_odmr')
         
@@ -595,7 +642,7 @@ def run_example_experiments():
         
         # 3. T1 decay
         print("\n" + "="*50)
-        delay_times = np.linspace(0, 10000, 50)  # 0-10000 ns in 50 steps
+        delay_times = np.linspace(0, 3e6, 50)  # 0-3 microseconds in 50 steps
         # Important: For T1 measurements, readout_laser_delay and detection_delay should be None, this allows to code to calculate the delays automatically otherwise the sequence will not be created correctly. 
         t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=5000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=1000)
         experiments.plot_results('t1_decay')
@@ -608,7 +655,7 @@ def run_example_experiments():
     
     finally:
         # Clean up connections
-        experiments.cleanup()  # Clean up TimeTagger resources
+        #experiments.cleanup()  # Clean up TimeTagger resources
         if rigol:
             rigol.set_rf_output(False)  # Safety: turn off RF output
             rigol.disconnect()
