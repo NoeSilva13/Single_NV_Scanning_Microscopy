@@ -714,11 +714,39 @@ class ODMRExperiments:
 
         elif experiment_type == 'odmr_contrast':
             freqs = np.array(data['frequencies']) / 1e9
-            plt.plot(freqs, np.array(data['contrasts']) * 100, 'go-', label='Contrast')
-            plt.xlabel('Frequency (GHz)')
-            plt.ylabel('Contrast (%)')
-            plt.title('ODMR Contrast')
-            plt.legend()
+            sig = np.array(data['mw_on_rates'])
+            ref = np.array(data['mw_off_rates'])
+
+            fig, axes = plt.gcf(), None
+            plt.close(fig)
+            fig, axes = plt.subplots(4, 1, figsize=(10, 16), sharex=True)
+
+            axes[0].plot(freqs, ref, 'bo-', label='Reference (MW off)')
+            axes[0].set_ylabel('Count Rate (cps)')
+            axes[0].set_title('ODMR Contrast')
+            axes[0].legend()
+            axes[0].grid(True, alpha=0.3)
+
+            axes[1].plot(freqs, sig, 'ro-', label='Signal (MW on)')
+            axes[1].set_ylabel('Count Rate (cps)')
+            axes[1].legend()
+            axes[1].grid(True, alpha=0.3)
+
+            sig_over_ref = np.where(ref > 0, sig / ref, np.nan)
+            axes[2].plot(freqs, sig_over_ref, 'mo-', label='Signal / Reference')
+            axes[2].set_ylabel('Signal / Reference')
+            axes[2].legend()
+            axes[2].grid(True, alpha=0.3)
+
+            axes[3].plot(freqs, np.array(data['contrasts']) * 100, 'go-', label='Contrast = (ref − sig) / ref')
+            axes[3].set_xlabel('Frequency (GHz)')
+            axes[3].set_ylabel('Contrast (%)')
+            axes[3].legend()
+            axes[3].grid(True, alpha=0.3)
+
+            plt.tight_layout()
+            plt.show()
+            return
             
         elif experiment_type == 'rabi':
             plt.plot(data['durations'], data['count_rates'], 'ro-')
