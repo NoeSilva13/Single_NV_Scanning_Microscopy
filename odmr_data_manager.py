@@ -31,6 +31,16 @@ class ODMRDataManager:
             'x_unit': 'ns',
             'x_range_format': lambda min_x, max_x: f"{min_x} ns ({min_x*1e-9:.9f} to {max_x*1e-9:.9f} s)"
         },
+        'odmr_contrast': {
+            'folder_name': 'ODMR_Contrast',
+            'file_suffix': '_ODMR_Contrast',
+            'x_column': 'Frequency_Hz',
+            'x_columns_converted': [],
+            'data_key': 'mw_frequencies',
+            'x_label': 'Frequency',
+            'x_unit': 'Hz',
+            'x_range_format': lambda min_x, max_x: f"{min_x:.1f} Hz ({min_x/1e9:.6f} to {max_x/1e9:.6f} GHz)"
+        },
         't1': {
             'folder_name': 'T1',
             'file_suffix': '_T1',
@@ -46,15 +56,18 @@ class ODMRDataManager:
         }
     }
     
-    def save_experiment_data(self, experiment_type: str, x_data: list, count_rates: list, parameters: dict) -> str:
+    def save_experiment_data(self, experiment_type: str, x_data: list, count_rates: list = None,
+                             parameters: dict = None, extra_columns: dict = None) -> str:
         """
         Save experiment data to a CSV file in a daily folder with experiment-specific subfolder.
         
         Args:
             experiment_type: Type of experiment ('odmr', 'rabi', or 't1')
             x_data: List of x-axis values (frequencies, durations, or delays)
-            count_rates: List of corresponding count rates (cps)
+            count_rates: List of corresponding count rates (cps). Omitted when extra_columns
+                         fully describes the y-data (e.g. contrast experiments).
             parameters: Dictionary containing measurement parameters
+            extra_columns: Optional dict of {column_name: data_list} for additional data columns
             
         Returns:
             str: The path to the saved file
@@ -89,10 +102,13 @@ class ODMRDataManager:
         filename = os.path.join(exp_folder, f"{daily_folder}{seq_str}{config['file_suffix']}.csv")
 
         # Create DataFrame with the data
-        data_dict = {
-            config['x_column']: x_data,
-            'Count_Rate_cps': count_rates
-        }
+        data_dict = {config['x_column']: x_data}
+        
+        if count_rates is not None:
+            data_dict['Count_Rate_cps'] = count_rates
+        
+        if extra_columns:
+            data_dict.update(extra_columns)
         
         # Add converted columns (including SI units)
         if 'x_columns_converted' in config:
@@ -114,7 +130,7 @@ class ODMRDataManager:
                 f.write(f"# Number of Points: {len(x_data)}\n")
             
             # Write measurement parameters (excluding the data list)
-            save_params = parameters.copy()
+            save_params = (parameters or {}).copy()
             if config['data_key'] in save_params:
                 del save_params[config['data_key']]
             

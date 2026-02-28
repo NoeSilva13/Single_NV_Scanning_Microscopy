@@ -85,7 +85,7 @@ class ODMRExperiments:
     _SAVE_MAP = {
         'cw_odmr':      ('odmr', 'frequencies'),
         'odmr':         ('odmr', 'frequencies'),
-        'odmr_contrast': ('odmr', 'frequencies'),
+        'odmr_contrast': ('odmr_contrast', 'frequencies'),
         'rabi':         ('rabi', 'durations'),
         't1_decay':     ('t1', 'delays'),
     }
@@ -94,11 +94,25 @@ class ODMRExperiments:
         """Save experiment results using ODMRDataManager."""
         dm_type, x_key = self._SAVE_MAP[result_key]
         try:
+            extra_columns = None
+            count_rates = result.get('count_rates')
+            if result_key == 'odmr_contrast':
+                sig = np.array(result['mw_on_rates'])
+                ref = np.array(result['mw_off_rates'])
+                sig_over_ref = np.where(ref > 0, sig / ref, np.nan)
+                extra_columns = {
+                    'Signal_cps': sig,
+                    'Reference_cps': ref,
+                    'Signal_over_Reference': sig_over_ref,
+                    'Contrast': result['contrasts'],
+                }
+                count_rates = None
             saved_file = self.data_manager.save_experiment_data(
                 experiment_type=dm_type,
                 x_data=result[x_key],
-                count_rates=result['count_rates'],
-                parameters=result.get('parameters', {})
+                count_rates=count_rates,
+                parameters=result.get('parameters', {}),
+                extra_columns=extra_columns
             )
             print(f"Data saved to: {saved_file}")
         except Exception as e:
@@ -367,6 +381,7 @@ class ODMRExperiments:
                 detection_delay=detection_delay,
                 sequence_interval=sequence_interval
             )
+            #sequence.plot()
             time.sleep(0.2)
 
             if sequence:
@@ -810,14 +825,14 @@ def run_example_experiments():
     
     try:
         #1. Continuous Wave ODMR
-        print("\n" + "="*50)
-        frequencies = np.linspace(2.6e9, 3.2e9, 50)  # 2.85-2.89 GHz
-        cw_odmr_result = experiments.cw_odmr(
-            mw_frequencies=frequencies,
-            acquisition_time=5,  # 1 seconds per point
-            mw_power=-10  # -10 dBm
-        )
-        experiments.plot_results('cw_odmr')
+        # print("\n" + "="*50)
+        # frequencies = np.linspace(2.6e9, 3.2e9, 50)  # 2.85-2.89 GHz
+        # cw_odmr_result = experiments.cw_odmr(
+        #     mw_frequencies=frequencies,
+        #     acquisition_time=5,  # 1 seconds per point
+        #     mw_power=-10  # -10 dBm
+        # )
+        # experiments.plot_results('cw_odmr')
         
         # 2. ODMR
         # print("\n" + "="*50)
@@ -827,17 +842,17 @@ def run_example_experiments():
 
         # 3. ODMR Contrast
         # print("\n" + "="*50)
-        # frequencies = np.linspace(2.6e9, 3.2e9, 50)
+        # frequencies = np.linspace(2.85e9, 2.9e9, 10)
         # odmr_contrast_result = experiments.odmr_contrast(
         #     mw_frequencies=frequencies,
-        #     laser_duration=2000,
-        #     mw_duration=2000,
-        #     detection_duration=1000,
+        #     laser_duration=5000,
+        #     mw_duration=5000,
+        #     detection_duration=2500,
         #     laser_delay=0,
         #     mw_delay=0,
         #     detection_delay=0,
-        #     sequence_interval=10000,
-        #     repetitions=100
+        #     sequence_interval=5000,
+        #     repetitions=1000
         # )
         # experiments.plot_results('odmr_contrast')
         

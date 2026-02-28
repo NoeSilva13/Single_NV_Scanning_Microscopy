@@ -284,8 +284,8 @@ class SwabianPulseController:
             full_duration = total_duration * 2
             print(f"✅ ODMR contrast sequence created: {full_duration} ns total ({total_duration} ns per sub-sequence, 8ns aligned)")
 
-            if threading.current_thread() is threading.main_thread():
-                sequence.plot()
+            # if threading.current_thread() is threading.main_thread():
+            #     sequence.plot()
 
             return sequence, full_duration
 
