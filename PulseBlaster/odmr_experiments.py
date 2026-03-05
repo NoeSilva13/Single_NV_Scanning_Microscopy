@@ -731,6 +731,8 @@ class ODMRExperiments:
             freqs = np.array(data['frequencies']) / 1e9
             sig = np.array(data['mw_on_rates'])
             ref = np.array(data['mw_off_rates'])
+            sig_over_ref = np.where(ref > 0, sig / ref, np.nan)
+            contrasts_pct = np.array(data['contrasts']) * 100
 
             fig, axes = plt.gcf(), None
             plt.close(fig)
@@ -747,19 +749,38 @@ class ODMRExperiments:
             axes[1].legend()
             axes[1].grid(True, alpha=0.3)
 
-            sig_over_ref = np.where(ref > 0, sig / ref, np.nan)
             axes[2].plot(freqs, sig_over_ref, 'mo-', label='Signal / Reference')
             axes[2].set_ylabel('Signal / Reference')
             axes[2].legend()
             axes[2].grid(True, alpha=0.3)
 
-            axes[3].plot(freqs, np.array(data['contrasts']) * 100, 'go-', label='Contrast = (ref − sig) / ref')
+            axes[3].plot(freqs, contrasts_pct, 'go-', label='Contrast = (ref − sig) / ref')
             axes[3].set_xlabel('Frequency (GHz)')
             axes[3].set_ylabel('Contrast (%)')
             axes[3].legend()
             axes[3].grid(True, alpha=0.3)
 
             plt.tight_layout()
+
+            # --- Individual plots ---
+            fig_ratio, ax_ratio = plt.subplots(figsize=(10, 6))
+            ax_ratio.plot(freqs, sig_over_ref, 'mo-', label='Signal / Reference')
+            ax_ratio.set_xlabel('Frequency (GHz)')
+            ax_ratio.set_ylabel('Signal / Reference')
+            ax_ratio.set_title('ODMR – Signal / Reference')
+            ax_ratio.legend()
+            ax_ratio.grid(True, alpha=0.3)
+            fig_ratio.tight_layout()
+
+            fig_con, ax_con = plt.subplots(figsize=(10, 6))
+            ax_con.plot(freqs, contrasts_pct, 'go-', label='Contrast = (ref − sig) / ref')
+            ax_con.set_xlabel('Frequency (GHz)')
+            ax_con.set_ylabel('Contrast (%)')
+            ax_con.set_title('ODMR – Contrast')
+            ax_con.legend()
+            ax_con.grid(True, alpha=0.3)
+            fig_con.tight_layout()
+
             plt.show()
             return
             
@@ -841,20 +862,20 @@ def run_example_experiments():
         # experiments.plot_results('odmr')
 
         # 3. ODMR Contrast
-        # print("\n" + "="*50)
-        # frequencies = np.linspace(2.85e9, 2.9e9, 10)
-        # odmr_contrast_result = experiments.odmr_contrast(
-        #     mw_frequencies=frequencies,
-        #     laser_duration=5000,
-        #     mw_duration=5000,
-        #     detection_duration=2500,
-        #     laser_delay=0,
-        #     mw_delay=0,
-        #     detection_delay=0,
-        #     sequence_interval=5000,
-        #     repetitions=1000
-        # )
-        # experiments.plot_results('odmr_contrast')
+        print("\n" + "="*50)
+        frequencies = np.linspace(2.8e9, 2.95e9, 50)
+        odmr_contrast_result = experiments.odmr_contrast(
+            mw_frequencies=frequencies,
+            laser_duration=200000,
+            mw_duration=200000,
+            detection_duration=200000,
+            laser_delay=0,
+            mw_delay=0,
+            detection_delay=0,
+            sequence_interval=2000,
+            repetitions=5000
+        )
+        experiments.plot_results('odmr_contrast')
         
         # 4. Rabi oscillation
         # print("\n" + "="*50)
