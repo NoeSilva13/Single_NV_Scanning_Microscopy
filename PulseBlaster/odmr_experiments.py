@@ -114,6 +114,7 @@ class ODMRExperiments:
                 parameters=result.get('parameters', {}),
                 extra_columns=extra_columns
             )
+            result['saved_file'] = saved_file
             print(f"Data saved to: {saved_file}")
         except Exception as e:
             print(f"Warning: Could not save data: {e}")
@@ -717,7 +718,8 @@ class ODMRExperiments:
             return
         
         data = self.results[experiment_type]
-        
+        base_path = data.get('saved_file', '').replace('.csv', '')
+
         plt.figure(figsize=(10, 6))
         
         if experiment_type in ('odmr', 'cw_odmr'):
@@ -781,6 +783,12 @@ class ODMRExperiments:
             ax_con.grid(True, alpha=0.3)
             fig_con.tight_layout()
 
+            if base_path:
+                fig.savefig(f"{base_path}.pdf", format='pdf', bbox_inches='tight')
+                fig_ratio.savefig(f"{base_path}_ratio.pdf", format='pdf', bbox_inches='tight')
+                fig_con.savefig(f"{base_path}_con.pdf", format='pdf', bbox_inches='tight')
+                print(f"Plots saved to: {base_path}*.pdf")
+
             plt.show()
             return
             
@@ -815,6 +823,11 @@ class ODMRExperiments:
         
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
+
+        if base_path:
+            plt.savefig(f"{base_path}.pdf", format='pdf', bbox_inches='tight')
+            print(f"Plot saved to: {base_path}.pdf")
+
         plt.show()
 
 
@@ -862,20 +875,20 @@ def run_example_experiments():
         # experiments.plot_results('odmr')
 
         # 3. ODMR Contrast
-        print("\n" + "="*50)
-        frequencies = np.linspace(2.8e9, 2.95e9, 50)
-        odmr_contrast_result = experiments.odmr_contrast(
-            mw_frequencies=frequencies,
-            laser_duration=200000,
-            mw_duration=200000,
-            detection_duration=200000,
-            laser_delay=0,
-            mw_delay=0,
-            detection_delay=0,
-            sequence_interval=2000,
-            repetitions=5000
-        )
-        experiments.plot_results('odmr_contrast')
+        # print("\n" + "="*50)
+        # frequencies = np.linspace(2.8e9, 2.95e9, 50)
+        # odmr_contrast_result = experiments.odmr_contrast(
+        #     mw_frequencies=frequencies,
+        #     laser_duration=200000,
+        #     mw_duration=200000,
+        #     detection_duration=200000,
+        #     laser_delay=0,
+        #     mw_delay=0,
+        #     detection_delay=0,
+        #     sequence_interval=2000,
+        #     repetitions=5000
+        # )
+        # experiments.plot_results('odmr_contrast')
         
         # 4. Rabi oscillation
         # print("\n" + "="*50)
@@ -884,11 +897,11 @@ def run_example_experiments():
         # experiments.plot_results('rabi')
         
         # 5. T1 decay
-        # print("\n" + "="*50)
-        # delay_times = np.linspace(0, 5000, 100)  # 0-3 microseconds in 50 steps
-        # # Important: For T1 measurements, readout_laser_delay and detection_delay should be None, this allows to code to calculate the delays automatically otherwise the sequence will not be created correctly. 
-        # t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=5000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=10000)
-        # experiments.plot_results('t1_decay')
+        print("\n" + "="*50)
+        delay_times = np.linspace(0, 10000, 50)  # 0-5 microseconds in 50 steps
+        # Important: For T1 measurements, readout_laser_delay and detection_delay should be None, this allows to code to calculate the delays automatically otherwise the sequence will not be created correctly. 
+        t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=1000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=5000)
+        experiments.plot_results('t1_decay')
         
         
         print("\n✅ All example experiments completed!")
