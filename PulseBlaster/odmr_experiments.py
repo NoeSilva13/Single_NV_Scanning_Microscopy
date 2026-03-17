@@ -729,6 +729,7 @@ class ODMRExperiments:
                           readout_laser_duration: int = 1000,
                           detection_duration: int = 500,
                           init_laser_delay: int = 0,
+                          detection_delay: int = 0,
                           sequence_interval: int = 10000,
                           repetitions: int = 1000,
                           progress_callback: Optional[Callable] = None) -> Dict:
@@ -750,6 +751,9 @@ class ODMRExperiments:
             readout_laser_duration: Duration of readout laser pulse in ns
             detection_duration: Duration of detection window in ns
             init_laser_delay: Delay before initialization laser in ns
+            detection_delay: Additional offset added to the SPD gate start in both
+                             sub-sequences to compensate for the AOM delay response in ns.
+                             The effective detection start becomes readout_laser_delay + detection_delay.
             sequence_interval: Interval between sequences in ns
             repetitions: Number of repetitions per delay point
             progress_callback: Optional callback(delays, contrasts) for live updates
@@ -774,10 +778,11 @@ class ODMRExperiments:
 
         max_delay = max(delay_times)
         max_readout_delay = init_laser_delay + init_laser_duration + max_delay
+        max_detection_start = max_readout_delay + detection_delay
         max_seq_duration = self.pulse_controller.align_timing(max(
             init_laser_delay + init_laser_duration,
             max_readout_delay + readout_laser_duration,
-            max_readout_delay + detection_duration
+            max_detection_start + detection_duration
         ))
         constant_total_period = max_seq_duration + self.pulse_controller.align_timing(sequence_interval)
 
@@ -800,6 +805,7 @@ class ODMRExperiments:
                 delay_time=delay_time,
                 init_laser_delay=init_laser_delay,
                 sequence_interval=adjusted_interval,
+                detection_delay=detection_delay,
                 fixed_seq_duration=max_seq_duration
             )
 
@@ -856,6 +862,7 @@ class ODMRExperiments:
                 'readout_laser_duration': readout_laser_duration,
                 'detection_duration': detection_duration,
                 'init_laser_delay': init_laser_delay,
+                'detection_delay': detection_delay,
                 'sequence_interval': sequence_interval,
                 'repetitions': repetitions
             }
@@ -1131,6 +1138,7 @@ def run_example_experiments():
             readout_laser_duration=5000,
             detection_duration=1000,
             init_laser_delay=0,
+            detection_delay=0,
             sequence_interval=1000,
             repetitions=5000
         )

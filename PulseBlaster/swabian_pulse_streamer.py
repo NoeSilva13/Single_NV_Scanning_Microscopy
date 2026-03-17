@@ -557,6 +557,7 @@ class SwabianPulseController:
                                      delay_time: int,
                                      init_laser_delay: int,
                                      sequence_interval: int,
+                                     detection_delay: int = 0,
                                      fixed_seq_duration: Optional[int] = None) -> Optional[Tuple]:
         """
         Create T1 contrast pulse sequence (single repetition with two sub-sequences).
@@ -575,6 +576,8 @@ class SwabianPulseController:
             delay_time: Dark time between init and readout for the signal sub-sequence in ns
             init_laser_delay: Delay before initialization laser in ns
             sequence_interval: Idle time appended after each sub-sequence in ns
+            detection_delay: Additional offset added to the detection window start in both
+                             sub-sequences to compensate for the AOM delay response in ns
             fixed_seq_duration: If provided, forces this as the active-sequence duration
                                 to guarantee a constant period across all delay values.
 
@@ -592,12 +595,13 @@ class SwabianPulseController:
             delay_time = self.align_timing(delay_time)
             init_laser_delay = self.align_timing(init_laser_delay)
             sequence_interval = self.align_timing(sequence_interval)
+            detection_delay = self.align_timing(detection_delay)
 
             ref_readout_delay = self.align_timing(init_laser_delay + init_laser_duration)
-            ref_detection_delay = ref_readout_delay
+            ref_detection_delay = self.align_timing(ref_readout_delay + detection_delay)
 
             sig_readout_delay = self.align_timing(init_laser_delay + init_laser_duration + delay_time)
-            sig_detection_delay = sig_readout_delay
+            sig_detection_delay = self.align_timing(sig_readout_delay + detection_delay)
 
             if fixed_seq_duration is not None:
                 single_seq_duration = self.align_timing(fixed_seq_duration)
