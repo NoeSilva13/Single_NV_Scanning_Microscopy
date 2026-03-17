@@ -502,54 +502,6 @@ class SwabianPulseController:
             print(f"❌ Error creating T1 sequence: {e}")
             return None
 
-    def _build_t1_sub_patterns(self,
-                               init_laser_delay: int,
-                               init_laser_duration: int,
-                               readout_laser_delay: int,
-                               readout_laser_duration: int,
-                               detection_delay: int,
-                               detection_duration: int,
-                               seq_duration: int,
-                               sequence_interval: int) -> Tuple[List[Tuple[int, int]], List[Tuple[int, int]]]:
-        """
-        Build AOM and SPD patterns for a single T1 sub-sequence.
-
-        Returns:
-            Tuple of (aom_pattern, spd_pattern)
-        """
-        aom_pattern = []
-        spd_pattern = []
-
-        if init_laser_delay > 0:
-            aom_pattern.append((init_laser_delay, 0))
-        aom_pattern.append((init_laser_duration, 1))
-
-        time_to_readout = readout_laser_delay - (init_laser_delay + init_laser_duration)
-        if time_to_readout > 0:
-            aom_pattern.append((time_to_readout, 0))
-
-        aom_pattern.append((readout_laser_duration, 1))
-
-        used_time = readout_laser_delay + readout_laser_duration
-        remaining_time = seq_duration - used_time
-        if remaining_time > 0:
-            aom_pattern.append((remaining_time, 0))
-
-        if detection_delay > 0:
-            spd_pattern.append((detection_delay, 0))
-        spd_pattern.append((detection_duration, 1))
-
-        used_time_spd = detection_delay + detection_duration
-        remaining_time_spd = seq_duration - used_time_spd
-        if remaining_time_spd > 0:
-            spd_pattern.append((remaining_time_spd, 0))
-
-        if sequence_interval > 0:
-            aom_pattern.append((sequence_interval, 0))
-            spd_pattern.append((sequence_interval, 0))
-
-        return aom_pattern, spd_pattern
-
     def _create_t1_sequence_contrast(self,
                                      init_laser_duration: int,
                                      readout_laser_duration: int,
@@ -560,24 +512,30 @@ class SwabianPulseController:
                                      detection_delay: int = 0,
                                      fixed_seq_duration: Optional[int] = None) -> Optional[Tuple]:
         """
-        Create T1 contrast pulse sequence (single repetition with two sub-sequences).
+        Create T1 contrast pulse sequence using a single sequence with two SPD windows.
 
-        Each sequence run contains two sub-sequences back-to-back:
-          1. Reference sub-sequence — zero delay between init and readout (even bins)
-          2. Signal sub-sequence   — variable delay τ between init and readout (odd bins)
+        The init laser pulse serves as the reference measurement, and the readout
+        laser pulse (after the variable delay τ) serves as the signal measurement.
+        Each sequence repetition therefore produces two detection bins:
 
-        The contrast Signal/Reference removes common-mode noise from laser
-        power drift, APD efficiency changes, etc.
+          AOM: |── init laser ──| ←── delay_time ───→ |── readout laser ──| fill | interval |
+          SPD:       |ref bin|                               |sig bin|      fill | interval |
+
+        Even bins (0, 2, 4, ...): reference — fluorescence during init laser (bright state)
+        Odd  bins (1, 3, 5, ...): signal    — fluorescence after delay τ (relaxed state)
+
+        This halves the experimental time compared to running separate reference and
+        signal sub-sequences.
 
         Args:
             init_laser_duration: Duration of initialization laser pulse in ns
             readout_laser_duration: Duration of readout laser pulse in ns
             detection_duration: Duration of detection window in ns
-            delay_time: Dark time between init and readout for the signal sub-sequence in ns
+            delay_time: Dark time between init and readout in ns
             init_laser_delay: Delay before initialization laser in ns
-            sequence_interval: Idle time appended after each sub-sequence in ns
-            detection_delay: Additional offset added to the detection window start in both
-                             sub-sequences to compensate for the AOM delay response in ns
+            sequence_interval: Idle time appended after the sequence in ns
+            detection_delay: Additional offset added to the SPD gate start relative to
+                             each laser pulse, to compensate for the AOM delay response in ns
             fixed_seq_duration: If provided, forces this as the active-sequence duration
                                 to guarantee a constant period across all delay values.
 
@@ -589,61 +547,83 @@ class SwabianPulseController:
             return None
 
         try:
-            init_laser_duration = self.align_timing(init_laser_duration)
+            init_laser_duration    = self.align_timing(init_laser_duration)
             readout_laser_duration = self.align_timing(readout_laser_duration)
-            detection_duration = self.align_timing(detection_duration)
-            delay_time = self.align_timing(delay_time)
-            init_laser_delay = self.align_timing(init_laser_delay)
-            sequence_interval = self.align_timing(sequence_interval)
-            detection_delay = self.align_timing(detection_delay)
+            detection_duration     = self.align_timing(detection_duration)
+            delay_time             = self.align_timing(delay_time)
+            init_laser_delay       = self.align_timing(init_laser_delay)
+            sequence_interval      = self.align_timing(sequence_interval)
+            detection_delay        = self.align_timing(detection_delay)
 
-            ref_readout_delay = self.align_timing(init_laser_delay + init_laser_duration)
-            ref_detection_delay = self.align_timing(ref_readout_delay + detection_delay)
+            readout_laser_delay = self.align_timing(init_laser_delay + init_laser_duration + delay_time)
 
-            sig_readout_delay = self.align_timing(init_laser_delay + init_laser_duration + delay_time)
-            sig_detection_delay = self.align_timing(sig_readout_delay + detection_delay)
+            # SPD window positions: laser start + detection_delay for each pulse
+            ref_detection_start = self.align_timing(init_laser_delay    + detection_delay)
+            sig_detection_start = self.align_timing(readout_laser_delay + detection_delay)
 
             if fixed_seq_duration is not None:
                 single_seq_duration = self.align_timing(fixed_seq_duration)
             else:
                 single_seq_duration = self.align_timing(max(
-                    init_laser_delay + init_laser_duration,
-                    sig_readout_delay + readout_laser_duration,
-                    sig_detection_delay + detection_duration
+                    init_laser_delay    + init_laser_duration,
+                    readout_laser_delay + readout_laser_duration,
+                    sig_detection_start + detection_duration
                 ))
 
-            ref_aom, ref_spd = self._build_t1_sub_patterns(
-                init_laser_delay, init_laser_duration,
-                ref_readout_delay, readout_laser_duration,
-                ref_detection_delay, detection_duration,
-                single_seq_duration, sequence_interval
-            )
+            # AOM: init laser | gap | readout laser | fill | interval
+            aom_pattern = []
+            if init_laser_delay > 0:
+                aom_pattern.append((init_laser_delay, 0))
+            aom_pattern.append((init_laser_duration, 1))
 
-            sig_aom, sig_spd = self._build_t1_sub_patterns(
-                init_laser_delay, init_laser_duration,
-                sig_readout_delay, readout_laser_duration,
-                sig_detection_delay, detection_duration,
-                single_seq_duration, sequence_interval
-            )
+            time_to_readout = readout_laser_delay - (init_laser_delay + init_laser_duration)
+            if time_to_readout > 0:
+                aom_pattern.append((time_to_readout, 0))
+            aom_pattern.append((readout_laser_duration, 1))
 
-            ref_duration = sum(d for d, _ in ref_aom)
-            sig_duration = sum(d for d, _ in sig_aom)
-            if ref_duration != sig_duration:
-                print(f"❌ Error: sub-sequence durations mismatch: ref={ref_duration}, sig={sig_duration}")
+            used_aom = readout_laser_delay + readout_laser_duration
+            remaining_aom = single_seq_duration - used_aom
+            if remaining_aom > 0:
+                aom_pattern.append((remaining_aom, 0))
+            if sequence_interval > 0:
+                aom_pattern.append((sequence_interval, 0))
+
+            # SPD: reference window (during init laser) then signal window (during readout laser)
+            gap_between_windows = sig_detection_start - (ref_detection_start + detection_duration)
+            if gap_between_windows < 0:
+                print(f"❌ Error: SPD windows overlap (gap={gap_between_windows} ns). "
+                      f"Reduce detection_duration or increase init_laser_duration / delay_time.")
                 return None
-            if ref_duration % 8 != 0:
-                print(f"❌ Error: sub-sequence duration ({ref_duration} ns) not multiple of 8 ns")
+
+            spd_pattern = []
+            if ref_detection_start > 0:
+                spd_pattern.append((ref_detection_start, 0))
+            spd_pattern.append((detection_duration, 1))
+
+            if gap_between_windows > 0:
+                spd_pattern.append((gap_between_windows, 0))
+            spd_pattern.append((detection_duration, 1))
+
+            used_spd = sig_detection_start + detection_duration
+            remaining_spd = single_seq_duration - used_spd
+            if remaining_spd > 0:
+                spd_pattern.append((remaining_spd, 0))
+            if sequence_interval > 0:
+                spd_pattern.append((sequence_interval, 0))
+
+            total_duration = sum(d for d, _ in aom_pattern)
+            if total_duration % 8 != 0:
+                print(f"❌ Error: T1 contrast sequence length ({total_duration} ns) not multiple of 8 ns")
                 return None
 
             sequence = self.pulse_streamer.createSequence()
-            sequence.setDigital(self.CHANNEL_AOM, ref_aom + sig_aom)
-            sequence.setDigital(self.CHANNEL_SPD, ref_spd + sig_spd)
+            sequence.setDigital(self.CHANNEL_AOM, aom_pattern)
+            sequence.setDigital(self.CHANNEL_SPD, spd_pattern)
 
-            full_duration = ref_duration * 2
             print(f"✅ T1 contrast sequence created: delay={delay_time}ns, "
-                  f"{full_duration} ns total ({ref_duration} ns per sub-sequence)")
+                  f"{total_duration} ns total (interval={sequence_interval}ns)")
 
-            return sequence, full_duration
+            return sequence, total_duration
 
         except Exception as e:
             print(f"❌ Error creating T1 contrast sequence: {e}")
