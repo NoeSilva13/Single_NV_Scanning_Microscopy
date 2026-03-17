@@ -445,11 +445,12 @@ class ODMRExperiments:
         Perform T1 decay measurement using the contrast method.
 
         Each sequence repetition contains a single pulse train with two SPD windows:
-          - Reference (even bins): detection during the init laser pulse (bright state)
-          - Signal   (odd  bins): detection during the readout laser pulse after delay τ
+          - Reference (even bins): detection at the END of the init laser (NV fully polarised)
+          - Signal   (odd  bins): detection at the START of the readout laser after delay τ
 
-          AOM: |── init laser ──| ←── delay τ ───→ |── readout laser ──| interval |
-          SPD:       |ref bin|                            |sig bin|       interval |
+          AOM: |──────── init laser ────────| ← delay τ → |── readout laser ──| interval |
+          SPD:                     |ref bin|                    |sig bin|       interval |
+               ← NV polarising →  ↑ fully init'd               ↑ + detection_delay
 
         The contrast Signal/Reference starts near 1.0 for short delays and decays
         exponentially toward the thermal-equilibrium value as τ increases.
@@ -459,14 +460,15 @@ class ODMRExperiments:
 
         Args:
             delay_times: List of delay times between init and readout in ns
-            init_laser_duration: Duration of initialization laser pulse in ns
+            init_laser_duration: Duration of initialization laser pulse in ns.
+                                 Must be >= detection_duration.
             readout_laser_duration: Duration of readout laser pulse in ns
             detection_duration: Duration of detection window in ns
             init_laser_delay: Delay before initialization laser in ns
-            detection_delay: Additional offset added to the SPD gate start relative to
-                             each laser pulse, to compensate for the AOM delay response in ns.
-                             Effective detection starts: init_laser_delay + detection_delay (ref)
-                             and readout_laser_delay + detection_delay (sig).
+            detection_delay: Offset added to the signal SPD gate start relative to the
+                             readout laser edge, to compensate for AOM delay response in ns.
+                             Only affects the signal window; the reference window is anchored
+                             to the trailing end of the init laser.
             sequence_interval: Interval between sequences in ns
             repetitions: Number of repetitions per delay point
             progress_callback: Optional callback(delays, contrasts) for live updates

@@ -338,24 +338,30 @@ class SwabianPulseController:
         laser pulse (after the variable delay τ) serves as the signal measurement.
         Each sequence repetition therefore produces two detection bins:
 
-          AOM: |── init laser ──| ←── delay_time ───→ |── readout laser ──| fill | interval |
-          SPD:       |ref bin|                               |sig bin|      fill | interval |
+          AOM: |──────── init laser ────────| ← delay_time → |── readout laser ──| fill | interval |
+          SPD:                     |ref bin|                       |sig bin|       fill | interval |
+               ← NV polarising →  ↑ fully initialised             ↑ + detection_delay (AOM comp.)
 
-        Even bins (0, 2, 4, ...): reference — fluorescence during init laser (bright state)
-        Odd  bins (1, 3, 5, ...): signal    — fluorescence after delay τ (relaxed state)
+        Even bins (0, 2, 4, ...): reference — fluorescence at the end of the init laser
+                                  (NV fully polarised into ms=0 bright state)
+        Odd  bins (1, 3, 5, ...): signal    — fluorescence at the start of the readout
+                                  laser after delay τ (partially relaxed state)
 
-        This halves the experimental time compared to running separate reference and
-        signal sub-sequences.
+        The reference window is placed at the trailing end of the init laser so the
+        NV has reached steady-state polarisation.  detection_delay is only applied to
+        the signal window to compensate for the AOM turn-on delay at the readout pulse.
 
         Args:
-            init_laser_duration: Duration of initialization laser pulse in ns
+            init_laser_duration: Duration of initialization laser pulse in ns.
+                                 Must be >= detection_duration so the reference window
+                                 fits inside the init laser pulse.
             readout_laser_duration: Duration of readout laser pulse in ns
-            detection_duration: Duration of detection window in ns
+            detection_duration: Duration of each detection window in ns
             delay_time: Dark time between init and readout in ns
             init_laser_delay: Delay before initialization laser in ns
             sequence_interval: Idle time appended after the sequence in ns
-            detection_delay: Additional offset added to the SPD gate start relative to
-                             each laser pulse, to compensate for the AOM delay response in ns
+            detection_delay: Offset added to the signal SPD gate start relative to the
+                             readout laser edge, to compensate for AOM delay response in ns
             fixed_seq_duration: If provided, forces this as the active-sequence duration
                                 to guarantee a constant period across all delay values.
 
@@ -375,10 +381,18 @@ class SwabianPulseController:
             sequence_interval      = self.align_timing(sequence_interval)
             detection_delay        = self.align_timing(detection_delay)
 
+            if init_laser_duration < detection_duration:
+                print(f"❌ Error: init_laser_duration ({init_laser_duration} ns) must be "
+                      f">= detection_duration ({detection_duration} ns) so the reference "
+                      f"window fits inside the init laser pulse.")
+                return None
+
             readout_laser_delay = self.align_timing(init_laser_delay + init_laser_duration + delay_time)
 
-            # SPD window positions: laser start + detection_delay for each pulse
-            ref_detection_start = self.align_timing(init_laser_delay    + detection_delay)
+            # Reference window: trailing end of init laser (NV fully polarised)
+            ref_detection_start = self.align_timing(
+                init_laser_delay + init_laser_duration - detection_duration)
+            # Signal window: start of readout laser + AOM compensation
             sig_detection_start = self.align_timing(readout_laser_delay + detection_delay)
 
             if fixed_seq_duration is not None:
