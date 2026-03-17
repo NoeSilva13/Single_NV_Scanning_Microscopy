@@ -9,18 +9,6 @@ class ODMRDataManager:
     
     # Define experiment types and their configurations
     EXPERIMENT_CONFIGS = {
-        'rabi': {
-            'folder_name': 'Rabi',
-            'file_suffix': '_Rabi',
-            'x_column': 'Duration_ns',
-            'x_columns_converted': [
-                ('Duration_s', 1e-9),  # SI unit
-            ],
-            'data_key': 'mw_durations',
-            'x_label': 'Duration',
-            'x_unit': 'ns',
-            'x_range_format': lambda min_x, max_x: f"{min_x} ns ({min_x*1e-9:.9f} to {max_x*1e-9:.9f} s)"
-        },
         'rabi_contrast': {
             'folder_name': 'Rabi_Contrast',
             'file_suffix': '_Rabi_Contrast',
@@ -64,7 +52,7 @@ class ODMRDataManager:
         Save experiment data to a CSV file in a daily folder with experiment-specific subfolder.
         
         Args:
-            experiment_type: Type of experiment ('odmr_contrast', 'rabi', or 't1_contrast')
+            experiment_type: Type of experiment ('odmr_contrast', 'rabi_contrast', or 't1_contrast')
             x_data: List of x-axis values (frequencies, durations, or delays)
             count_rates: List of corresponding count rates (cps). Omitted when extra_columns
                          fully describes the y-data (e.g. contrast experiments).

@@ -82,7 +82,6 @@ class ODMRExperiments:
     # Maps internal result keys to ODMRDataManager experiment types and x-data keys
     _SAVE_MAP = {
         'odmr_contrast':  ('odmr_contrast', 'frequencies'),
-        'rabi':           ('rabi', 'durations'),
         'rabi_contrast':  ('rabi_contrast', 'durations'),
         't1_contrast':    ('t1_contrast', 'delays'),
     }
@@ -269,122 +268,6 @@ class ODMRExperiments:
         print(f"Frequencies: {frequencies}")
         print("✅ ODMR contrast measurement completed")
         return self.results['odmr_contrast']
-
-    def rabi_oscillation(self,
-                        mw_durations: List[int],
-                        mw_frequency: float = 2.87e9,
-                        laser_duration: int = 1000,
-                        detection_duration: int = 500,
-                        laser_delay: int = 0,
-                        mw_delay: Optional[int] = None,
-                        detection_delay: Optional[int] = None,
-                        sequence_interval: int = 10000,
-                        repetitions: int = 1000,
-                        progress_callback: Optional[Callable] = None) -> Dict:
-        """
-        Perform Rabi oscillation measurement.
-        
-        Args:
-            mw_durations: List of MW pulse durations in ns
-            mw_frequency: MW frequency in Hz
-            laser_duration: Laser pulse duration in ns
-            detection_duration: Detection window duration in ns
-            laser_delay: Delay before laser pulse in ns
-            mw_delay: Delay before MW pulse in ns
-            detection_delay: Delay after MW pulse in ns
-            sequence_interval: Interval between sequences in ns
-            repetitions: Number of repetitions
-            
-        Returns:
-            Dictionary containing MW durations and count rates
-        """
-        print("🔬 Starting Rabi oscillation measurement...")
-
-        durations = []
-        count_rates = []
-        # Set up TimeTagger counter for Rabi measurements
-        self.counter = TimeTagger.CountBetweenMarkers(tagger=self.tagger, click_channel=1, begin_channel=2, end_channel=-2, n_values=repetitions)
-        # Set MW frequency and power for Rabi oscillation
-        if self.mw_generator:
-            self.mw_generator.set_odmr_frequency(mw_frequency / 1e9)  # Convert Hz to GHz
-            self.mw_generator.prepare_for_odmr(mw_frequency / 1e9, -10.0)
-
-        for mw_duration in mw_durations:
-            print(f"⏱️ MW duration: {mw_duration} ns")
-
-            # Calculate default delays for this duration if not provided
-            local_mw_delay = mw_delay if mw_delay is not None else laser_duration + 1000
-            local_detection_delay = detection_delay if detection_delay is not None else local_mw_delay + mw_duration + 100
-
-            # Create Rabi sequence
-            sequence, total_duration = self.pulse_controller.create_odmr_sequence(
-                laser_duration=laser_duration,
-                mw_duration=mw_duration,
-                detection_duration=detection_duration,
-                laser_delay=laser_delay,
-                mw_delay=local_mw_delay,
-                detection_delay=local_detection_delay,
-                sequence_interval=sequence_interval
-            )
-            # Only plot sequence when running in main thread (not in GUI worker threads)
-            #if threading.current_thread() is threading.main_thread():
-            #    sequence.plot()
-            # Sleep time if not the while loop fails  
-            time.sleep(0.2)
-
-            if sequence:
-                # Enable RF output for this measurement
-                if self.mw_generator:
-                    self.mw_generator.set_rf_output(True)
-
-                self.counter.start()
-                ready = False
-                self.pulse_controller.run_sequence(sequence, repetitions)
-
-                while ready is False:
-                    time.sleep(.2)
-                    ready = self.counter.ready()
-                    information = self.counter.getBinWidths()
-                    print(f"Information: {information}")
-                    print(f"Ready: {ready}")
-                    counts = self.counter.getData()
-                    print(f"Counts: {counts}")
-
-                self.counter.clear()
-
-                # Get real count rate from TimeTagger
-                count_rate = np.mean(counts)/(np.mean(information)*1e-12)
-                print(f"Count rate: {count_rate} Hz")
-
-                durations.append(mw_duration)
-                count_rates.append(count_rate)
-
-                if progress_callback:
-                    progress_callback(durations.copy(), count_rates.copy())
-
-                # Turn off RF output after measurement
-                if self.mw_generator:
-                    self.mw_generator.set_rf_output(False)
-
-                time.sleep(0.05)
-        
-        self.results['rabi'] = {
-            'durations': durations,
-            'count_rates': count_rates,
-            'parameters': {
-                'mw_frequency': mw_frequency,
-                'laser_duration': laser_duration,
-                'detection_duration': detection_duration,
-                'laser_delay': laser_delay,
-                'mw_delay': mw_delay,
-                'detection_delay': detection_delay,
-                'sequence_interval': sequence_interval,
-                'repetitions': repetitions
-            }
-        }
-        self._save_results('rabi', self.results['rabi'])
-        print("✅ Rabi oscillation measurement completed")
-        return self.results['rabi']
 
     def rabi_oscillation_contrast(self,
                                    mw_durations: List[int],
@@ -778,12 +661,6 @@ class ODMRExperiments:
             plt.show()
             return
             
-        elif experiment_type == 'rabi':
-            plt.plot(data['durations'], data['count_rates'], 'ro-')
-            plt.xlabel('MW Duration (ns)')
-            plt.ylabel('Count Rate (cps)')
-            plt.title('Rabi Oscillation')
-
         elif experiment_type == 'rabi_contrast':
             durs = np.array(data['durations'])
             sig = np.array(data['mw_on_rates'])
@@ -947,13 +824,7 @@ def run_example_experiments():
         # )
         # experiments.plot_results('odmr_contrast')
 
-        # 2. Rabi oscillation
-        # print("\n" + "="*50)
-        # mw_durations = np.linspace(0, 10000, 20)  # 0-10000 ns in 500 ns steps
-        # rabi_result = experiments.rabi_oscillation(mw_durations=mw_durations, mw_frequency=2.87e9, laser_duration=5000, detection_duration=5000, laser_delay=0, mw_delay=6000, detection_delay=0, sequence_interval=1000, repetitions=1000)
-        # experiments.plot_results('rabi')
-
-        # 2b. Rabi oscillation with contrast (signal/reference normalisation)
+        # 2. Rabi oscillation with contrast (signal/reference normalisation)
         # print("\n" + "="*50)
         # mw_durations = np.linspace(0, 10000, 40)
         # rabi_contrast_result = experiments.rabi_oscillation_contrast(
