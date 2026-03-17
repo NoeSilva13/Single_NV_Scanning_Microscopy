@@ -53,6 +53,19 @@ class ODMRDataManager:
             'x_label': 'Delay',
             'x_unit': 'ns',
             'x_range_format': lambda min_x, max_x: f"{min_x} ns ({min_x*1e-9:.9f} to {max_x*1e-9:.9f} s)"
+        },
+        't1_contrast': {
+            'folder_name': 'T1_Contrast',
+            'file_suffix': '_T1_Contrast',
+            'x_column': 'Delay_ns',
+            'x_columns_converted': [
+                ('Delay_s', 1e-9),
+                ('Delay_us', 1e-3),
+            ],
+            'data_key': 'delay_times',
+            'x_label': 'Delay',
+            'x_unit': 'ns',
+            'x_range_format': lambda min_x, max_x: f"{min_x} ns ({min_x*1e-9:.9f} to {max_x*1e-9:.9f} s)"
         }
     }
     

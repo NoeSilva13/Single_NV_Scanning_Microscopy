@@ -83,11 +83,12 @@ class ODMRExperiments:
     
     # Maps internal result keys to ODMRDataManager experiment types and x-data keys
     _SAVE_MAP = {
-        'cw_odmr':      ('odmr', 'frequencies'),
-        'odmr':         ('odmr', 'frequencies'),
-        'odmr_contrast': ('odmr_contrast', 'frequencies'),
-        'rabi':         ('rabi', 'durations'),
-        't1_decay':     ('t1', 'delays'),
+        'cw_odmr':        ('odmr', 'frequencies'),
+        'odmr':           ('odmr', 'frequencies'),
+        'odmr_contrast':  ('odmr_contrast', 'frequencies'),
+        'rabi':           ('rabi', 'durations'),
+        't1_decay':       ('t1', 'delays'),
+        't1_contrast':    ('t1_contrast', 'delays'),
     }
 
     def _save_results(self, result_key: str, result: Dict):
@@ -99,6 +100,17 @@ class ODMRExperiments:
             if result_key == 'odmr_contrast':
                 sig = np.array(result['mw_on_rates'])
                 ref = np.array(result['mw_off_rates'])
+                sig_over_ref = np.where(ref > 0, sig / ref, np.nan)
+                extra_columns = {
+                    'Signal_cps': sig,
+                    'Reference_cps': ref,
+                    'Signal_over_Reference': sig_over_ref,
+                    'Contrast': result['contrasts'],
+                }
+                count_rates = None
+            elif result_key == 't1_contrast':
+                sig = np.array(result['sig_rates'])
+                ref = np.array(result['ref_rates'])
                 sig_over_ref = np.where(ref > 0, sig / ref, np.nan)
                 extra_columns = {
                     'Signal_cps': sig,
@@ -710,7 +722,151 @@ class ODMRExperiments:
         self._save_results('t1_decay', self.results['t1_decay'])
         print("✅ T1 decay measurement completed")
         return self.results['t1_decay']
-    
+
+    def t1_decay_contrast(self,
+                          delay_times: List[int],
+                          init_laser_duration: int = 1000,
+                          readout_laser_duration: int = 1000,
+                          detection_duration: int = 500,
+                          init_laser_delay: int = 0,
+                          sequence_interval: int = 10000,
+                          repetitions: int = 1000,
+                          progress_callback: Optional[Callable] = None) -> Dict:
+        """
+        Perform T1 decay measurement using the contrast method.
+
+        For each delay time τ, the sequence alternates between two sub-sequences:
+          - Reference (even bins): init laser → 0 delay → readout laser + detection
+          - Signal   (odd  bins): init laser → τ delay → readout laser + detection
+
+        The contrast Signal/Reference starts near 1.0 for short delays and decays
+        exponentially toward the thermal-equilibrium value as τ increases.
+        Normalising by the interleaved reference removes common-mode noise from
+        laser power drift, APD efficiency changes, etc.
+
+        Args:
+            delay_times: List of delay times between init and readout in ns
+            init_laser_duration: Duration of initialization laser pulse in ns
+            readout_laser_duration: Duration of readout laser pulse in ns
+            detection_duration: Duration of detection window in ns
+            init_laser_delay: Delay before initialization laser in ns
+            sequence_interval: Interval between sequences in ns
+            repetitions: Number of repetitions per delay point
+            progress_callback: Optional callback(delays, contrasts) for live updates
+
+        Returns:
+            Dictionary containing delays, contrasts, signal rates, and reference rates
+        """
+        print("🔬 Starting T1 contrast measurement...")
+
+        delays = []
+        contrasts = []
+        sig_rates = []
+        ref_rates = []
+
+        self.counter = TimeTagger.CountBetweenMarkers(
+            tagger=self.tagger,
+            click_channel=1,
+            begin_channel=2,
+            end_channel=-2,
+            n_values=repetitions * 2
+        )
+
+        max_delay = max(delay_times)
+        max_readout_delay = init_laser_delay + init_laser_duration + max_delay
+        max_seq_duration = self.pulse_controller.align_timing(max(
+            init_laser_delay + init_laser_duration,
+            max_readout_delay + readout_laser_duration,
+            max_readout_delay + detection_duration
+        ))
+        constant_total_period = max_seq_duration + self.pulse_controller.align_timing(sequence_interval)
+
+        print(f"📏 Maximum sequence duration: {max_seq_duration} ns (for delay={max_delay} ns)")
+        print(f"📏 Constant total period per repetition: {constant_total_period} ns")
+
+        for delay_time in delay_times:
+            print(f"⏱️ Delay time: {delay_time} ns")
+
+            adjusted_interval = constant_total_period - max_seq_duration
+            adjusted_interval = self.pulse_controller.align_timing(adjusted_interval)
+
+            print(f"Using fixed seq duration: {max_seq_duration} ns, delay time: {delay_time} ns, "
+                  f"Interval: {adjusted_interval} ns, Total period: {max_seq_duration + adjusted_interval} ns")
+
+            sequence, total_duration = self.pulse_controller._create_t1_sequence_contrast(
+                init_laser_duration=init_laser_duration,
+                readout_laser_duration=readout_laser_duration,
+                detection_duration=detection_duration,
+                delay_time=delay_time,
+                init_laser_delay=init_laser_delay,
+                sequence_interval=adjusted_interval,
+                fixed_seq_duration=max_seq_duration
+            )
+
+            time.sleep(0.2)
+
+            if sequence:
+                self.counter.start()
+                ready = False
+                self.pulse_controller.run_sequence(sequence, n_runs=repetitions)
+
+                while ready is False:
+                    time.sleep(0.2)
+                    ready = self.counter.ready()
+                    information = self.counter.getBinWidths()
+                    print(f"Information: {information}")
+                    print(f"Ready: {ready}")
+                    counts = self.counter.getData()
+                    print(f"Counts: {counts}")
+
+                self.counter.clear()
+
+                counts_arr = np.array(counts)
+                info_arr = np.array(information)
+
+                # Even bins → reference (zero delay); odd bins → signal (delay τ)
+                counts_ref = counts_arr[0::2]
+                counts_sig = counts_arr[1::2]
+                info_ref = info_arr[0::2]
+                info_sig = info_arr[1::2]
+
+                rate_ref = np.mean(counts_ref) / (np.mean(info_ref) * 1e-12)
+                rate_sig = np.mean(counts_sig) / (np.mean(info_sig) * 1e-12)
+                contrast = rate_sig / rate_ref if rate_ref > 0 else 0.0
+
+                print(f"Reference: {rate_ref:.2f} Hz | Signal: {rate_sig:.2f} Hz | Sig/Ref: {contrast:.4f}")
+
+                delays.append(delay_time)
+                contrasts.append(contrast)
+                ref_rates.append(rate_ref)
+                sig_rates.append(rate_sig)
+
+                if progress_callback:
+                    progress_callback(delays.copy(), contrasts.copy())
+
+                time.sleep(0.05)
+
+        self.results['t1_contrast'] = {
+            'delays': delays,
+            'contrasts': contrasts,
+            'ref_rates': ref_rates,
+            'sig_rates': sig_rates,
+            'parameters': {
+                'init_laser_duration': init_laser_duration,
+                'readout_laser_duration': readout_laser_duration,
+                'detection_duration': detection_duration,
+                'init_laser_delay': init_laser_delay,
+                'sequence_interval': sequence_interval,
+                'repetitions': repetitions
+            }
+        }
+
+        self._save_results('t1_contrast', self.results['t1_contrast'])
+        print(f"Contrasts: {contrasts}")
+        print(f"Delays: {delays}")
+        print("✅ T1 contrast measurement completed")
+        return self.results['t1_contrast']
+
     def plot_results(self, experiment_type: str):
         """Plot the results of a specific experiment"""
         if experiment_type not in self.results:
@@ -820,7 +976,70 @@ class ODMRExperiments:
             plt.xlabel('Delay (µs)')
             plt.ylabel('Count Rate (cps)')
             plt.title('T1 Decay')
-        
+
+        elif experiment_type == 't1_contrast':
+            delays_us = np.array(data['delays']) / 1000  # ns -> µs
+            sig = np.array(data['sig_rates'])
+            ref = np.array(data['ref_rates'])
+            sig_over_ref = np.where(ref > 0, sig / ref, np.nan)
+            contrasts = np.array(data['contrasts'])
+
+            fig, axes = plt.gcf(), None
+            plt.close(fig)
+            fig, axes = plt.subplots(3, 1, figsize=(10, 14), sharex=True)
+
+            axes[0].plot(delays_us, ref, 'bo-', label='Reference (τ = 0)')
+            axes[0].set_ylabel('Count Rate (cps)')
+            axes[0].set_title('T1 Contrast')
+            axes[0].legend()
+            axes[0].grid(True, alpha=0.3)
+
+            axes[1].plot(delays_us, sig, 'ro-', label='Signal (τ = delay)')
+            axes[1].set_ylabel('Count Rate (cps)')
+            axes[1].legend()
+            axes[1].grid(True, alpha=0.3)
+
+            axes[2].plot(delays_us, sig_over_ref, 'mo', label='Signal / Reference')
+            try:
+                exp_decay = lambda t, A, T1, C: A * np.exp(-t / T1) + C
+                p0 = [sig_over_ref[0] - sig_over_ref[-1], delays_us[-1] / 3, sig_over_ref[-1]]
+                popt, pcov = curve_fit(exp_decay, delays_us, sig_over_ref, p0=p0, maxfev=10000)
+                perr = np.sqrt(np.diag(pcov))
+                fit_t = np.linspace(delays_us[0], delays_us[-1], 500)
+                axes[2].plot(fit_t, exp_decay(fit_t, *popt), 'r-', linewidth=2,
+                             label=f'Fit: T1 = {popt[1]:.2f} ± {perr[1]:.2f} µs')
+                print(f"T1 fit: A={popt[0]:.4f}, T1={popt[1]:.2f} ± {perr[1]:.2f} µs, C={popt[2]:.4f}")
+            except Exception as e:
+                print(f"Warning: T1 exponential fit failed: {e}")
+            axes[2].set_xlabel('Delay (µs)')
+            axes[2].set_ylabel('Signal / Reference')
+            axes[2].legend()
+            axes[2].grid(True, alpha=0.3)
+
+            plt.tight_layout()
+
+            fig_ratio, ax_ratio = plt.subplots(figsize=(10, 6))
+            ax_ratio.plot(delays_us, sig_over_ref, 'mo', label='Signal / Reference')
+            try:
+                ax_ratio.plot(fit_t, exp_decay(fit_t, *popt), 'r-', linewidth=2,
+                              label=f'Fit: T1 = {popt[1]:.2f} ± {perr[1]:.2f} µs')
+            except Exception:
+                pass
+            ax_ratio.set_xlabel('Delay (µs)')
+            ax_ratio.set_ylabel('Signal / Reference')
+            ax_ratio.set_title('T1 – Signal / Reference')
+            ax_ratio.legend()
+            ax_ratio.grid(True, alpha=0.3)
+            fig_ratio.tight_layout()
+
+            if base_path:
+                fig.savefig(f"{base_path}.pdf", format='pdf', bbox_inches='tight')
+                fig_ratio.savefig(f"{base_path}_ratio.pdf", format='pdf', bbox_inches='tight')
+                print(f"Plots saved to: {base_path}*.pdf")
+
+            plt.show()
+            return
+
         plt.grid(True, alpha=0.3)
         plt.tight_layout()
 
@@ -897,11 +1116,25 @@ def run_example_experiments():
         # experiments.plot_results('rabi')
         
         # 5. T1 decay
+        # print("\n" + "="*50)
+        # delay_times = np.linspace(0, 10000, 50)  # 0-5 microseconds in 50 steps
+        # # Important: For T1 measurements, readout_laser_delay and detection_delay should be None, this allows to code to calculate the delays automatically otherwise the sequence will not be created correctly. 
+        # t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=1000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=5000)
+        # experiments.plot_results('t1_decay')
+
+        # 6. T1 decay with contrast (signal/reference normalisation)
         print("\n" + "="*50)
-        delay_times = np.linspace(0, 10000, 50)  # 0-5 microseconds in 50 steps
-        # Important: For T1 measurements, readout_laser_delay and detection_delay should be None, this allows to code to calculate the delays automatically otherwise the sequence will not be created correctly. 
-        t1_result = experiments.t1_decay(delay_times=delay_times, init_laser_duration=5000, readout_laser_duration=5000, detection_duration=1000, init_laser_delay=0, readout_laser_delay=None, detection_delay=None, sequence_interval=1000, repetitions=5000)
-        experiments.plot_results('t1_decay')
+        delay_times = np.linspace(0, 10000, 50)  # 0-10 µs in 50 steps
+        t1_contrast_result = experiments.t1_decay_contrast(
+            delay_times=delay_times,
+            init_laser_duration=5000,
+            readout_laser_duration=5000,
+            detection_duration=1000,
+            init_laser_delay=0,
+            sequence_interval=1000,
+            repetitions=5000
+        )
+        experiments.plot_results('t1_contrast')
         
         
         print("\n✅ All example experiments completed!")
