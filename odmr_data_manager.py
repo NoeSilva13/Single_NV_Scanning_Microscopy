@@ -21,6 +21,18 @@ class ODMRDataManager:
             'x_unit': 'ns',
             'x_range_format': lambda min_x, max_x: f"{min_x} ns ({min_x*1e-9:.9f} to {max_x*1e-9:.9f} s)"
         },
+        'rabi_contrast': {
+            'folder_name': 'Rabi_Contrast',
+            'file_suffix': '_Rabi_Contrast',
+            'x_column': 'Duration_ns',
+            'x_columns_converted': [
+                ('Duration_s', 1e-9),
+            ],
+            'data_key': 'mw_durations',
+            'x_label': 'Duration',
+            'x_unit': 'ns',
+            'x_range_format': lambda min_x, max_x: f"{min_x} ns ({min_x*1e-9:.9f} to {max_x*1e-9:.9f} s)"
+        },
         'odmr_contrast': {
             'folder_name': 'ODMR_Contrast',
             'file_suffix': '_ODMR_Contrast',
