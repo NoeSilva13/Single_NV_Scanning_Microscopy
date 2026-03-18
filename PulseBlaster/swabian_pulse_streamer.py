@@ -329,8 +329,7 @@ class SwabianPulseController:
                                      delay_time: int,
                                      init_laser_delay: int,
                                      sequence_interval: int,
-                                     detection_delay: int = 0,
-                                     fixed_seq_duration: Optional[int] = None) -> Optional[Tuple]:
+                                     detection_delay: int = 0) -> Optional[Tuple]:
         """
         Create T1 contrast pulse sequence using a single sequence with two SPD windows.
 
@@ -351,6 +350,10 @@ class SwabianPulseController:
         NV has reached steady-state polarisation.  detection_delay is only applied to
         the signal window to compensate for the AOM turn-on delay at the readout pulse.
 
+        Because contrast normalisation (sig/ref) removes period-dependent effects,
+        the sequence duration naturally varies with delay_time — no fixed-period
+        padding is needed.
+
         Args:
             init_laser_duration: Duration of initialization laser pulse in ns.
                                  Must be >= detection_duration so the reference window
@@ -362,8 +365,6 @@ class SwabianPulseController:
             sequence_interval: Idle time appended after the sequence in ns
             detection_delay: Offset added to the signal SPD gate start relative to the
                              readout laser edge, to compensate for AOM delay response in ns
-            fixed_seq_duration: If provided, forces this as the active-sequence duration
-                                to guarantee a constant period across all delay values.
 
         Returns:
             Tuple (Sequence, total_duration_ns) or None if error
@@ -395,14 +396,11 @@ class SwabianPulseController:
             # Signal window: start of readout laser + AOM compensation
             sig_detection_start = self.align_timing(readout_laser_delay + detection_delay)
 
-            if fixed_seq_duration is not None:
-                single_seq_duration = self.align_timing(fixed_seq_duration)
-            else:
-                single_seq_duration = self.align_timing(max(
-                    init_laser_delay    + init_laser_duration,
-                    readout_laser_delay + readout_laser_duration,
-                    sig_detection_start + detection_duration
-                ))
+            single_seq_duration = self.align_timing(max(
+                init_laser_delay    + init_laser_duration,
+                readout_laser_delay + readout_laser_duration,
+                sig_detection_start + detection_duration
+            ))
 
             # AOM: init laser | gap | readout laser | fill | interval
             aom_pattern = []

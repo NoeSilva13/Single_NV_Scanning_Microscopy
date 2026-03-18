@@ -491,27 +491,8 @@ class ODMRExperiments:
             n_values=repetitions * 2
         )
 
-        max_delay = max(delay_times)
-        max_readout_delay = init_laser_delay + init_laser_duration + max_delay
-        max_detection_start = max_readout_delay + detection_delay
-        max_seq_duration = self.pulse_controller.align_timing(max(
-            init_laser_delay + init_laser_duration,
-            max_readout_delay + readout_laser_duration,
-            max_detection_start + detection_duration
-        ))
-        constant_total_period = max_seq_duration + self.pulse_controller.align_timing(sequence_interval)
-
-        print(f"📏 Maximum sequence duration: {max_seq_duration} ns (for delay={max_delay} ns)")
-        print(f"📏 Constant total period per repetition: {constant_total_period} ns")
-
         for delay_time in delay_times:
             print(f"⏱️ Delay time: {delay_time} ns")
-
-            adjusted_interval = constant_total_period - max_seq_duration
-            adjusted_interval = self.pulse_controller.align_timing(adjusted_interval)
-
-            print(f"Using fixed seq duration: {max_seq_duration} ns, delay time: {delay_time} ns, "
-                  f"Interval: {adjusted_interval} ns, Total period: {max_seq_duration + adjusted_interval} ns")
 
             sequence, total_duration = self.pulse_controller._create_t1_sequence_contrast(
                 init_laser_duration=init_laser_duration,
@@ -519,9 +500,8 @@ class ODMRExperiments:
                 detection_duration=detection_duration,
                 delay_time=delay_time,
                 init_laser_delay=init_laser_delay,
-                sequence_interval=adjusted_interval,
-                detection_delay=detection_delay,
-                fixed_seq_duration=max_seq_duration
+                sequence_interval=sequence_interval,
+                detection_delay=detection_delay
             )
 
             time.sleep(0.2)
