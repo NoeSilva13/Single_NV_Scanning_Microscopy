@@ -53,7 +53,7 @@ class ODMRExperiments:
         
         # Initialize TimeTagger for real data acquisition
         try:
-            self.tagger = TimeTagger.createTimeTaggerNetwork("localhost")
+            self.tagger = TimeTagger.createTimeTaggerNetwork("192.168.0.221")
             print("✅ Connected to Network TimeTagger device")
         except Exception as e:
             print(f"⚠️ Network TimeTagger not detected: {str(e)}")
@@ -287,16 +287,9 @@ class ODMRExperiments:
           - Reference (even bins): laser + detection, MW off  → bright ms=0 PL
           - Signal   (odd  bins): laser + detection, MW on(τ) → PL after spin rotation
 
-          AOM: |── laser ──| fill | interval | |── laser ──| fill | interval |
-          MW:  |   OFF    |      | interval | |──MW(τ)───| fill | interval |
-          SPD: |  |det|   |      | interval | |  |det|   |      | interval |
-
         The contrast (ref − sig) / ref starts near 0 for τ ≈ 0 and oscillates with the
         Rabi frequency. Normalising by the interleaved reference removes common-mode noise
         from laser power drift and APD efficiency changes.
-
-        The detection window is fixed at mw_delay + max(mw_durations) + 100 ns for all
-        sweep points so the repetition period is constant regardless of the MW duration.
 
         Args:
             mw_durations: List of MW pulse durations to sweep in ns
@@ -304,10 +297,8 @@ class ODMRExperiments:
             laser_duration: Laser pulse duration in ns
             detection_duration: Detection window duration in ns
             laser_delay: Delay before laser pulse in ns
-            mw_delay: Delay before MW pulse in ns (default: laser_duration + 1000)
-            detection_delay: Fixed start of detection window in ns.
-                             Defaults to mw_delay + max(mw_durations) + 100, which
-                             guarantees the window is always after the longest MW pulse.
+            mw_delay: Delay before MW pulse in ns
+            detection_delay: Delay before detection window in ns
             sequence_interval: Interval between sub-sequences in ns
             repetitions: Number of repetitions per duration point
             progress_callback: Optional callback(durations, contrasts) for live updates
@@ -321,19 +312,6 @@ class ODMRExperiments:
         contrasts = []
         mw_off_rates = []
         mw_on_rates = []
-
-        # Resolve mw_delay first so it feeds into the detection_delay default
-        local_mw_delay = mw_delay if mw_delay is not None else laser_duration + 1000
-        local_mw_delay = self.pulse_controller.align_timing(local_mw_delay)
-
-        # Fix detection_delay from the maximum MW duration so period is constant
-        max_mw = max(mw_durations)
-        local_detection_delay = (detection_delay if detection_delay is not None
-                                 else local_mw_delay + max_mw + 100)
-        local_detection_delay = self.pulse_controller.align_timing(local_detection_delay)
-
-        print(f"📏 Fixed detection delay: {local_detection_delay} ns "
-              f"(after longest MW pulse of {max_mw} ns)")
 
         self.counter = TimeTagger.CountBetweenMarkers(
             tagger=self.tagger,
@@ -350,17 +328,20 @@ class ODMRExperiments:
         for mw_duration in mw_durations:
             print(f"⏱️ MW duration: {mw_duration} ns")
 
-            sequence, total_duration = self.pulse_controller.create_odmr_sequence_contrast(
+            local_laser_delay = mw_delay + mw_duration + laser_delay
+            local_detection_delay = mw_delay + mw_duration + detection_delay
+
+            sequence, total_duration = self.pulse_controller.create_rabi_sequence_contrast(
                 laser_duration=laser_duration,
                 mw_duration=mw_duration,
                 detection_duration=detection_duration,
-                laser_delay=laser_delay,
-                mw_delay=local_mw_delay,
+                laser_delay=local_laser_delay,
+                mw_delay=mw_delay,
                 detection_delay=local_detection_delay,
                 sequence_interval=sequence_interval
             )
             time.sleep(0.2)
-
+            sequence.plot()
             if sequence:
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(True)
@@ -368,7 +349,7 @@ class ODMRExperiments:
                 self.counter.start()
                 ready = False
                 self.pulse_controller.run_sequence(sequence, repetitions)
-
+                sequence.plot()
                 while ready is False:
                     time.sleep(0.2)
                     ready = self.counter.ready()
@@ -418,8 +399,8 @@ class ODMRExperiments:
                 'laser_duration': laser_duration,
                 'detection_duration': detection_duration,
                 'laser_delay': laser_delay,
-                'mw_delay': local_mw_delay,
-                'detection_delay': local_detection_delay,
+                'mw_delay': mw_delay,
+                'detection_delay': detection_delay,
                 'sequence_interval': sequence_interval,
                 'repetitions': repetitions
             }
@@ -807,34 +788,35 @@ def run_example_experiments():
         # experiments.plot_results('odmr_contrast')
 
         # 2. Rabi oscillation with contrast (signal/reference normalisation)
-        # print("\n" + "="*50)
-        # mw_durations = np.linspace(0, 10000, 40)
-        # rabi_contrast_result = experiments.rabi_oscillation_contrast(
-        #     mw_durations=mw_durations,
-        #     mw_frequency=2.87e9,
-        #     laser_duration=5000,
-        #     detection_duration=1000,
-        #     laser_delay=0,
-        #     mw_delay=6000,       # detection_delay auto-set to mw_delay + max(mw_durations) + 100
-        #     sequence_interval=1000,
-        #     repetitions=5000
-        # )
-        # experiments.plot_results('rabi_contrast')
-
-        # 3. T1 decay with contrast (signal/reference normalisation)
         print("\n" + "="*50)
-        delay_times = np.linspace(0, 10000, 50)  # 0-10 µs in 50 steps
-        t1_contrast_result = experiments.t1_decay_contrast(
-            delay_times=delay_times,
-            init_laser_duration=5000,
-            readout_laser_duration=5000,
-            detection_duration=1000,
-            init_laser_delay=0,
-            detection_delay=0,
+        mw_durations = np.linspace(0, 10000, 40)
+        rabi_contrast_result = experiments.rabi_oscillation_contrast(
+            mw_durations=mw_durations,
+            mw_frequency=2.87e9,
+            laser_duration=25000,
+            detection_duration=2000,
+            laser_delay=0,
+            mw_delay=0,
+            detection_delay=1500,
             sequence_interval=1000,
             repetitions=5000
         )
-        experiments.plot_results('t1_contrast')
+        experiments.plot_results('rabi_contrast')
+
+        # 3. T1 decay with contrast (signal/reference normalisation)
+        # print("\n" + "="*50)
+        # delay_times = np.linspace(0, 10000, 50)  # 0-10 µs in 50 steps
+        # t1_contrast_result = experiments.t1_decay_contrast(
+        #     delay_times=delay_times,
+        #     init_laser_duration=5000,
+        #     readout_laser_duration=5000,
+        #     detection_duration=1000,
+        #     init_laser_delay=0,
+        #     detection_delay=0,
+        #     sequence_interval=1000,
+        #     repetitions=5000
+        # )
+        # experiments.plot_results('t1_contrast')
         
         
         print("\n✅ All example experiments completed!")

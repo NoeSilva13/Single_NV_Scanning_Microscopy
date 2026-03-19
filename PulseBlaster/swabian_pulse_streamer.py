@@ -286,7 +286,120 @@ class SwabianPulseController:
         pattern.append((params['sequence_interval'], 0))
 
         return pattern
-    
+
+    def _create_spd_pattern_off(self, params: Dict, seq_duration: int) -> List[Tuple[int, int]]:
+        """
+        Create mirrored SPD gate pattern: detection window at the trailing end
+        of the laser pulse, where the NV is fully polarised into ms=0.
+        """
+        pattern = []
+
+        spd_start = params['laser_delay'] + params['laser_duration'] - params['detection_duration']
+        if spd_start < 0:
+            raise ValueError(
+                f"laser_duration ({params['laser_duration']} ns) must be >= "
+                f"detection_duration ({params['detection_duration']} ns) for "
+                f"the mirrored SPD window to fit inside the laser pulse.")
+
+        if spd_start > 0:
+            pattern.append((spd_start, 0))
+        pattern.append((params['detection_duration'], 1))
+
+        used_time = spd_start + params['detection_duration']
+        remaining_time = seq_duration - used_time
+        if remaining_time > 0:
+            pattern.append((remaining_time, 0))
+
+        pattern.append((params['sequence_interval'], 0))
+
+        return pattern
+
+    def create_rabi_sequence_contrast(self,
+                                      laser_duration: int = None,
+                                      mw_duration: int = None,
+                                      detection_duration: int = None,
+                                      laser_delay: int = None,
+                                      mw_delay: int = None,
+                                      detection_delay: int = None,
+                                      sequence_interval: int = None) -> Optional[Tuple]:
+        """
+        Create a Rabi oscillation contrast pulse sequence.
+
+        Each sequence run contains two sub-sequences back-to-back:
+          1. MW off sub-sequence (reference) — SPD gate at the END of the laser
+             pulse where the NV is fully polarised (spd_pattern_off, mirrored).
+          2. MW on  sub-sequence (signal)    — SPD gate at the normal detection
+             window position (spd_pattern).
+
+        Contrast = signal / reference reveals Rabi oscillations as the MW
+        duration is swept.
+
+        Args:
+            laser_duration: Duration of laser pulse in ns
+            mw_duration: Duration of MW pulse in ns
+            detection_duration: Duration of detection window in ns
+            laser_delay: Delay before laser pulse in ns
+            mw_delay: Delay before MW pulse in ns
+            detection_delay: Delay before detection in ns
+            sequence_interval: Dead time appended after each sub-sequence in ns
+
+        Returns:
+            Tuple (Sequence, total_duration_ns) or None if error
+        """
+        if not self.is_connected:
+            print("❌ Device not connected")
+            return None
+
+        params = self.default_params.copy()
+        if laser_duration is not None:
+            params['laser_duration'] = self.align_timing(laser_duration)
+        if mw_duration is not None:
+            params['mw_duration'] = self.align_timing(mw_duration)
+        if detection_duration is not None:
+            params['detection_duration'] = self.align_timing(detection_duration)
+        if laser_delay is not None:
+            params['laser_delay'] = self.align_timing(laser_delay)
+        if mw_delay is not None:
+            params['mw_delay'] = self.align_timing(mw_delay)
+        if detection_delay is not None:
+            params['detection_delay'] = self.align_timing(detection_delay)
+        if sequence_interval is not None:
+            params['sequence_interval'] = self.align_timing(sequence_interval)
+
+        try:
+            single_seq_duration = max(
+                params['laser_delay'] + params['laser_duration'],
+                params['mw_delay'] + params['mw_duration'],
+                params['detection_delay'] + params['detection_duration']
+            )
+            single_seq_duration = self.align_timing(single_seq_duration)
+
+            aom_pattern = self._create_laser_pattern(params, single_seq_duration)
+            mw_pattern = self._create_mw_pattern(params, single_seq_duration)
+            mw_pattern_off = self._create_mw_pattern_off(params, single_seq_duration)
+            spd_pattern = self._create_spd_pattern(params, single_seq_duration)
+            spd_pattern_off = self._create_spd_pattern_off(params, single_seq_duration)
+
+            total_duration = sum(duration for duration, _ in aom_pattern)
+            if total_duration % 8 != 0:
+                print(f"❌ Error: Total sequence length ({total_duration} ns) not multiple of 8 ns")
+                return None
+
+            sequence = self.pulse_streamer.createSequence()
+            sequence.setDigital(self.CHANNEL_AOM, aom_pattern + aom_pattern)
+            sequence.setDigital(self.CHANNEL_MW, mw_pattern_off + mw_pattern)
+            sequence.setDigital(self.CHANNEL_SPD, spd_pattern_off + spd_pattern)
+
+            full_duration = total_duration * 2
+            print(f"✅ Rabi contrast sequence created: {full_duration} ns total "
+                  f"({total_duration} ns per sub-sequence, 8ns aligned)")
+
+            return sequence, full_duration
+
+        except Exception as e:
+            print(f"❌ Error creating Rabi contrast sequence: {e}")
+            return None
+
     def run_sequence(self, sequence: Sequence, n_runs: int = None):
         """
         Upload and run a pulse sequence.
