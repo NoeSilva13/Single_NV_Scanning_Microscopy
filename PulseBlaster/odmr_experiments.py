@@ -341,7 +341,7 @@ class ODMRExperiments:
                 sequence_interval=sequence_interval
             )
             time.sleep(0.2)
-            sequence.plot()
+            # sequence.plot()
             if sequence:
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(True)
@@ -349,7 +349,7 @@ class ODMRExperiments:
                 self.counter.start()
                 ready = False
                 self.pulse_controller.run_sequence(sequence, repetitions)
-                sequence.plot()
+                
                 while ready is False:
                     time.sleep(0.2)
                     ready = self.counter.ready()
@@ -678,28 +678,37 @@ class ODMRExperiments:
             sig_over_ref = np.where(ref > 0, sig / ref, np.nan)
             contrasts = np.array(data['contrasts'])
 
+            diffs = np.diff(delays_us)
+            use_log = len(delays_us) > 2 and delays_us[0] > 0 and (diffs.max() / diffs.min() > 5)
+            plot_fn_name = 'semilogx' if use_log else 'plot'
+            grid_which = 'both' if use_log else 'major'
+
             fig, axes = plt.gcf(), None
             plt.close(fig)
             fig, axes = plt.subplots(3, 1, figsize=(10, 14), sharex=True)
 
-            axes[0].plot(delays_us, ref, 'bo-', label='Reference (τ = 0)')
+            getattr(axes[0], plot_fn_name)(delays_us, ref, 'bo-', label='Reference (τ = 0)')
             axes[0].set_ylabel('Count Rate (cps)')
             axes[0].set_title('T1 Contrast')
             axes[0].legend()
-            axes[0].grid(True, alpha=0.3)
+            axes[0].grid(True, alpha=0.3, which=grid_which)
 
-            axes[1].plot(delays_us, sig, 'ro-', label='Signal (τ = delay)')
+            getattr(axes[1], plot_fn_name)(delays_us, sig, 'ro-', label='Signal (τ = delay)')
             axes[1].set_ylabel('Count Rate (cps)')
             axes[1].legend()
-            axes[1].grid(True, alpha=0.3)
+            axes[1].grid(True, alpha=0.3, which=grid_which)
 
-            axes[2].plot(delays_us, sig_over_ref, 'mo', label='Signal / Reference')
+            getattr(axes[2], plot_fn_name)(delays_us, sig_over_ref, 'mo', label='Signal / Reference')
+            fit_t = None
             try:
                 exp_decay = lambda t, A, T1, C: A * np.exp(-t / T1) + C
                 p0 = [sig_over_ref[0] - sig_over_ref[-1], delays_us[-1] / 3, sig_over_ref[-1]]
                 popt, pcov = curve_fit(exp_decay, delays_us, sig_over_ref, p0=p0, maxfev=10000)
                 perr = np.sqrt(np.diag(pcov))
-                fit_t = np.linspace(delays_us[0], delays_us[-1], 500)
+                if use_log:
+                    fit_t = np.logspace(np.log10(delays_us[0]), np.log10(delays_us[-1]), 500)
+                else:
+                    fit_t = np.linspace(delays_us[0], delays_us[-1], 500)
                 axes[2].plot(fit_t, exp_decay(fit_t, *popt), 'r-', linewidth=2,
                              label=f'Fit: T1 = {popt[1]:.2f} ± {perr[1]:.2f} µs')
                 print(f"T1 fit: A={popt[0]:.4f}, T1={popt[1]:.2f} ± {perr[1]:.2f} µs, C={popt[2]:.4f}")
@@ -708,22 +717,23 @@ class ODMRExperiments:
             axes[2].set_xlabel('Delay (µs)')
             axes[2].set_ylabel('Signal / Reference')
             axes[2].legend()
-            axes[2].grid(True, alpha=0.3)
+            axes[2].grid(True, alpha=0.3, which=grid_which)
 
             plt.tight_layout()
 
             fig_ratio, ax_ratio = plt.subplots(figsize=(10, 6))
-            ax_ratio.plot(delays_us, sig_over_ref, 'mo', label='Signal / Reference')
-            try:
-                ax_ratio.plot(fit_t, exp_decay(fit_t, *popt), 'r-', linewidth=2,
-                              label=f'Fit: T1 = {popt[1]:.2f} ± {perr[1]:.2f} µs')
-            except Exception:
-                pass
+            getattr(ax_ratio, plot_fn_name)(delays_us, sig_over_ref, 'mo', label='Signal / Reference')
+            if fit_t is not None:
+                try:
+                    ax_ratio.plot(fit_t, exp_decay(fit_t, *popt), 'r-', linewidth=2,
+                                  label=f'Fit: T1 = {popt[1]:.2f} ± {perr[1]:.2f} µs')
+                except Exception:
+                    pass
             ax_ratio.set_xlabel('Delay (µs)')
             ax_ratio.set_ylabel('Signal / Reference')
             ax_ratio.set_title('T1 – Signal / Reference')
             ax_ratio.legend()
-            ax_ratio.grid(True, alpha=0.3)
+            ax_ratio.grid(True, alpha=0.3, which=grid_which)
             fig_ratio.tight_layout()
 
             if base_path:
@@ -788,35 +798,36 @@ def run_example_experiments():
         # experiments.plot_results('odmr_contrast')
 
         # 2. Rabi oscillation with contrast (signal/reference normalisation)
-        print("\n" + "="*50)
-        mw_durations = np.linspace(0, 10000, 40)
-        rabi_contrast_result = experiments.rabi_oscillation_contrast(
-            mw_durations=mw_durations,
-            mw_frequency=2.87e9,
-            laser_duration=25000,
-            detection_duration=2000,
-            laser_delay=0,
-            mw_delay=0,
-            detection_delay=1500,
-            sequence_interval=1000,
-            repetitions=5000
-        )
-        experiments.plot_results('rabi_contrast')
-
-        # 3. T1 decay with contrast (signal/reference normalisation)
         # print("\n" + "="*50)
-        # delay_times = np.linspace(0, 10000, 50)  # 0-10 µs in 50 steps
-        # t1_contrast_result = experiments.t1_decay_contrast(
-        #     delay_times=delay_times,
-        #     init_laser_duration=5000,
-        #     readout_laser_duration=5000,
-        #     detection_duration=1000,
-        #     init_laser_delay=0,
-        #     detection_delay=0,
+        # mw_durations = np.linspace(0, 10000, 40)
+        # rabi_contrast_result = experiments.rabi_oscillation_contrast(
+        #     mw_durations=mw_durations,
+        #     mw_frequency=2.87e9,
+        #     laser_duration=25000,
+        #     detection_duration=2000,
+        #     laser_delay=0,
+        #     mw_delay=0,
+        #     detection_delay=1500,
         #     sequence_interval=1000,
         #     repetitions=5000
         # )
-        # experiments.plot_results('t1_contrast')
+        # experiments.plot_results('rabi_contrast')
+
+        # 3. T1 decay with contrast (signal/reference normalisation)
+        print("\n" + "="*50)
+        delay_times = np.linspace(0, 0.5e6, 50)  # 0-10 µs in 50 steps
+        #delay_times = np.logspace(0, np.log10(1e6), 50)
+        t1_contrast_result = experiments.t1_decay_contrast(
+            delay_times=delay_times,
+            init_laser_duration=50000,
+            readout_laser_duration=50000,
+            detection_duration=3000,
+            init_laser_delay=0,
+            detection_delay=1500,
+            sequence_interval=2000,
+            repetitions=500
+        )
+        experiments.plot_results('t1_contrast')
         
         
         print("\n✅ All example experiments completed!")
