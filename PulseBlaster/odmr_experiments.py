@@ -13,6 +13,7 @@ Date: 2025
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
+from scipy.special import gamma as gamma_func
 import time
 import sys
 import os
@@ -345,7 +346,7 @@ class ODMRExperiments:
             if sequence:
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(True)
-
+                time.sleep(0.2)
                 self.counter.start()
                 ready = False
                 self.pulse_controller.run_sequence(sequence, repetitions)
@@ -675,8 +676,7 @@ class ODMRExperiments:
             delays_us = np.array(data['delays']) / 1000  # ns -> µs
             sig = np.array(data['sig_rates'])
             ref = np.array(data['ref_rates'])
-            sig_over_ref = np.where(ref > 0, sig / ref, np.nan)
-            contrasts = np.array(data['contrasts'])
+            sig_over_ref = np.array(data['contrasts'])
 
             diffs = np.diff(delays_us)
             use_log = len(delays_us) > 2 and delays_us[0] > 0 and (diffs.max() / diffs.min() > 5)
@@ -701,19 +701,23 @@ class ODMRExperiments:
             getattr(axes[2], plot_fn_name)(delays_us, sig_over_ref, 'mo', label='Signal / Reference')
             fit_t = None
             try:
-                exp_decay = lambda t, A, T1, C: A * np.exp(-t / T1) + C
-                p0 = [sig_over_ref[0] - sig_over_ref[-1], delays_us[-1] / 3, sig_over_ref[-1]]
-                popt, pcov = curve_fit(exp_decay, delays_us, sig_over_ref, p0=p0, maxfev=10000)
+                stretched_exp = lambda t, A, T1, n, C: A * np.exp(-(t / T1) ** n) + C
+                p0 = [sig_over_ref[0] - sig_over_ref[-1], delays_us[-1] / 3, 1.0, sig_over_ref[-1]]
+                bounds = ([-np.inf, 0, 0.1, -np.inf], [np.inf, np.inf, 1.0, np.inf])
+                popt, pcov = curve_fit(stretched_exp, delays_us, sig_over_ref,
+                                       p0=p0, bounds=bounds, maxfev=10000)
                 perr = np.sqrt(np.diag(pcov))
+                mean_t1 = (popt[1] / popt[2]) * gamma_func(1.0 / popt[2])
                 if use_log:
                     fit_t = np.logspace(np.log10(delays_us[0]), np.log10(delays_us[-1]), 500)
                 else:
                     fit_t = np.linspace(delays_us[0], delays_us[-1], 500)
-                axes[2].plot(fit_t, exp_decay(fit_t, *popt), 'r-', linewidth=2,
-                             label=f'Fit: T1 = {popt[1]:.2f} ± {perr[1]:.2f} µs')
-                print(f"T1 fit: A={popt[0]:.4f}, T1={popt[1]:.2f} ± {perr[1]:.2f} µs, C={popt[2]:.4f}")
+                fit_label = f'Fit: T1 = {popt[1]:.2f} ± {perr[1]:.2f} µs'
+                axes[2].plot(fit_t, stretched_exp(fit_t, *popt), 'r-', linewidth=2, label=fit_label)
+                print(f"T1 stretched-exp fit: A={popt[0]:.4f}, T1={popt[1]:.2f} ± {perr[1]:.2f} µs, "
+                      f"n={popt[2]:.2f} ± {perr[2]:.2f}, C={popt[3]:.4f}, ⟨τ⟩={mean_t1:.2f} µs")
             except Exception as e:
-                print(f"Warning: T1 exponential fit failed: {e}")
+                print(f"Warning: T1 stretched-exponential fit failed: {e}")
             axes[2].set_xlabel('Delay (µs)')
             axes[2].set_ylabel('Signal / Reference')
             axes[2].legend()
@@ -725,8 +729,8 @@ class ODMRExperiments:
             getattr(ax_ratio, plot_fn_name)(delays_us, sig_over_ref, 'mo', label='Signal / Reference')
             if fit_t is not None:
                 try:
-                    ax_ratio.plot(fit_t, exp_decay(fit_t, *popt), 'r-', linewidth=2,
-                                  label=f'Fit: T1 = {popt[1]:.2f} ± {perr[1]:.2f} µs')
+                    ax_ratio.plot(fit_t, stretched_exp(fit_t, *popt), 'r-', linewidth=2,
+                                  label=fit_label)
                 except Exception:
                     pass
             ax_ratio.set_xlabel('Delay (µs)')
@@ -786,12 +790,12 @@ def run_example_experiments():
         # frequencies = np.linspace(2.8e9, 2.95e9, 50)
         # odmr_contrast_result = experiments.odmr_contrast(
         #     mw_frequencies=frequencies,
-        #     laser_duration=200000,
-        #     mw_duration=200000,
-        #     detection_duration=200000,
+        #     laser_duration=100000,
+        #     mw_duration=100000,
+        #     detection_duration=100000,
         #     laser_delay=0,
         #     mw_delay=0,
-        #     detection_delay=0,
+        #     detection_delay=1500,
         #     sequence_interval=2000,
         #     repetitions=5000
         # )
@@ -799,24 +803,24 @@ def run_example_experiments():
 
         # 2. Rabi oscillation with contrast (signal/reference normalisation)
         # print("\n" + "="*50)
-        # mw_durations = np.linspace(0, 10000, 40)
+        # mw_durations = np.linspace(0, 3000, 100)
         # rabi_contrast_result = experiments.rabi_oscillation_contrast(
         #     mw_durations=mw_durations,
-        #     mw_frequency=2.87e9,
+        #     mw_frequency=2.875e9,
         #     laser_duration=25000,
         #     detection_duration=2000,
         #     laser_delay=0,
         #     mw_delay=0,
-        #     detection_delay=1500,
-        #     sequence_interval=1000,
-        #     repetitions=5000
+        #     detection_delay=1000,
+        #     sequence_interval=2000,
+        #     repetitions=20000
         # )
         # experiments.plot_results('rabi_contrast')
 
         # 3. T1 decay with contrast (signal/reference normalisation)
         print("\n" + "="*50)
-        delay_times = np.linspace(0, 0.5e6, 50)  # 0-10 µs in 50 steps
-        #delay_times = np.logspace(0, np.log10(1e6), 50)
+        delay_times = np.linspace(0, 30e6, 50)  # 0-10 µs in 50 steps
+        #delay_times = np.logspace(np.log10(0.5e3), np.log10(5e6), 50)
         t1_contrast_result = experiments.t1_decay_contrast(
             delay_times=delay_times,
             init_laser_duration=50000,
@@ -825,7 +829,7 @@ def run_example_experiments():
             init_laser_delay=0,
             detection_delay=1500,
             sequence_interval=2000,
-            repetitions=500
+            repetitions=3000
         )
         experiments.plot_results('t1_contrast')
         
