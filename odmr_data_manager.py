@@ -9,22 +9,12 @@ class ODMRDataManager:
     
     # Define experiment types and their configurations
     EXPERIMENT_CONFIGS = {
-        'odmr': {
-            'folder_name': 'ODMR',
-            'file_suffix': '_ODMR',
-            'x_column': 'Frequency_Hz',
-            'x_columns_converted': [],
-            'data_key': 'mw_frequencies',
-            'x_label': 'Frequency',
-            'x_unit': 'Hz',
-            'x_range_format': lambda min_x, max_x: f"{min_x:.1f} Hz ({min_x/1e9:.6f} to {max_x/1e9:.6f} GHz)"
-        },
-        'rabi': {
-            'folder_name': 'Rabi',
-            'file_suffix': '_Rabi',
+        'rabi_contrast': {
+            'folder_name': 'Rabi_Contrast',
+            'file_suffix': '_Rabi_Contrast',
             'x_column': 'Duration_ns',
             'x_columns_converted': [
-                ('Duration_s', 1e-9),  # SI unit
+                ('Duration_s', 1e-9),
             ],
             'data_key': 'mw_durations',
             'x_label': 'Duration',
@@ -41,13 +31,13 @@ class ODMRDataManager:
             'x_unit': 'Hz',
             'x_range_format': lambda min_x, max_x: f"{min_x:.1f} Hz ({min_x/1e9:.6f} to {max_x/1e9:.6f} GHz)"
         },
-        't1': {
-            'folder_name': 'T1',
-            'file_suffix': '_T1',
+        't1_contrast': {
+            'folder_name': 'T1_Contrast',
+            'file_suffix': '_T1_Contrast',
             'x_column': 'Delay_ns',
             'x_columns_converted': [
-                ('Delay_s', 1e-9),  # SI unit
-                ('Delay_us', 1e-3),  # Common unit in the field
+                ('Delay_s', 1e-9),
+                ('Delay_us', 1e-3),
             ],
             'data_key': 'delay_times',
             'x_label': 'Delay',
@@ -62,7 +52,7 @@ class ODMRDataManager:
         Save experiment data to a CSV file in a daily folder with experiment-specific subfolder.
         
         Args:
-            experiment_type: Type of experiment ('odmr', 'rabi', or 't1')
+            experiment_type: Type of experiment ('odmr_contrast', 'rabi_contrast', or 't1_contrast')
             x_data: List of x-axis values (frequencies, durations, or delays)
             count_rates: List of corresponding count rates (cps). Omitted when extra_columns
                          fully describes the y-data (e.g. contrast experiments).
