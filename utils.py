@@ -18,6 +18,9 @@ MAX_ZOOM_LEVEL = 6
 # Default binwidth for TimeTagger counter in picoseconds (5e9 = 5 milliseconds)
 BINWIDTH = int(5e9)
 
+# Hardware-timed scan: extra samples per row for galvo mechanical settling
+SETTLING_SAMPLES = 5
+
 # Piezo auto-focus parameters (in micrometers)
 PIEZO_COARSE_STEP = 5.0  # Step size for coarse focus scan
 PIEZO_FINE_STEP = 0.5    # Step size for fine focus scan

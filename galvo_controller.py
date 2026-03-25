@@ -33,6 +33,11 @@ class GalvoScannerController:
             self.xout_voltage = "Dev1/ai14"
             self.yout_voltage = "Dev1/ai15"
 
+            # Hardware-timed scan: PFI terminal for exported pixel clock
+            # and Time Tagger channel receiving the clock signal
+            self.pfi_pixel_clock = "/Dev1/PFI8"
+            self.tt_marker_channel = 3
+
             # Voltage ranges
             self.control_range = (-10.0, 10.0)      # Output voltage range
             self.output_range = (-3.75, 3.75)       # Input voltage range

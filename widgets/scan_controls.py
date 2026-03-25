@@ -330,14 +330,29 @@ def update_scan_parameters_widget(widget_instance, scan_params_manager):
     return _update_widget
 
 
-def stop_scan(scan_in_progress, stop_scan_requested):
-    """Factory function to create stop_scan widget with dependencies"""
+def stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref=None, cbm_ref=None):
+    """Factory function to create stop_scan widget with dependencies.
+
+    Args:
+        scan_task_ref: Mutable list holding the hardware-timed DAQ task (or None).
+        cbm_ref: Mutable list holding the CountBetweenMarkers measurement (or None).
+    """
     
     @magicgui(call_button="🛑 Stop Scan")
     def _stop_scan():
         """Safely stop the current scanning process."""
-        if scan_in_progress[0]:  # Use list to allow modification of mutable object
+        if scan_in_progress[0]:
             stop_scan_requested[0] = True
+            if scan_task_ref is not None and scan_task_ref[0] is not None:
+                try:
+                    scan_task_ref[0].stop()
+                except Exception:
+                    pass
+            if cbm_ref is not None and cbm_ref[0] is not None:
+                try:
+                    cbm_ref[0].stop()
+                except Exception:
+                    pass
             show_info("🛑 Stopping scan... Please wait.")
         else:
             show_info("ℹ️ No scan currently in progress.")
