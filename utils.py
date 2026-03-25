@@ -7,7 +7,10 @@ import tifffile
 from napari.utils.notifications import show_info
 
 # Calibration constant: microns per volt based on empirical measurements
-MICRONS_PER_VOLT = 130
+# Air objective 40x 0.95 NA
+#MICRONS_PER_VOLT = 130 
+# Oil objective 
+MICRONS_PER_VOLT = 51
 
 # Maximum zoom level allowed in the scanning interface
 MAX_ZOOM_LEVEL = 6
