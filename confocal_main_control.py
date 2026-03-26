@@ -338,6 +338,7 @@ def scan_pattern(x_points, y_points):
     height, width = len(y_points), len(x_points)
 
     try:
+        output_task.write([x_points[0], y_points[0]])
         x_waveform, y_waveform = generate_scan_waveform(x_points, y_points)
         total_samples = len(x_waveform)
         pixel_rate = 1.0 / dwell_time
