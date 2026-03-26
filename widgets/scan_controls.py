@@ -153,7 +153,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             default_y_max = 1.0
             default_x_res = 50
             default_y_res = 50
-            default_dwell_time = 0.008  # Default dwell time in seconds
+            default_dwell_time = 0.001  # Default dwell time in seconds
             
             # X Min
             layout.addWidget(QLabel("X Min:"), 1, 0)
@@ -226,9 +226,9 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             # Dwell Time
             layout.addWidget(QLabel("Dwell Time:"), 7, 0)
             self.dwell_time_spinbox = QDoubleSpinBox()
-            self.dwell_time_spinbox.setRange(0.001, 10.0)  # 1ms to 10s
-            self.dwell_time_spinbox.setSingleStep(0.001)
-            self.dwell_time_spinbox.setDecimals(3)
+            self.dwell_time_spinbox.setRange(0.0001, 10.0)  # 1ms to 10s
+            self.dwell_time_spinbox.setSingleStep(0.0001)
+            self.dwell_time_spinbox.setDecimals(4)
             self.dwell_time_spinbox.setValue(default_dwell_time)
             self.dwell_time_spinbox.setSuffix(" s")
             layout.addWidget(self.dwell_time_spinbox, 7, 1, 1, 2)  # Span 2 columns
