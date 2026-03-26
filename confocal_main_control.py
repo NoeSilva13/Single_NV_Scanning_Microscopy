@@ -299,24 +299,45 @@ def update_contrast_limits(layer, image):
         show_info(f'❌ Error setting contrast limits: {str(e)}')
 
 # --------------------- WAVEFORM GENERATION ---------------------
-def generate_scan_waveform(x_points, y_points):
+GALVO_FLYBACK_TIME = 0.002  # seconds of retrace budget between rows
+
+def generate_scan_waveform(x_points, y_points, n_flyback=0):
     """Pre-compute complete X/Y voltage waveforms for a hardware-timed raster scan.
+
+    Inserts a smooth linear ramp of *n_flyback* samples between consecutive
+    rows so the galvo can decelerate, retrace, and settle before the next
+    line of data acquisition begins.  Flyback samples are clocked at the
+    same rate as imaging samples; their photon counts must be discarded by
+    the caller.
 
     Args:
         x_points: 1D array of X galvo voltages (one per column).
         y_points: 1D array of Y galvo voltages (one per row).
+        n_flyback: Number of extra retrace samples inserted between rows.
+                   Set to 0 to disable (original behaviour).
 
     Returns:
-        x_waveform: 1D voltage array for AO0 (width * height samples).
-        y_waveform: 1D voltage array for AO1 (width * height samples).
+        x_waveform: 1D voltage array for AO0.
+        y_waveform: 1D voltage array for AO1.
     """
-    width, height = len(x_points), len(y_points)
-    total_samples = width * height
+    width = len(x_points)
+    height = len(y_points)
 
-    x_waveform = np.tile(x_points, height)
-    y_waveform = np.repeat(y_points, width)
+    if n_flyback <= 0:
+        return np.tile(x_points, height), np.repeat(y_points, width)
 
-    return x_waveform, y_waveform
+    segments_x = []
+    segments_y = []
+
+    for i in range(height):
+        segments_x.append(x_points)
+        segments_y.append(np.full(width, y_points[i]))
+
+        if i < height - 1:
+            segments_x.append(np.linspace(x_points[-1], x_points[0], n_flyback))
+            segments_y.append(np.linspace(y_points[i], y_points[i + 1], n_flyback))
+
+    return np.concatenate(segments_x), np.concatenate(segments_y)
 
 # --------------------- HARDWARE-TIMED SCANNING FUNCTION ---------------------
 def scan_pattern(x_points, y_points):
@@ -339,8 +360,10 @@ def scan_pattern(x_points, y_points):
 
     try:
         output_task.write([x_points[0], y_points[0]])
-        x_waveform, y_waveform = generate_scan_waveform(x_points, y_points)
+        n_flyback = max(1, int(np.ceil(GALVO_FLYBACK_TIME / dwell_time)))
+        x_waveform, y_waveform = generate_scan_waveform(x_points, y_points, n_flyback=n_flyback)
         total_samples = len(x_waveform)
+        stride = width + n_flyback
         pixel_rate = 1.0 / dwell_time
 
         image = np.zeros((height, width), dtype=np.float32)
@@ -397,7 +420,7 @@ def scan_pattern(x_points, y_points):
             print(f"Partial bins: {partial_bins}")
 
             for row_idx in range(last_completed_row + 1, height):
-                row_start = row_idx * width
+                row_start = row_idx * stride
                 row_end = row_start + width
 
                 row_bins = partial_bins[row_start:row_end]
@@ -422,7 +445,7 @@ def scan_pattern(x_points, y_points):
         print(f"Bin widths: {bin_widths}")
 
         for row_idx in range(height):
-            row_start = row_idx * width
+            row_start = row_idx * stride
             row_end = row_start + width
             row_counts = all_counts[row_start:row_end]
             row_bin_s = bin_widths[row_start:row_end] / 1e12
@@ -431,7 +454,8 @@ def scan_pattern(x_points, y_points):
 
         layer.data = image
         end_time = time.time()
-        print(f"Scan time: {end_time - start_time:.2f} seconds, {width}x{height} pixels (hardware-timed)")
+        print(f"Scan time: {end_time - start_time:.2f} seconds, {width}x{height} pixels, "
+              f"{n_flyback} flyback samples/row (hardware-timed)")
         update_contrast_limits(layer, image)
 
         scan_data = {
