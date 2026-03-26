@@ -362,7 +362,7 @@ def scan_pattern(x_points, y_points):
         scan_task.timing.cfg_samp_clk_timing(
             rate=pixel_rate,
             sample_mode=AcquisitionType.FINITE,
-            samps_per_chan=total_samples
+            samps_per_chan=total_samples+1
         )
         scan_task.export_signals.samp_clk_output_term = "/Dev1/PFI8"
 
@@ -379,6 +379,7 @@ def scan_pattern(x_points, y_points):
         cbm_ref[0] = cbm
 
         cbm.start()
+        time.sleep(1)
         start_time = time.time()
         scan_task.start()
 
@@ -391,6 +392,8 @@ def scan_pattern(x_points, y_points):
 
             partial_data = cbm.getData()
             partial_bins = cbm.getBinWidths()
+            print(f"Partial counts: {partial_data}")
+            print(f"Partial bins: {partial_bins}")
 
             for row_idx in range(last_completed_row + 1, height):
                 row_start = row_idx * width
@@ -414,6 +417,8 @@ def scan_pattern(x_points, y_points):
         # Extract final image from completed measurement
         all_counts = cbm.getData()
         bin_widths = cbm.getBinWidths()
+        print(f"All counts: {all_counts}")
+        print(f"Bin widths: {bin_widths}")
 
         for row_idx in range(height):
             row_start = row_idx * width
