@@ -33,7 +33,6 @@ from utils import (
     calculate_scale, 
     MAX_ZOOM_LEVEL, 
     BINWIDTH,
-    SETTLING_SAMPLES,
     save_tiff_with_imagej_metadata
 )
 from qtpy.QtWidgets import QWidget
@@ -300,38 +299,24 @@ def update_contrast_limits(layer, image):
         show_info(f'❌ Error setting contrast limits: {str(e)}')
 
 # --------------------- WAVEFORM GENERATION ---------------------
-def generate_scan_waveform(x_points, y_points, settling_samples=SETTLING_SAMPLES):
-    """Pre-compute complete X/Y voltage waveforms and pixel mask for hardware-timed raster scan.
+def generate_scan_waveform(x_points, y_points):
+    """Pre-compute complete X/Y voltage waveforms for a hardware-timed raster scan.
 
     Args:
         x_points: 1D array of X galvo voltages (one per column).
         y_points: 1D array of Y galvo voltages (one per row).
-        settling_samples: Extra samples at the start of each row where the
-            galvo is held at the first X position to allow mechanical settling.
 
     Returns:
-        x_waveform: 1D voltage array for AO0 (all samples).
-        y_waveform: 1D voltage array for AO1 (all samples).
-        pixel_mask: Boolean array, True for data-pixel samples.
+        x_waveform: 1D voltage array for AO0 (width * height samples).
+        y_waveform: 1D voltage array for AO1 (width * height samples).
     """
     width, height = len(x_points), len(y_points)
-    samples_per_row = settling_samples + width
-    total_samples = samples_per_row * height
+    total_samples = width * height
 
-    x_waveform = np.empty(total_samples)
-    y_waveform = np.empty(total_samples)
-    pixel_mask = np.zeros(total_samples, dtype=bool)
+    x_waveform = np.tile(x_points, height)
+    y_waveform = np.repeat(y_points, width)
 
-    for row_idx, y_val in enumerate(y_points):
-        row_start = row_idx * samples_per_row
-        x_waveform[row_start:row_start + settling_samples] = x_points[0]
-        y_waveform[row_start:row_start + settling_samples] = y_val
-        data_start = row_start + settling_samples
-        x_waveform[data_start:data_start + width] = x_points
-        y_waveform[data_start:data_start + width] = y_val
-        pixel_mask[data_start:data_start + width] = True
-
-    return x_waveform, y_waveform, pixel_mask
+    return x_waveform, y_waveform
 
 # --------------------- HARDWARE-TIMED SCANNING FUNCTION ---------------------
 def scan_pattern(x_points, y_points):
@@ -351,10 +336,9 @@ def scan_pattern(x_points, y_points):
     dwell_time = current_scan_params['dwell_time']
 
     height, width = len(y_points), len(x_points)
-    samples_per_row = SETTLING_SAMPLES + width
 
     try:
-        x_waveform, y_waveform, pixel_mask = generate_scan_waveform(x_points, y_points)
+        x_waveform, y_waveform = generate_scan_waveform(x_points, y_points)
         total_samples = len(x_waveform)
         pixel_rate = 1.0 / dwell_time
 
@@ -380,17 +364,16 @@ def scan_pattern(x_points, y_points):
             sample_mode=AcquisitionType.FINITE,
             samps_per_chan=total_samples
         )
-        scan_task.export_signals.samp_clk_output_term = galvo_controller.pfi_pixel_clock
+        scan_task.export_signals.samp_clk_output_term = "/Dev1/PFI8"
 
         scan_task.write(np.array([x_waveform, y_waveform]), auto_start=False)
 
         # Configure CountBetweenMarkers (counts during HIGH phase of each clock cycle)
-        tt_ch = galvo_controller.tt_marker_channel
         cbm = TimeTagger.CountBetweenMarkers(
             tagger=tagger,
             click_channel=1,
-            begin_channel=tt_ch,
-            end_channel=-tt_ch,
+            begin_channel=3,
+            end_channel=-3,
             n_values=total_samples
         )
         cbm_ref[0] = cbm
@@ -410,12 +393,12 @@ def scan_pattern(x_points, y_points):
             partial_bins = cbm.getBinWidths()
 
             for row_idx in range(last_completed_row + 1, height):
-                row_data_start = row_idx * samples_per_row + SETTLING_SAMPLES
-                row_data_end = row_data_start + width
+                row_start = row_idx * width
+                row_end = row_start + width
 
-                row_bins = partial_bins[row_data_start:row_data_end]
+                row_bins = partial_bins[row_start:row_end]
                 if np.all(row_bins > 0):
-                    row_counts = partial_data[row_data_start:row_data_end]
+                    row_counts = partial_data[row_start:row_end]
                     row_bin_s = row_bins / 1e12
                     image[row_idx, :] = row_counts / row_bin_s
                     last_completed_row = row_idx
@@ -433,10 +416,10 @@ def scan_pattern(x_points, y_points):
         bin_widths = cbm.getBinWidths()
 
         for row_idx in range(height):
-            row_data_start = row_idx * samples_per_row + SETTLING_SAMPLES
-            row_data_end = row_data_start + width
-            row_counts = all_counts[row_data_start:row_data_end]
-            row_bin_s = bin_widths[row_data_start:row_data_end] / 1e12
+            row_start = row_idx * width
+            row_end = row_start + width
+            row_counts = all_counts[row_start:row_end]
+            row_bin_s = bin_widths[row_start:row_end] / 1e12
             valid = row_bin_s > 0
             image[row_idx, valid] = row_counts[valid] / row_bin_s[valid]
 
