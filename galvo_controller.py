@@ -27,7 +27,7 @@ class GalvoScannerController:
             
             # DAQ channel configuration
             self.spd_counter = "Dev1/ctr0"
-            self.spd_edge_source = "/Dev1/PFI8"
+            #self.spd_edge_source = "/Dev1/PFI8"
             self.xin_control = "Dev1/ao0"
             self.yin_control = "Dev1/ao1"
             self.xout_voltage = "Dev1/ai14"

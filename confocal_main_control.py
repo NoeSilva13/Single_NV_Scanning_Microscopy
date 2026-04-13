@@ -17,6 +17,7 @@ import time
 import numpy as np 
 import napari
 import nidaqmx
+from nidaqmx.constants import AcquisitionType, TaskMode
 from napari.utils.notifications import show_info
 from PyQt5.QtWidgets import QDesktopWidget
 import TimeTagger
@@ -184,6 +185,8 @@ data_path = None
 single_axis_widget_ref = None  # Reference to be set later
 scan_in_progress = [False]  # Flag to track if scan is running (mutable)
 stop_scan_requested = [False]  # Flag to request scan stop (mutable)
+scan_task_ref = [None]  # Reference to hardware-timed DAQ scan task (mutable for stop access)
+cbm_ref = [None]  # Reference to CountBetweenMarkers measurement (mutable for stop access)
 
 # Initialize DAQ output task for galvo control
 output_task = nidaqmx.Task()
@@ -295,61 +298,166 @@ def update_contrast_limits(layer, image):
     except Exception as e:
         show_info(f'❌ Error setting contrast limits: {str(e)}')
 
-# --------------------- SCANNING FUNCTION ---------------------
+# --------------------- WAVEFORM GENERATION ---------------------
+GALVO_FLYBACK_TIME = 0.002  # seconds of retrace budget between rows
+
+def generate_scan_waveform(x_points, y_points, n_flyback=0):
+    """Pre-compute complete X/Y voltage waveforms for a hardware-timed raster scan.
+
+    Inserts a smooth linear ramp of *n_flyback* samples between consecutive
+    rows so the galvo can decelerate, retrace, and settle before the next
+    line of data acquisition begins.  Flyback samples are clocked at the
+    same rate as imaging samples; their photon counts must be discarded by
+    the caller.
+
+    Args:
+        x_points: 1D array of X galvo voltages (one per column).
+        y_points: 1D array of Y galvo voltages (one per row).
+        n_flyback: Number of extra retrace samples inserted between rows.
+                   Set to 0 to disable (original behaviour).
+
+    Returns:
+        x_waveform: 1D voltage array for AO0.
+        y_waveform: 1D voltage array for AO1.
+    """
+    width = len(x_points)
+    height = len(y_points)
+
+    if n_flyback <= 0:
+        return np.tile(x_points, height), np.repeat(y_points, width)
+
+    segments_x = []
+    segments_y = []
+
+    for i in range(height):
+        segments_x.append(x_points)
+        segments_y.append(np.full(width, y_points[i]))
+
+        if i < height - 1:
+            segments_x.append(np.linspace(x_points[-1], x_points[0], n_flyback))
+            segments_y.append(np.linspace(y_points[i], y_points[i + 1], n_flyback))
+
+    return np.concatenate(segments_x), np.concatenate(segments_y)
+
+# --------------------- HARDWARE-TIMED SCANNING FUNCTION ---------------------
 def scan_pattern(x_points, y_points):
-    """Perform a raster scan pattern using the galvo mirrors and collect APD counts."""
+    """Perform a hardware-timed raster scan using buffered AO and CountBetweenMarkers.
+
+    The full scan waveform is pre-computed, loaded into the DAQ, and clocked
+    out by the hardware sample clock.  The same clock is exported to a PFI
+    terminal and wired to the Time Tagger, where CountBetweenMarkers counts
+    APD photons between successive clock edges for each pixel.
+    """
     global image, layer, data_path
-    
+
     scan_in_progress[0] = True
     stop_scan_requested[0] = False
-    
-    # Get all scan parameters once at the start
+
     current_scan_params = scan_params_manager.get_params()
     dwell_time = current_scan_params['dwell_time']
-    
+
+    height, width = len(y_points), len(x_points)
+
     try:
-        height, width = len(y_points), len(x_points)
+        output_task.write([x_points[0], y_points[0]])
+        n_flyback = max(1, int(np.ceil(GALVO_FLYBACK_TIME / dwell_time)))
+        x_waveform, y_waveform = generate_scan_waveform(x_points, y_points, n_flyback=n_flyback)
+        total_samples = len(x_waveform)
+        stride = width + n_flyback
+        pixel_rate = 1.0 / dwell_time
+
         image = np.zeros((height, width), dtype=np.float32)
         layer.data = image
         layer.contrast_limits = contrast_limits
-        
-        # Update scale before starting the scan
+
         scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
         scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
         layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
-        
+
+        # Release AO channels from the persistent on-demand task
+        output_task.stop()
+        output_task.control(TaskMode.TASK_UNRESERVE)
+
+        # Create hardware-timed finite AO task
+        scan_task = nidaqmx.Task()
+        scan_task_ref[0] = scan_task
+        scan_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
+        scan_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
+        scan_task.timing.cfg_samp_clk_timing(
+            rate=pixel_rate,
+            sample_mode=AcquisitionType.FINITE,
+            samps_per_chan=total_samples+1
+        )
+        scan_task.export_signals.samp_clk_output_term = "/Dev1/PFI8"
+
+        scan_task.write(np.array([x_waveform, y_waveform]), auto_start=False)
+
+        # Configure CountBetweenMarkers (counts during HIGH phase of each clock cycle)
+        cbm = TimeTagger.CountBetweenMarkers(
+            tagger=tagger,
+            click_channel=1,
+            begin_channel=3,
+            end_channel=-3,
+            n_values=total_samples
+        )
+        cbm_ref[0] = cbm
+
+        cbm.start()
+        time.sleep(1)
         start_time = time.time()
-        for y_idx, y in enumerate(y_points):
-            for x_idx, x in enumerate(x_points):
-                if stop_scan_requested[0]:
-                    show_info("🛑 Scan stopped by user")
-                    output_task.write([0, 0])  # Return to zero position
-                    scan_in_progress[0] = False
-                    return None, None
-                    
-                output_task.write([x, y])
-                # Use dwell time from parameters, with longer settling time for first pixel in each row
-                if x_idx == 0:
-                    time.sleep(max(dwell_time * 2, 0.05))  # Longer settling time for row start
-                else:
-                    time.sleep(dwell_time)
-                    
-                counts = counter.getData()[0][0]/(binwidth/1e12)
-                print(f"{counts}")
-                image[y_idx, x_idx] = counts
-                
-                if x_idx == len(x_points) - 1: # Update layer every row
+        scan_task.start()
+
+        # Poll for progress and update the live display
+        last_completed_row = -1
+        while not cbm.ready():
+            if stop_scan_requested[0]:
+                break
+            time.sleep(0.2)
+
+            partial_data = cbm.getData()
+            partial_bins = cbm.getBinWidths()
+            print(f"Partial counts: {partial_data}")
+            print(f"Partial bins: {partial_bins}")
+
+            for row_idx in range(last_completed_row + 1, height):
+                row_start = row_idx * stride
+                row_end = row_start + width
+
+                row_bins = partial_bins[row_start:row_end]
+                if np.all(row_bins > 0):
+                    row_counts = partial_data[row_start:row_end]
+                    row_bin_s = row_bins / 1e12
+                    image[row_idx, :] = row_counts / row_bin_s
+                    last_completed_row = row_idx
                     layer.refresh()
                     update_contrast_limits(layer, image)
-                    
-        # Final update to ensure last pixels are displayed
+                else:
+                    break
+
+        if stop_scan_requested[0]:
+            show_info("🛑 Scan stopped by user")
+            return None, None
+
+        # Extract final image from completed measurement
+        all_counts = cbm.getData()
+        bin_widths = cbm.getBinWidths()
+        print(f"All counts: {all_counts}")
+        print(f"Bin widths: {bin_widths}")
+
+        for row_idx in range(height):
+            row_start = row_idx * stride
+            row_end = row_start + width
+            row_counts = all_counts[row_start:row_end]
+            row_bin_s = bin_widths[row_start:row_end] / 1e12
+            valid = row_bin_s > 0
+            image[row_idx, valid] = row_counts[valid] / row_bin_s[valid]
+
         layer.data = image
         end_time = time.time()
-        print(f"Scan time: {end_time - start_time} seconds, {len(x_points)}, {len(y_points)}")
-        # Adjust contrast and save data
+        print(f"Scan time: {end_time - start_time:.2f} seconds, {width}x{height} pixels, "
+              f"{n_flyback} flyback samples/row (hardware-timed)")
         update_contrast_limits(layer, image)
-        
-        # Create a dictionary with image and scan positions
+
         scan_data = {
             'image': image,
             'x_points': x_points,
@@ -357,15 +465,11 @@ def scan_pattern(x_points, y_points):
             'scale_x': scale_um_per_px_x,
             'scale_y': scale_um_per_px_y
         }
-        # Save data using the parameters we got at the start
         data_path = data_manager.save_scan_data(scan_data, current_scan_params)
-
-        # Plot scan results in pdf file
         plot_scan_results(scan_data, data_path)
-        
-        # Save image with scale information and scan parameters
+
         timestamp_str = time.strftime("%Y%m%d-%H%M%S")
-        np.savez(data_path.replace('.csv', '.npz'), 
+        np.savez(data_path.replace('.csv', '.npz'),
                  image=image,
                  scale_x=scale_um_per_px_x,
                  scale_y=scale_um_per_px_y,
@@ -377,8 +481,7 @@ def scan_pattern(x_points, y_points):
                  x_points=x_points,
                  y_points=y_points,
                  timestamp=timestamp_str)
-        
-        # Save TIFF with ImageJ-compatible metadata
+
         save_tiff_with_imagej_metadata(
             image_data=image,
             filepath=data_path.replace('.csv', '.tiff'),
@@ -387,13 +490,32 @@ def scan_pattern(x_points, y_points):
             scan_config=current_scan_params,
             timestamp=timestamp_str
         )
-        
+
     finally:
-        # Return scanner to zero position after scan
-        output_task.write([0, 0])
+        if scan_task_ref[0] is not None:
+            try:
+                scan_task_ref[0].stop()
+                scan_task_ref[0].close()
+            except Exception:
+                pass
+            scan_task_ref[0] = None
+
+        if cbm_ref[0] is not None:
+            try:
+                cbm_ref[0].stop()
+            except Exception:
+                pass
+            cbm_ref[0] = None
+
+        try:
+            output_task.start()
+            output_task.write([0, 0])
+        except Exception as e:
+            show_info(f"⚠️ Failed to restart galvo control: {e}")
+
         show_info("🎯 Scanner returned to zero position")
         scan_in_progress[0] = False
-        
+
     return x_points, y_points
 
 # --------------------- DATA PATH FUNCTION ---------------------
@@ -414,7 +536,7 @@ update_widget_func = create_update_scan_parameters_widget(update_scan_parameters
 scan_points_manager._update_points_from_params()
 
 # Create stop scan widget
-stop_scan_widget = create_stop_scan(scan_in_progress, stop_scan_requested)
+stop_scan_widget = create_stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref)
 stop_scan_widget.native.setFixedSize(150, 50)
 
 reset_zoom_widget = create_reset_zoom(

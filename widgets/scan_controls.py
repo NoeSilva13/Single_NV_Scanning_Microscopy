@@ -153,7 +153,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             default_y_max = 1.0
             default_x_res = 50
             default_y_res = 50
-            default_dwell_time = 0.008  # Default dwell time in seconds
+            default_dwell_time = 0.001  # Default dwell time in seconds
             
             # X Min
             layout.addWidget(QLabel("X Min:"), 1, 0)
@@ -226,9 +226,9 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             # Dwell Time
             layout.addWidget(QLabel("Dwell Time:"), 7, 0)
             self.dwell_time_spinbox = QDoubleSpinBox()
-            self.dwell_time_spinbox.setRange(0.001, 10.0)  # 1ms to 10s
-            self.dwell_time_spinbox.setSingleStep(0.001)
-            self.dwell_time_spinbox.setDecimals(3)
+            self.dwell_time_spinbox.setRange(0.0001, 10.0)  # 1ms to 10s
+            self.dwell_time_spinbox.setSingleStep(0.0001)
+            self.dwell_time_spinbox.setDecimals(4)
             self.dwell_time_spinbox.setValue(default_dwell_time)
             self.dwell_time_spinbox.setSuffix(" s")
             layout.addWidget(self.dwell_time_spinbox, 7, 1, 1, 2)  # Span 2 columns
@@ -330,14 +330,29 @@ def update_scan_parameters_widget(widget_instance, scan_params_manager):
     return _update_widget
 
 
-def stop_scan(scan_in_progress, stop_scan_requested):
-    """Factory function to create stop_scan widget with dependencies"""
+def stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref=None, cbm_ref=None):
+    """Factory function to create stop_scan widget with dependencies.
+
+    Args:
+        scan_task_ref: Mutable list holding the hardware-timed DAQ task (or None).
+        cbm_ref: Mutable list holding the CountBetweenMarkers measurement (or None).
+    """
     
     @magicgui(call_button="🛑 Stop Scan")
     def _stop_scan():
         """Safely stop the current scanning process."""
-        if scan_in_progress[0]:  # Use list to allow modification of mutable object
+        if scan_in_progress[0]:
             stop_scan_requested[0] = True
+            if scan_task_ref is not None and scan_task_ref[0] is not None:
+                try:
+                    scan_task_ref[0].stop()
+                except Exception:
+                    pass
+            if cbm_ref is not None and cbm_ref[0] is not None:
+                try:
+                    cbm_ref[0].stop()
+                except Exception:
+                    pass
             show_info("🛑 Stopping scan... Please wait.")
         else:
             show_info("ℹ️ No scan currently in progress.")
