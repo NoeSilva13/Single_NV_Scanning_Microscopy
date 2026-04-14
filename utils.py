@@ -42,7 +42,7 @@ def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):
     return scan_width_microns / image_width_px 
 
 
-def save_tiff_with_imagej_metadata(image_data, filepath, x_points, y_points, scan_config, timestamp=None):
+def save_tiff_with_imagej_metadata(image_data, filepath, x_points, y_points, scan_config, timestamp=None, notify=None):
     """
     Save TIFF file with comprehensive metadata that ImageJ/Fiji can interpret.
     
@@ -127,5 +127,6 @@ Scanner: Thorlabs LSKGG4 Galvo-Galvo"""
         imagej=True  # Enable ImageJ-specific metadata format
     )
     
-    show_info(f"💾 TIFF saved with ImageJ metadata: {filepath}")
-    show_info(f"📏 Scale: {microns_per_pixel_x:.3f} × {microns_per_pixel_y:.3f} um/pixel") 
+    _notify = notify if notify else show_info
+    _notify(f"💾 TIFF saved with ImageJ metadata: {filepath}")
+    _notify(f"📏 Scale: {microns_per_pixel_x:.3f} × {microns_per_pixel_y:.3f} um/pixel") 

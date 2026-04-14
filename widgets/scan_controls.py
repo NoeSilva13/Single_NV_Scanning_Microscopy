@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import QWidget, QGridLayout, QLabel, QDoubleSpinBox, QSpinB
 from PyQt5.QtCore import Qt
 
 
-def new_scan(scan_pattern_func, scan_points_manager, shapes):
+def new_scan(scan_pattern_func, scan_points_manager, shapes, bridge=None, scan_in_progress=None):
     """Factory function to create new_scan widget with dependencies"""
     
     @magicgui(call_button="🔬 New Scan")
@@ -28,11 +28,17 @@ def new_scan(scan_pattern_func, scan_points_manager, shapes):
         """Initiates a new scan using the current scan parameters from scan_points_manager.
         Runs the scan in a separate thread to prevent UI freezing.
         """
+        if scan_in_progress and scan_in_progress[0]:
+            show_info("⚠️ A scan is already in progress")
+            return
+
         def run_new_scan():
-            # Get current scan points from the manager
             x_points, y_points = scan_points_manager.get_points()
             scan_pattern_func(x_points, y_points)
-            shapes.data = []
+            if bridge:
+                bridge.run_on_main(lambda: setattr(shapes, 'data', []))
+            else:
+                shapes.data = []
         threading.Thread(target=run_new_scan, daemon=True).start()
         show_info("🔬 New scan started")
     
@@ -76,23 +82,25 @@ def save_image(viewer, data_path_func):
 
 def reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points_manager,
                shapes, update_scan_parameters_func, update_scan_parameters_widget_func,
-               zoom_level_manager):
+               zoom_level_manager, bridge=None, scan_in_progress=None):
     """Factory function to create reset_zoom widget with dependencies"""
     
     @magicgui(call_button="🔄 Reset Zoom")
     def _reset_zoom():
-        shapes.data = []  # Clear rectangle
+        shapes.data = []  # Main thread, safe
         current_zoom = zoom_level_manager.get_zoom_level()
         
         if current_zoom == 0:
             show_info("🔁 You are already in the original view.")
             return
+
+        if scan_in_progress and scan_in_progress[0]:
+            show_info("⚠️ A scan is already in progress")
+            return
         
-        # Get original points from history or use default values
         if scan_history:
             orig_x_points, orig_y_points = scan_history[0]
         else:
-            # Fallback to default values
             params = scan_params_manager.get_params()
             x_range = params['scan_range']['x']
             y_range = params['scan_range']['y']
@@ -105,21 +113,30 @@ def reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points
         zoom_level_manager.set_zoom_level(0)
 
         def run_reset():
-            # Update both managers with the original values
-            update_scan_parameters_func(
-                x_range=[orig_x_points[0], orig_x_points[-1]],
-                y_range=[orig_y_points[0], orig_y_points[-1]],
-                x_res=len(orig_x_points),
-                y_res=len(orig_y_points)
-            )
+            x_r = [orig_x_points[0], orig_x_points[-1]]
+            y_r = [orig_y_points[0], orig_y_points[-1]]
+            n_x = len(orig_x_points)
+            n_y = len(orig_y_points)
+
+            if bridge:
+                bridge.run_on_main(lambda: update_scan_parameters_func(
+                    x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
+                ))
+            else:
+                update_scan_parameters_func(
+                    x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
+                )
+
             scan_points_manager.update_points(
-                x_range=[orig_x_points[0], orig_x_points[-1]],
-                y_range=[orig_y_points[0], orig_y_points[-1]],
-                x_res=len(orig_x_points),
-                y_res=len(orig_y_points)
+                x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
             )
             scan_pattern_func(orig_x_points, orig_y_points)
-            shapes.data = []
+
+            if bridge:
+                bridge.run_on_main(lambda: setattr(shapes, 'data', []))
+            else:
+                shapes.data = []
+
             update_scan_parameters_widget_func()
             
         threading.Thread(target=run_reset, daemon=True).start()
@@ -315,46 +332,65 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
     return widget_instance
 
 
-def update_scan_parameters_widget(widget_instance, scan_params_manager):
-    """Update the scan parameters widget with current values."""
-    def _update_widget():
+def update_scan_parameters_widget(widget_instance, scan_params_manager, bridge=None):
+    """Update the scan parameters widget with current values.
+    
+    When a bridge is provided, the update is marshalled to the main thread
+    so that this function is safe to call from any thread.
+    """
+    def _do_update():
         params = scan_params_manager.get_params()
         x_range = params['scan_range']['x']
         y_range = params['scan_range']['y']
         x_res = params['resolution']['x']
         y_res = params['resolution']['y']
         dwell_time = params['dwell_time']
-        
         widget_instance.update_values(x_range, y_range, x_res, y_res, dwell_time)
+
+    def _update_widget():
+        if bridge:
+            bridge.run_on_main(_do_update)
+        else:
+            _do_update()
     
     return _update_widget
 
 
-def stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref=None, cbm_ref=None):
+def stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref=None, cbm_ref=None, scan_lock=None):
     """Factory function to create stop_scan widget with dependencies.
 
     Args:
         scan_task_ref: Mutable list holding the hardware-timed DAQ task (or None).
         cbm_ref: Mutable list holding the CountBetweenMarkers measurement (or None).
+        scan_lock: threading.Lock protecting shared scan state.
     """
     
     @magicgui(call_button="🛑 Stop Scan")
     def _stop_scan():
         """Safely stop the current scanning process."""
-        if scan_in_progress[0]:
+        if scan_lock:
+            scan_lock.acquire()
+        try:
+            if not scan_in_progress[0]:
+                show_info("ℹ️ No scan currently in progress.")
+                return
             stop_scan_requested[0] = True
-            if scan_task_ref is not None and scan_task_ref[0] is not None:
-                try:
-                    scan_task_ref[0].stop()
-                except Exception:
-                    pass
-            if cbm_ref is not None and cbm_ref[0] is not None:
-                try:
-                    cbm_ref[0].stop()
-                except Exception:
-                    pass
-            show_info("🛑 Stopping scan... Please wait.")
-        else:
-            show_info("ℹ️ No scan currently in progress.")
+            task = scan_task_ref[0] if scan_task_ref is not None else None
+            cbm = cbm_ref[0] if cbm_ref is not None else None
+        finally:
+            if scan_lock:
+                scan_lock.release()
+
+        if task is not None:
+            try:
+                task.stop()
+            except Exception:
+                pass
+        if cbm is not None:
+            try:
+                cbm.stop()
+            except Exception:
+                pass
+        show_info("🛑 Stopping scan... Please wait.")
     
     return _stop_scan 

@@ -23,7 +23,8 @@ class SignalBridge(QObject):
     update_progress_signal = pyqtSignal(int, str)
     show_progress_signal = pyqtSignal()
     hide_progress_signal = pyqtSignal()
-    update_z_control_signal = pyqtSignal()  # New signal for updating Z control
+    update_z_control_signal = pyqtSignal()
+    notify_signal = pyqtSignal(str)
     
     def __init__(self, viewer):
         super().__init__()
@@ -33,9 +34,10 @@ class SignalBridge(QObject):
         self.show_progress_signal.connect(self._show_progress)
         self.hide_progress_signal.connect(self._hide_progress)
         self.update_z_control_signal.connect(self._update_z_control)
+        self.notify_signal.connect(self._on_notify)
         self.focus_plot_widget = None
         self.focus_dock_widget = None
-        self.z_control_widget = None  # Reference to Z control widget
+        self.z_control_widget = None
     
     def _update_focus_plot(self, positions, counts, name):
         """Update the focus plot widget from the main thread"""
@@ -78,6 +80,10 @@ class SignalBridge(QObject):
         if self.z_control_widget:
             self.z_control_widget._update_ui_with_current_position()
 
+    def _on_notify(self, msg):
+        """Show notification on the main thread"""
+        show_info(msg)
+
 
 
 
@@ -102,11 +108,11 @@ def auto_focus(counter, binwidth, signal_bridge, piezo_controller):
         """Automatically find the optimal Z position by scanning for maximum signal"""
         def run_auto_focus():
             try:
-                show_info('🔍 Starting Z scan...')
+                signal_bridge.notify_signal.emit('🔍 Starting Z scan...')
                 signal_bridge.show_progress_signal.emit()
                 
                 if not piezo_controller._is_connected:
-                    show_info('❌ Piezo stage not connected')
+                    signal_bridge.notify_signal.emit('❌ Piezo stage not connected')
                     signal_bridge.hide_progress_signal.emit()
                     return
                 
@@ -127,7 +133,7 @@ def auto_focus(counter, binwidth, signal_bridge, piezo_controller):
                         progress_callback=progress_callback
                     )
                     
-                    show_info(f'✅ Focus optimized at Z = {optimal_pos} µm')
+                    signal_bridge.notify_signal.emit(f'✅ Focus optimized at Z = {optimal_pos} µm')
                     signal_bridge.update_focus_plot_signal.emit(positions, counts, 'Auto-Focus Plot')
                     signal_bridge.update_z_control_signal.emit()  # Update Z control widget
                     
@@ -135,7 +141,7 @@ def auto_focus(counter, binwidth, signal_bridge, piezo_controller):
                     signal_bridge.hide_progress_signal.emit()
                 
             except Exception as e:
-                show_info(f'❌ Auto-focus error: {str(e)}')
+                signal_bridge.notify_signal.emit(f'❌ Auto-focus error: {str(e)}')
                 signal_bridge.hide_progress_signal.emit()
         
         threading.Thread(target=run_auto_focus, daemon=True).start()

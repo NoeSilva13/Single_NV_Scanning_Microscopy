@@ -8,15 +8,18 @@ import threading
 import time
 import numpy as np
 from PyQt5.QtWidgets import QWidget, QPushButton, QGridLayout
+from PyQt5.QtCore import pyqtSignal
 from napari.utils.notifications import show_info
 from plot_widgets.single_axis_plot import SingleAxisPlot
 
 
 class SingleAxisScanWidget(QWidget):
     """Widget for performing single axis scans at current cursor position"""
-    
+    _plot_ready_signal = pyqtSignal(dict)
+
     def __init__(self, scan_params_manager, layer, output_task, counter, binwidth, parent=None):
         super().__init__(parent)
+        self._plot_ready_signal.connect(self._on_plot_ready)
         self.scan_params_manager = scan_params_manager
         self.layer = layer
         self.output_task = output_task
@@ -116,18 +119,21 @@ class SingleAxisScanWidget(QWidget):
                 print(count)
                 counts.append(count)
             
-            # Plot results
-            self.plot_widget.plot_data(
-                x_data=scan_points,
-                y_data=counts,
-                x_label=axis_label,
-                y_label='Counts',
-                title=f'Single Axis Scan ({axis.upper()})',
-                mark_peak=True
-            )
+            self._plot_ready_signal.emit({
+                'x_data': scan_points,
+                'y_data': counts,
+                'x_label': axis_label,
+                'y_label': 'Counts',
+                'title': f'Single Axis Scan ({axis.upper()})',
+                'mark_peak': True
+            })
             
             # Return to original position
             self.output_task.write([x_pos, y_pos])
         
         threading.Thread(target=run_scan, daemon=True).start()
-        show_info(f"🔍 Starting {axis.upper()}-axis scan...") 
+        show_info(f"🔍 Starting {axis.upper()}-axis scan...")
+
+    def _on_plot_ready(self, plot_args):
+        """Update plot widget on the main thread"""
+        self.plot_widget.plot_data(**plot_args) 
