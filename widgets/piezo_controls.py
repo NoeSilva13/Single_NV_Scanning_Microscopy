@@ -11,7 +11,7 @@ import threading
 import time
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QDoubleSpinBox, QPushButton
+    QDoubleSpinBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from napari.utils.notifications import show_info
@@ -58,20 +58,19 @@ class PiezoControlWidget(QWidget):
         self.pos_spinbox.setRange(0, 450)  # 0-450 µm range
         self.pos_spinbox.setDecimals(2)    # Show nm precision
         self.pos_spinbox.setSingleStep(0.1) # 100 nm step for fine control
-        self.pos_spinbox.setFixedWidth(120)
+        self.pos_spinbox.setFixedWidth(105)
         self.pos_spinbox.valueChanged.connect(self._on_spinbox_changed)
         
         controls_layout.addWidget(self.pos_spinbox)
+        
+        self.status_label = QLabel("Error")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setFixedWidth(105)
+        controls_layout.addWidget(self.status_label)
         controls_layout.addStretch()
         layout.addLayout(controls_layout)
-        
-        # Add status label
-        self.status_label = QLabel("Not Connected")
-        self.status_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.status_label)
-        
-        # Set widget size
-        self.setFixedSize(400, 80)
+
+        self.setFixedSize(320, 60)
         
     def _connect_piezo(self):
         """Connect to the piezo controller in a separate thread"""
@@ -87,7 +86,7 @@ class PiezoControlWidget(QWidget):
                     self._update_status_signal.emit("Error")
                     self._notify_signal.emit(f"❌ Error getting piezo position: {str(e)}")
             else:
-                self._update_status_signal.emit("Connection Failed")
+                self._update_status_signal.emit("Error")
                 self._notify_signal.emit("❌ Failed to connect to piezo controller")
         
         threading.Thread(target=connect, daemon=True).start()
@@ -130,7 +129,7 @@ class PiezoControlWidget(QWidget):
                     self._update_status_signal.emit("Connected")
                     self._update_position_signal.emit(current_pos)
                 else:
-                    self._update_status_signal.emit("Not Connected")
+                    self._update_status_signal.emit("Error")
             except Exception as e:
                 self._update_status_signal.emit("Error")
                 self._notify_signal.emit(f"❌ Error getting piezo position: {str(e)}")
@@ -143,8 +142,14 @@ class PiezoControlWidget(QWidget):
         self.pos_spinbox.blockSignals(False)
 
     def _set_status_ui(self, status):
-        """Update status label on the main thread"""
+        """Set status label text and color based on connection state"""
+        colors = {
+            "Connected": "#4CAF50",
+            "Error":     "#F44336",
+        }
+        color = colors.get(status, "#F44336")
         self.status_label.setText(status)
+        self.status_label.setStyleSheet(f"color: {color}; font-weight: bold;")
 
     def _on_notify(self, msg):
         """Show notification on the main thread"""
