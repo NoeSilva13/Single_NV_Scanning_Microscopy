@@ -505,7 +505,7 @@ def scan_pattern(x_points, y_points):
                 'scale_x': save_scale_x,
                 'scale_y': save_scale_y
             }
-            nonlocal data_path
+            global data_path
             data_path = data_manager.save_scan_data(scan_data, save_params)
             plot_scan_results(scan_data, data_path)
 
