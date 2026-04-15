@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QDoubleSpinBox
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from napari.utils.notifications import show_info
 from piezo_controller import PiezoController
 
@@ -59,6 +59,10 @@ class PiezoControlWidget(QWidget):
         self.pos_spinbox.setDecimals(2)    # Show nm precision
         self.pos_spinbox.setSingleStep(0.1) # 100 nm step for fine control
         self.pos_spinbox.setFixedWidth(105)
+        self._move_timer = QTimer()
+        self._move_timer.setSingleShot(True)
+        self._move_timer.setInterval(500)
+        self._move_timer.timeout.connect(self._on_move_timer_fired)
         self.pos_spinbox.valueChanged.connect(self._on_spinbox_changed)
         
         controls_layout.addWidget(self.pos_spinbox)
@@ -92,8 +96,13 @@ class PiezoControlWidget(QWidget):
         threading.Thread(target=connect, daemon=True).start()
     
     def _on_spinbox_changed(self, value):
-        """Handle spinbox value changes"""
-        self._move_piezo(value)
+        """Restart the debounce timer on every value change"""
+        self._pending_position = value
+        self._move_timer.start()
+
+    def _on_move_timer_fired(self):
+        """Called once, 500 ms after the last spinbox change"""
+        self._move_piezo(self._pending_position)
     
     def _move_piezo(self, position_um: float, settling_time: float = 0.1):
         """Move the piezo to the specified position with fixed settling time
