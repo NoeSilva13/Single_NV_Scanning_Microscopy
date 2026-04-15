@@ -511,8 +511,7 @@ def scan_pattern(x_points, y_points):
             x_points=x_points,
             y_points=y_points,
             scan_config=current_scan_params,
-            timestamp=timestamp_str,
-            notify=bridge.notify
+            timestamp=timestamp_str
         )
 
     finally:

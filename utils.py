@@ -4,7 +4,6 @@ Utility functions and constants for the Napari Scanning SPD application.
 
 import numpy as np
 import tifffile
-from napari.utils.notifications import show_info
 
 # Calibration constant: microns per volt based on empirical measurements
 # Air objective 40x 0.95 NA
@@ -42,7 +41,7 @@ def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):
     return scan_width_microns / image_width_px 
 
 
-def save_tiff_with_imagej_metadata(image_data, filepath, x_points, y_points, scan_config, timestamp=None, notify=None):
+def save_tiff_with_imagej_metadata(image_data, filepath, x_points, y_points, scan_config, timestamp=None):
     """
     Save TIFF file with comprehensive metadata that ImageJ/Fiji can interpret.
     
@@ -127,6 +126,5 @@ Scanner: Thorlabs LSKGG4 Galvo-Galvo"""
         imagej=True  # Enable ImageJ-specific metadata format
     )
     
-    _notify = notify if notify else show_info
-    _notify(f"💾 TIFF saved with ImageJ metadata: {filepath}")
-    _notify(f"📏 Scale: {microns_per_pixel_x:.3f} × {microns_per_pixel_y:.3f} um/pixel") 
+    print(f"💾 TIFF saved with ImageJ metadata: {filepath}")
+    print(f"📏 Scale: {microns_per_pixel_x:.3f} × {microns_per_pixel_y:.3f} um/pixel") 
