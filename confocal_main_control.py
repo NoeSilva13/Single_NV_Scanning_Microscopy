@@ -483,6 +483,9 @@ def scan_pattern(x_points, y_points):
         print(f"Scan time: {end_time - start_time:.2f} seconds, {width}x{height} pixels, "
               f"{n_flyback} flyback samples/row (hardware-timed)")
 
+        current_scan_params['scan_range']['x'] = [float(x_points[0]), float(x_points[-1])]
+        current_scan_params['scan_range']['y'] = [float(y_points[0]), float(y_points[-1])]
+
         scan_data = {
             'image': image,
             'x_points': x_points,
