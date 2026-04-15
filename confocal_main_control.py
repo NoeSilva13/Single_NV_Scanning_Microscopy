@@ -486,38 +486,54 @@ def scan_pattern(x_points, y_points):
         current_scan_params['scan_range']['x'] = [float(x_points[0]), float(x_points[-1])]
         current_scan_params['scan_range']['y'] = [float(y_points[0]), float(y_points[-1])]
 
-        scan_data = {
-            'image': image,
-            'x_points': x_points,
-            'y_points': y_points,
-            'scale_x': scale_um_per_px_x,
-            'scale_y': scale_um_per_px_y
+        save_image = image.copy()
+        save_x = x_points.copy()
+        save_y = y_points.copy()
+        save_params = {
+            'scan_range': dict(current_scan_params['scan_range']),
+            'resolution': dict(current_scan_params['resolution']),
+            'dwell_time': current_scan_params['dwell_time']
         }
-        data_path = data_manager.save_scan_data(scan_data, current_scan_params)
-        plot_scan_results(scan_data, data_path)
+        save_scale_x = scale_um_per_px_x
+        save_scale_y = scale_um_per_px_y
 
-        timestamp_str = time.strftime("%Y%m%d-%H%M%S")
-        np.savez(data_path.replace('.csv', '.npz'),
-                 image=image,
-                 scale_x=scale_um_per_px_x,
-                 scale_y=scale_um_per_px_y,
-                 x_range=current_scan_params['scan_range']['x'],
-                 y_range=current_scan_params['scan_range']['y'],
-                 x_resolution=current_scan_params['resolution']['x'],
-                 y_resolution=current_scan_params['resolution']['y'],
-                 dwell_time=current_scan_params['dwell_time'],
-                 x_points=x_points,
-                 y_points=y_points,
-                 timestamp=timestamp_str)
+        def _save_all():
+            scan_data = {
+                'image': save_image,
+                'x_points': save_x,
+                'y_points': save_y,
+                'scale_x': save_scale_x,
+                'scale_y': save_scale_y
+            }
+            nonlocal data_path
+            data_path = data_manager.save_scan_data(scan_data, save_params)
+            plot_scan_results(scan_data, data_path)
 
-        save_tiff_with_imagej_metadata(
-            image_data=image,
-            filepath=data_path.replace('.csv', '.tiff'),
-            x_points=x_points,
-            y_points=y_points,
-            scan_config=current_scan_params,
-            timestamp=timestamp_str
-        )
+            timestamp_str = time.strftime("%Y%m%d-%H%M%S")
+            np.savez(data_path.replace('.csv', '.npz'),
+                     image=save_image,
+                     scale_x=save_scale_x,
+                     scale_y=save_scale_y,
+                     x_range=save_params['scan_range']['x'],
+                     y_range=save_params['scan_range']['y'],
+                     x_resolution=save_params['resolution']['x'],
+                     y_resolution=save_params['resolution']['y'],
+                     dwell_time=save_params['dwell_time'],
+                     x_points=save_x,
+                     y_points=save_y,
+                     timestamp=timestamp_str)
+
+            save_tiff_with_imagej_metadata(
+                image_data=save_image,
+                filepath=data_path.replace('.csv', '.tiff'),
+                x_points=save_x,
+                y_points=save_y,
+                scan_config=save_params,
+                timestamp=timestamp_str
+            )
+            bridge.notify("💾 Scan data saved")
+
+        threading.Thread(target=_save_all, daemon=True).start()
 
     finally:
         with scan_lock:
