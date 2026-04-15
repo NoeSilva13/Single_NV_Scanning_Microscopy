@@ -19,6 +19,8 @@ import napari
 import nidaqmx
 from nidaqmx.constants import AcquisitionType, TaskMode
 from napari.utils.notifications import show_info
+from napari._qt.dialogs.qt_notification import NapariQtNotification
+NapariQtNotification.DISMISS_AFTER = 1000
 from PyQt5.QtWidgets import QDesktopWidget
 import TimeTagger
 from magicgui import magicgui
