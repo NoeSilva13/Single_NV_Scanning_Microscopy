@@ -3,7 +3,7 @@ Piezo Z-axis control widget for the Napari Scanning SPD application.
 
 This widget provides control over the Z-axis piezo stage, allowing users to:
 - View current position
-- Set position via spinbox or slider
+- Set position via spinbox
 - Move to specific positions with proper settling time
 """
 
@@ -11,7 +11,7 @@ import threading
 import time
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-    QDoubleSpinBox, QSlider, QPushButton
+    QDoubleSpinBox, QPushButton
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from napari.utils.notifications import show_info
@@ -50,10 +50,8 @@ class PiezoControlWidget(QWidget):
         # Create position display and controls in a horizontal layout
         controls_layout = QHBoxLayout()
         
-        # Position label and spinbox in a sub-layout
-        spinbox_layout = QHBoxLayout()
         pos_label = QLabel("Position:")
-        spinbox_layout.addWidget(pos_label)
+        controls_layout.addWidget(pos_label)
         
         # Position spinbox (1 nm resolution = 0.001 µm)
         self.pos_spinbox = QDoubleSpinBox()
@@ -62,17 +60,9 @@ class PiezoControlWidget(QWidget):
         self.pos_spinbox.setSingleStep(0.1) # 100 nm step for fine control
         self.pos_spinbox.setFixedWidth(120)
         self.pos_spinbox.valueChanged.connect(self._on_spinbox_changed)
-        spinbox_layout.addWidget(self.pos_spinbox)
-        spinbox_layout.addStretch()
-        controls_layout.addLayout(spinbox_layout)
         
-        # Position slider (0.1 µm resolution for smoother UI)
-        self.pos_slider = QSlider(Qt.Horizontal)
-        self.pos_slider.setRange(0, 4500)  # Range * 10 for 0.1 µm resolution
-        self.pos_slider.valueChanged.connect(self._on_slider_changed)
-        self.pos_slider.setMinimumWidth(200)  # Make slider wider
-        controls_layout.addWidget(self.pos_slider)
-        
+        controls_layout.addWidget(self.pos_spinbox)
+        controls_layout.addStretch()
         layout.addLayout(controls_layout)
         
         # Add status label
@@ -104,21 +94,7 @@ class PiezoControlWidget(QWidget):
     
     def _on_spinbox_changed(self, value):
         """Handle spinbox value changes"""
-        # Update slider without triggering its callback
-        self.pos_slider.blockSignals(True)
-        self.pos_slider.setValue(int(value * 10))
-        self.pos_slider.blockSignals(False)
         self._move_piezo(value)
-    
-    def _on_slider_changed(self, value):
-        """Handle slider value changes"""
-        # Convert slider value to µm (slider value is 10x for 0.1 µm resolution)
-        pos_um = value / 10.0
-        # Update spinbox without triggering its callback
-        self.pos_spinbox.blockSignals(True)
-        self.pos_spinbox.setValue(pos_um)
-        self.pos_spinbox.blockSignals(False)
-        self._move_piezo(pos_um)
     
     def _move_piezo(self, position_um: float, settling_time: float = 0.1):
         """Move the piezo to the specified position with fixed settling time
@@ -163,11 +139,8 @@ class PiezoControlWidget(QWidget):
     def _set_position_ui(self, position):
         """Update position widgets on the main thread"""
         self.pos_spinbox.blockSignals(True)
-        self.pos_slider.blockSignals(True)
         self.pos_spinbox.setValue(position)
-        self.pos_slider.setValue(int(position * 10))
         self.pos_spinbox.blockSignals(False)
-        self.pos_slider.blockSignals(False)
 
     def _set_status_ui(self, status):
         """Update status label on the main thread"""
