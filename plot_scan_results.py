@@ -1,6 +1,6 @@
 import numpy as np
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_pdf import FigureCanvasPdf
+from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.colors import Normalize
 from pathlib import Path
 from utils import calculate_scale
@@ -8,25 +8,24 @@ from utils import calculate_scale
 
 def plot_scan_results(scan_data, save_path):
     """
-    Save 2D scan results as a PDF heatmap, automatically handling file extension.
+    Save 2D scan results as a PNG heatmap (raster), using the same basename as the CSV.
 
-    Uses the OO matplotlib API (Figure + FigureCanvasPdf) so that no global
-    pyplot state is touched — this makes the function safe to call from any
-    thread without contending with the main-thread event loop.
+    Uses the OO matplotlib API (Figure + FigureCanvasAgg) so that no global
+    pyplot state is touched — safe to call from a background thread.
 
     Args:
         scan_data (dict): Dictionary containing scan results
-        save_path (str or Path): Path where to save the plot (will force .pdf extension)
+        save_path (str or Path): Path aligned with the saved CSV (extension forced to .png)
     """
     save_path = Path(save_path)
-    plot_path = save_path.with_suffix('.pdf')
+    plot_path = save_path.with_suffix('.png')
 
     x_grid = np.array(scan_data['x_points'])
     y_grid = np.array(scan_data['y_points'])
     counts_grid = np.array(scan_data['image'])
 
     fig = Figure(figsize=(10, 8))
-    FigureCanvasPdf(fig)
+    FigureCanvasAgg(fig)
     ax = fig.add_subplot(111)
 
     im = ax.pcolormesh(
@@ -49,4 +48,4 @@ def plot_scan_results(scan_data, save_path):
     fig.tight_layout()
 
     plot_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(plot_path, format='pdf', bbox_inches='tight')
+    fig.savefig(plot_path, format='png', dpi=150, bbox_inches='tight')
