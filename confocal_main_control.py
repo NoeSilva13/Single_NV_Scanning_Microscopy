@@ -435,8 +435,8 @@ def scan_pattern(x_points, y_points):
 
             partial_data = cbm.getData()
             partial_bins = cbm.getBinWidths()
-            print(f"Partial counts: {partial_data}")
-            print(f"Partial bins: {partial_bins}")
+            #print(f"Partial counts: {partial_data}")
+            #print(f"Partial bins: {partial_bins}")
 
             rows_updated = False
             for row_idx in range(last_completed_row + 1, height):

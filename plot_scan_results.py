@@ -34,7 +34,7 @@ def plot_scan_results(scan_data, save_path):
         counts_grid,
         shading='auto',
         norm=Normalize(vmin=counts_grid.min(), vmax=counts_grid.max()),
-        cmap='viridis'
+        cmap='inferno'
     )
 
     microns_per_pixel_x = calculate_scale(x_grid[0], x_grid[-1], 1)

@@ -12,7 +12,7 @@ import tifffile
 MICRONS_PER_VOLT = 51
 
 # Maximum zoom level allowed in the scanning interface
-MAX_ZOOM_LEVEL = 6
+MAX_ZOOM_LEVEL = 9
 
 # Default binwidth for TimeTagger counter in picoseconds (5e9 = 5 milliseconds)
 BINWIDTH = int(5e9)
