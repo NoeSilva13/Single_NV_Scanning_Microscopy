@@ -9,7 +9,9 @@ import tifffile
 # Air objective 40x 0.95 NA
 #MICRONS_PER_VOLT = 130 
 # Oil objective 
-MICRONS_PER_VOLT = 51
+#MICRONS_PER_VOLT = 51
+# Oil objective Zeiss 100x 1.4 NA
+MICRONS_PER_VOLT = 24
 
 # Maximum zoom level allowed in the scanning interface
 MAX_ZOOM_LEVEL = 9
