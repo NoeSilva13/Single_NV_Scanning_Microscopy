@@ -19,6 +19,8 @@ import napari
 import nidaqmx
 from nidaqmx.constants import AcquisitionType, TaskMode
 from napari.utils.notifications import show_info
+from napari._qt.dialogs.qt_notification import NapariQtNotification
+NapariQtNotification.DISMISS_AFTER = 1000
 from PyQt5.QtWidgets import QDesktopWidget
 import TimeTagger
 from magicgui import magicgui
@@ -36,6 +38,7 @@ from utils import (
     save_tiff_with_imagej_metadata
 )
 from qtpy.QtWidgets import QWidget
+from thread_safe_bridge import GUIBridge
 
 # Import extracted widgets
 from widgets.scan_controls import (
@@ -200,6 +203,10 @@ viewer = napari.Viewer(title="NV Scanning Microscopy")
 screen = QDesktopWidget().screenGeometry()
 viewer.window.resize(screen.width(), screen.height())
 
+# Thread-safe bridge for GUI updates from background threads
+bridge = GUIBridge()
+scan_lock = threading.Lock()
+
 # Add an image layer to display the live scan
 layer = viewer.add_image(image, name="live scan", colormap="viridis", contrast_limits=contrast_limits)
 # Add a shapes layer to display the zoom area
@@ -350,8 +357,12 @@ def scan_pattern(x_points, y_points):
     """
     global image, layer, data_path
 
-    scan_in_progress[0] = True
-    stop_scan_requested[0] = False
+    with scan_lock:
+        if scan_in_progress[0]:
+            bridge.notify("⚠️ A scan is already in progress")
+            return None, None
+        scan_in_progress[0] = True
+        stop_scan_requested[0] = False
 
     current_scan_params = scan_params_manager.get_params()
     dwell_time = current_scan_params['dwell_time']
@@ -367,12 +378,14 @@ def scan_pattern(x_points, y_points):
         pixel_rate = 1.0 / dwell_time
 
         image = np.zeros((height, width), dtype=np.float32)
-        layer.data = image
-        layer.contrast_limits = contrast_limits
-
         scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
         scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
-        layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+
+        def _setup_layer():
+            layer.data = image
+            layer.contrast_limits = contrast_limits
+            layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+        bridge.run_on_main(_setup_layer)
 
         # Release AO channels from the persistent on-demand task
         output_task.stop()
@@ -380,7 +393,8 @@ def scan_pattern(x_points, y_points):
 
         # Create hardware-timed finite AO task
         scan_task = nidaqmx.Task()
-        scan_task_ref[0] = scan_task
+        with scan_lock:
+            scan_task_ref[0] = scan_task
         scan_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
         scan_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
         scan_task.timing.cfg_samp_clk_timing(
@@ -400,12 +414,17 @@ def scan_pattern(x_points, y_points):
             end_channel=-3,
             n_values=total_samples
         )
-        cbm_ref[0] = cbm
+        with scan_lock:
+            cbm_ref[0] = cbm
 
         cbm.start()
         time.sleep(1)
         start_time = time.time()
         scan_task.start()
+
+        def _refresh_and_update():
+            layer.refresh()
+            update_contrast_limits(layer, image)
 
         # Poll for progress and update the live display
         last_completed_row = -1
@@ -416,9 +435,10 @@ def scan_pattern(x_points, y_points):
 
             partial_data = cbm.getData()
             partial_bins = cbm.getBinWidths()
-            print(f"Partial counts: {partial_data}")
-            print(f"Partial bins: {partial_bins}")
+            #print(f"Partial counts: {partial_data}")
+            #print(f"Partial bins: {partial_bins}")
 
+            rows_updated = False
             for row_idx in range(last_completed_row + 1, height):
                 row_start = row_idx * stride
                 row_end = row_start + width
@@ -429,13 +449,15 @@ def scan_pattern(x_points, y_points):
                     row_bin_s = row_bins / 1e12
                     image[row_idx, :] = row_counts / row_bin_s
                     last_completed_row = row_idx
-                    layer.refresh()
-                    update_contrast_limits(layer, image)
+                    rows_updated = True
                 else:
                     break
 
+            if rows_updated:
+                bridge.run_on_main(_refresh_and_update)
+
         if stop_scan_requested[0]:
-            show_info("🛑 Scan stopped by user")
+            bridge.notify("🛑 Scan stopped by user")
             return None, None
 
         # Extract final image from completed measurement
@@ -452,69 +474,93 @@ def scan_pattern(x_points, y_points):
             valid = row_bin_s > 0
             image[row_idx, valid] = row_counts[valid] / row_bin_s[valid]
 
-        layer.data = image
+        def _final_layer_update():
+            layer.data = image
+            update_contrast_limits(layer, image)
+        bridge.run_on_main(_final_layer_update)
+
         end_time = time.time()
         print(f"Scan time: {end_time - start_time:.2f} seconds, {width}x{height} pixels, "
               f"{n_flyback} flyback samples/row (hardware-timed)")
-        update_contrast_limits(layer, image)
 
-        scan_data = {
-            'image': image,
-            'x_points': x_points,
-            'y_points': y_points,
-            'scale_x': scale_um_per_px_x,
-            'scale_y': scale_um_per_px_y
+        current_scan_params['scan_range']['x'] = [float(x_points[0]), float(x_points[-1])]
+        current_scan_params['scan_range']['y'] = [float(y_points[0]), float(y_points[-1])]
+
+        save_image = image.copy()
+        save_x = x_points.copy()
+        save_y = y_points.copy()
+        save_params = {
+            'scan_range': dict(current_scan_params['scan_range']),
+            'resolution': dict(current_scan_params['resolution']),
+            'dwell_time': current_scan_params['dwell_time']
         }
-        data_path = data_manager.save_scan_data(scan_data, current_scan_params)
-        plot_scan_results(scan_data, data_path)
+        save_scale_x = scale_um_per_px_x
+        save_scale_y = scale_um_per_px_y
 
-        timestamp_str = time.strftime("%Y%m%d-%H%M%S")
-        np.savez(data_path.replace('.csv', '.npz'),
-                 image=image,
-                 scale_x=scale_um_per_px_x,
-                 scale_y=scale_um_per_px_y,
-                 x_range=current_scan_params['scan_range']['x'],
-                 y_range=current_scan_params['scan_range']['y'],
-                 x_resolution=current_scan_params['resolution']['x'],
-                 y_resolution=current_scan_params['resolution']['y'],
-                 dwell_time=current_scan_params['dwell_time'],
-                 x_points=x_points,
-                 y_points=y_points,
-                 timestamp=timestamp_str)
+        def _save_all():
+            scan_data = {
+                'image': save_image,
+                'x_points': save_x,
+                'y_points': save_y,
+                'scale_x': save_scale_x,
+                'scale_y': save_scale_y
+            }
+            global data_path
+            data_path = data_manager.save_scan_data(scan_data, save_params)
+            plot_scan_results(scan_data, data_path)
 
-        save_tiff_with_imagej_metadata(
-            image_data=image,
-            filepath=data_path.replace('.csv', '.tiff'),
-            x_points=x_points,
-            y_points=y_points,
-            scan_config=current_scan_params,
-            timestamp=timestamp_str
-        )
+            timestamp_str = time.strftime("%Y%m%d-%H%M%S")
+            np.savez(data_path.replace('.csv', '.npz'),
+                     image=save_image,
+                     scale_x=save_scale_x,
+                     scale_y=save_scale_y,
+                     x_range=save_params['scan_range']['x'],
+                     y_range=save_params['scan_range']['y'],
+                     x_resolution=save_params['resolution']['x'],
+                     y_resolution=save_params['resolution']['y'],
+                     dwell_time=save_params['dwell_time'],
+                     x_points=save_x,
+                     y_points=save_y,
+                     timestamp=timestamp_str)
+
+            save_tiff_with_imagej_metadata(
+                image_data=save_image,
+                filepath=data_path.replace('.csv', '.tiff'),
+                x_points=save_x,
+                y_points=save_y,
+                scan_config=save_params,
+                timestamp=timestamp_str
+            )
+            bridge.notify("💾 Scan data saved")
+
+        threading.Thread(target=_save_all, daemon=True).start()
 
     finally:
-        if scan_task_ref[0] is not None:
-            try:
-                scan_task_ref[0].stop()
-                scan_task_ref[0].close()
-            except Exception:
-                pass
-            scan_task_ref[0] = None
+        with scan_lock:
+            if scan_task_ref[0] is not None:
+                try:
+                    scan_task_ref[0].stop()
+                    scan_task_ref[0].close()
+                except Exception:
+                    pass
+                scan_task_ref[0] = None
 
-        if cbm_ref[0] is not None:
-            try:
-                cbm_ref[0].stop()
-            except Exception:
-                pass
-            cbm_ref[0] = None
+            if cbm_ref[0] is not None:
+                try:
+                    cbm_ref[0].stop()
+                except Exception:
+                    pass
+                cbm_ref[0] = None
 
         try:
             output_task.start()
             output_task.write([0, 0])
         except Exception as e:
-            show_info(f"⚠️ Failed to restart galvo control: {e}")
+            bridge.notify(f"⚠️ Failed to restart galvo control: {e}")
 
-        show_info("🎯 Scanner returned to zero position")
-        scan_in_progress[0] = False
+        bridge.notify("🎯 Scanner returned to zero position")
+        with scan_lock:
+            scan_in_progress[0] = False
 
     return x_points, y_points
 
@@ -526,24 +572,26 @@ def get_data_path():
 # --------------------- CREATE WIDGETS USING FACTORIES ---------------------
 
 # Create scan control widgets
-new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes)
+new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes, bridge, scan_in_progress)
 close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
 update_scan_parameters_widget = create_update_scan_parameters(scan_params_manager, scan_points_manager)
-update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, scan_params_manager)
+update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, scan_params_manager, bridge)
 
 # Update scan points manager with initial parameters from the widget
 scan_points_manager._update_points_from_params()
 
 # Create stop scan widget
-stop_scan_widget = create_stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref)
+stop_scan_widget = create_stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref, scan_lock)
 stop_scan_widget.native.setFixedSize(150, 50)
 
 reset_zoom_widget = create_reset_zoom(
     scan_pattern, scan_history, scan_params_manager, scan_points_manager,
     shapes, lambda **kwargs: scan_params_manager.update_scan_parameters(**kwargs), 
     update_widget_func,
-    zoom_manager
+    zoom_manager,
+    bridge,
+    scan_in_progress
 )
 
 # Create camera control widgets
@@ -591,6 +639,10 @@ def on_shape_added(event):
         show_info(f"⚠️ Max zoom reached ({zoom_manager.max_zoom} levels).")
         return
 
+    if scan_in_progress[0]:
+        show_info("⚠️ A scan is already in progress")
+        return
+
     if len(shapes.data) == 0:
         return
 
@@ -623,21 +675,19 @@ def on_shape_added(event):
     def run_zoom():
         global zoom_in_progress
         zoom_in_progress = True
-        
-        scan_params_manager.update_scan_parameters(
-            x_range=[x_zoom[0], x_zoom[-1]],
-            y_range=[y_zoom[0], y_zoom[-1]],
-            x_res=current_x_res,
-            y_res=current_y_res
-        )
+
+        x_range_new = [x_zoom[0], x_zoom[-1]]
+        y_range_new = [y_zoom[0], y_zoom[-1]]
+        bridge.run_on_main(lambda: scan_params_manager.update_scan_parameters(
+            x_range=x_range_new, y_range=y_range_new,
+            x_res=current_x_res, y_res=current_y_res
+        ))
         scan_points_manager.update_points(
-            x_range=[x_zoom[0], x_zoom[-1]],
-            y_range=[y_zoom[0], y_zoom[-1]],
-            x_res=current_x_res,
-            y_res=current_y_res
+            x_range=x_range_new, y_range=y_range_new,
+            x_res=current_x_res, y_res=current_y_res
         )
-        
-        shapes.data = []
+
+        bridge.run_on_main(lambda: setattr(shapes, 'data', []))
         scan_pattern(x_zoom, y_zoom)
         zoom_manager.set_zoom_level(zoom_manager.get_zoom_level() + 1)
         update_widget_func()

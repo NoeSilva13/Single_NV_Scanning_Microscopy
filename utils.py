@@ -4,16 +4,17 @@ Utility functions and constants for the Napari Scanning SPD application.
 
 import numpy as np
 import tifffile
-from napari.utils.notifications import show_info
 
 # Calibration constant: microns per volt based on empirical measurements
 # Air objective 40x 0.95 NA
 #MICRONS_PER_VOLT = 130 
 # Oil objective 
-MICRONS_PER_VOLT = 51
+#MICRONS_PER_VOLT = 51
+# Oil objective Zeiss 100x 1.4 NA
+MICRONS_PER_VOLT = 24
 
 # Maximum zoom level allowed in the scanning interface
-MAX_ZOOM_LEVEL = 6
+MAX_ZOOM_LEVEL = 9
 
 # Default binwidth for TimeTagger counter in picoseconds (5e9 = 5 milliseconds)
 BINWIDTH = int(5e9)
@@ -127,5 +128,5 @@ Scanner: Thorlabs LSKGG4 Galvo-Galvo"""
         imagej=True  # Enable ImageJ-specific metadata format
     )
     
-    show_info(f"💾 TIFF saved with ImageJ metadata: {filepath}")
-    show_info(f"📏 Scale: {microns_per_pixel_x:.3f} × {microns_per_pixel_y:.3f} um/pixel") 
+    print(f"💾 TIFF saved with ImageJ metadata: {filepath}")
+    print(f"📏 Scale: {microns_per_pixel_x:.3f} × {microns_per_pixel_y:.3f} um/pixel") 

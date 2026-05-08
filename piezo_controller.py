@@ -172,7 +172,7 @@ class PiezoController:
             if progress_callback:
                 progress_callback(current_step, total_steps, "Coarse Scan", pos, count)
             
-            print(f'Coarse scan - Position: {pos:.1f} µm, counts: {count}')
+            #print(f'Coarse scan - Position: {pos:.1f} µm, counts: {count}')
 
         # Find optimal position from coarse scan
         optimal_idx = np.argmax(counts)
@@ -210,7 +210,7 @@ class PiezoController:
                 if progress_callback:
                     progress_callback(current_step, total_steps, "Fine Scan", pos, count)
                 
-                print(f'Fine scan - Position: {pos:.2f} µm, counts: {count}')
+                #print(f'Fine scan - Position: {pos:.2f} µm, counts: {count}')
             
             # Find optimal position from fine scan
             fine_optimal_idx = np.argmax(fine_counts)
