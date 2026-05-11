@@ -394,9 +394,19 @@ class CameraControlWidget(QWidget):
         gain_widget.setLayout(gain_layout)
         layout.addWidget(gain_widget, 2, 1)
         
+        # Apply correct slider ranges for the initially selected camera type
+        self._apply_slider_ranges(self.get_camera_type())
+
         # Set fixed height for better appearance
         self.setFixedHeight(150)  # Increased to accommodate camera selection
     
+    # Slider ranges per camera type
+    _SLIDER_RANGES = {
+        "USB": {"exp_max": 8,    "exp_default": 4,   "gain_max": 255, "gain_default": 128},
+        "POA": {"exp_max": 1000, "exp_default": 50,  "gain_max": 1000, "gain_default": 300},
+        "ZWO": {"exp_max": 1000, "exp_default": 50,  "gain_max": 1000, "gain_default": 300},
+    }
+
     def get_camera_type(self):
         """Get the currently selected camera type"""
         text = self.camera_type_combo.currentText()
@@ -406,7 +416,25 @@ class CameraControlWidget(QWidget):
             return "USB"
         else:
             return "POA"
-    
+
+    def _apply_slider_ranges(self, camera_type: str):
+        """Adjust slider limits and defaults for the selected camera type."""
+        ranges = self._SLIDER_RANGES.get(camera_type, self._SLIDER_RANGES["POA"])
+
+        self.exposure_slider.blockSignals(True)
+        self.exposure_slider.setMaximum(ranges["exp_max"])
+        self.exposure_slider.setValue(min(self.exposure_slider.value(), ranges["exp_max"]))
+        self.exposure_slider.setValue(ranges["exp_default"])
+        self.exposure_value_label.setText(str(ranges["exp_default"]))
+        self.exposure_slider.blockSignals(False)
+
+        self.gain_slider.blockSignals(True)
+        self.gain_slider.setMaximum(ranges["gain_max"])
+        self.gain_slider.setValue(min(self.gain_slider.value(), ranges["gain_max"]))
+        self.gain_slider.setValue(ranges["gain_default"])
+        self.gain_value_label.setText(str(ranges["gain_default"]))
+        self.gain_slider.blockSignals(False)
+
     @pyqtSlot(str)
     def on_camera_type_changed(self, camera_type_text):
         """Handle camera type change"""
@@ -434,6 +462,9 @@ class CameraControlWidget(QWidget):
             # Remove camera reference without using del
             self.capture_shot_widget.camera = None
         
+        # Adjust slider ranges for the new camera type
+        self._apply_slider_ranges(self.get_camera_type())
+
         # Show info about the change
         type_map = {"ZWO Camera": "ZWO", "USB Webcam": "USB Webcam"}
         camera_type = type_map.get(camera_type_text, "POA")

@@ -5,7 +5,6 @@ This module provides a wrapper around OpenCV's VideoCapture to match the interfa
 of POACameraController and ZWOCameraController for seamless integration.
 """
 
-import math
 import numpy as np
 from typing import Optional, Tuple
 
@@ -160,20 +159,24 @@ class USBWebcamController:
     def _apply_exposure(self, exposure_us: int) -> None:
         """Push exposure to the driver.
 
-        Windows DirectShow (CAP_DSHOW) requires CAP_PROP_EXPOSURE in integer log₂(seconds)
-        steps: -1=500ms, -2=250ms, -3=125ms, -4=62.5ms, -5=31.25ms, etc.
-        Passing a float causes the driver to snap silently to an unpredictable step, so we
-        round to the nearest integer before writing.
+        The DirectShow spec uses log₂(seconds) for CAP_PROP_EXPOSURE, but the vast
+        majority of consumer USB webcam drivers on Windows instead interpret this
+        property as the *negative* of the exposure in milliseconds:
+            -50  → 50 ms
+            -500 → 500 ms
+        Using log₂ values with such drivers produces an apparent inversion (higher
+        slider → less-negative log₂ → smaller magnitude → shorter actual exposure).
+        Passing negative-ms values gives a correct, linear 1:1 mapping and is also
+        what most webcam-specific OpenCV examples on Windows recommend.
         """
         if self.cap is None or not self.cap.isOpened():
             return
         try:
             # Disable auto-exposure so the manual value takes effect
             self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # 0.25 = manual on DirectShow
-            exposure_s = max(exposure_us, 1) / 1_000_000.0
-            # Round to nearest integer: DirectShow only honours whole log₂ steps
-            exposure_log2 = round(math.log2(exposure_s))
-            self.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_log2)
+            # Send as negative milliseconds (consumer webcam convention)
+            exposure_ms = max(1, round(exposure_us / 1000.0))
+            self.cap.set(cv2.CAP_PROP_EXPOSURE, -exposure_ms)
         except Exception:
             pass  # Webcam drivers routinely ignore unsupported properties
 
@@ -190,13 +193,13 @@ class USBWebcamController:
         self.exposure = max(100, exposure_us)
         if self.is_connected:
             self._apply_exposure(self.exposure)
-            # Snap self.exposure to the integer log₂ step the driver actually accepted
-            # so that get_exposure() reflects what the hardware is really doing.
+            # Read back what the driver actually accepted and update self.exposure.
+            # Driver reports negative-ms: e.g. -50 means 50 ms = 50 000 µs.
             if self.cap is not None:
                 try:
-                    val_log2 = self.cap.get(cv2.CAP_PROP_EXPOSURE)
-                    if val_log2 <= 0:
-                        self.exposure = int(round((2 ** val_log2) * 1_000_000))
+                    val = self.cap.get(cv2.CAP_PROP_EXPOSURE)
+                    if val < 0:
+                        self.exposure = int(round(-val * 1000))
                 except Exception:
                     pass
         return True
@@ -210,10 +213,10 @@ class USBWebcamController:
         """
         if self.is_connected and self.cap is not None:
             try:
-                val_log2 = self.cap.get(cv2.CAP_PROP_EXPOSURE)
-                # DirectShow returns log₂(seconds); convert back to µs
-                if val_log2 < 0:
-                    self.exposure = int((2 ** val_log2) * 1_000_000)
+                val = self.cap.get(cv2.CAP_PROP_EXPOSURE)
+                # Driver returns negative-ms: e.g. -50 = 50 ms = 50 000 µs
+                if val < 0:
+                    self.exposure = int(round(-val * 1000))
             except Exception:
                 pass
         return self.exposure
