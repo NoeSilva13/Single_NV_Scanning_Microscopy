@@ -5,6 +5,7 @@ This module provides a wrapper around OpenCV's VideoCapture to match the interfa
 of POACameraController and ZWOCameraController for seamless integration.
 """
 
+import math
 import numpy as np
 from typing import Optional, Tuple
 
@@ -154,14 +155,20 @@ class USBWebcamController:
     # ------------------------------------------------------------------
 
     def _apply_exposure(self, exposure_us: int) -> None:
-        """Push exposure to the driver. Converts µs → ms; silently ignores failures."""
+        """Push exposure to the driver.
+
+        Windows DirectShow (CAP_DSHOW) expects CAP_PROP_EXPOSURE in log₂(seconds),
+        e.g. 50 ms → log2(0.05) ≈ -4.32. Passing raw ms values produces values
+        that clamp to maximum or behave non-monotonically.
+        """
         if self.cap is None or not self.cap.isOpened():
             return
         try:
-            # Disable auto-exposure first so the manual value takes effect
-            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # 0.25 = manual on many backends
-            exposure_ms = exposure_us / 1000.0
-            self.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_ms)
+            # Disable auto-exposure so the manual value takes effect
+            self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # 0.25 = manual on DirectShow
+            exposure_s = max(exposure_us, 1) / 1_000_000.0
+            exposure_log2 = math.log2(exposure_s)  # e.g. 50 ms → ~-4.32
+            self.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_log2)
         except Exception:
             pass  # Webcam drivers routinely ignore unsupported properties
 
@@ -189,9 +196,10 @@ class USBWebcamController:
         """
         if self.is_connected and self.cap is not None:
             try:
-                val_ms = self.cap.get(cv2.CAP_PROP_EXPOSURE)
-                if val_ms > 0:
-                    self.exposure = int(val_ms * 1000)
+                val_log2 = self.cap.get(cv2.CAP_PROP_EXPOSURE)
+                # DirectShow returns log₂(seconds); convert back to µs
+                if val_log2 < 0:
+                    self.exposure = int((2 ** val_log2) * 1_000_000)
             except Exception:
                 pass
         return self.exposure
