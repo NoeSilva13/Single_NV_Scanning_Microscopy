@@ -86,10 +86,10 @@ def camera_live(viewer, get_camera_type_func=None):
         if not _camera_live.is_running:
             # Start camera feed
             if not hasattr(_camera_live, 'camera_layer') or _camera_live.camera_layer not in viewer.layers:
-                # Connect to camera (USB webcam uses native max resolution)
+                # Connect to camera
                 camera_type_for_connect = get_camera_type_func() if get_camera_type_func else "POA"
                 if camera_type_for_connect == "USB":
-                    if not _camera_live.camera.connect(camera_index=0):
+                    if not _camera_live.camera.connect(camera_index=0, width=960, height=720):
                         show_info("❌ Failed to connect to camera")
                         return
                 elif not _camera_live.camera.connect(camera_index=0, width=1024, height=1024):
@@ -131,10 +131,10 @@ def camera_live(viewer, get_camera_type_func=None):
                     visible=True
                 )
             else:
-                # Reuse existing layer but reconnect camera (USB uses native max resolution)
+                # Reuse existing layer but reconnect camera
                 camera_type_for_connect = get_camera_type_func() if get_camera_type_func else "POA"
                 if camera_type_for_connect == "USB":
-                    if not _camera_live.camera.connect(camera_index=0):
+                    if not _camera_live.camera.connect(camera_index=0, width=960, height=720):
                         show_info("❌ Failed to connect to camera")
                         return
                 elif not _camera_live.camera.connect(camera_index=0, width=1024, height=1024):
@@ -218,11 +218,11 @@ def capture_shot(viewer, settings_callback=None, get_camera_type_func=None):
                 exposure_ms = 50
                 gain = 300
             
-            # Connect to camera if not already connected (USB uses native max resolution)
+            # Connect to camera if not already connected
             if not _capture_shot.camera.is_connected:
                 camera_type_for_connect = get_camera_type_func() if get_camera_type_func else "POA"
                 if camera_type_for_connect == "USB":
-                    if not _capture_shot.camera.connect(camera_index=0):
+                    if not _capture_shot.camera.connect(camera_index=0, width=960, height=720):
                         show_info("❌ Failed to connect to camera")
                         return
                 elif not _capture_shot.camera.connect(camera_index=0, width=1024, height=1024):
