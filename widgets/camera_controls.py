@@ -342,10 +342,19 @@ class CameraControlWidget(QWidget):
         exposure_layout.setSpacing(0)
         exposure_layout.setContentsMargins(0, 0, 0, 0)
         
+        exp_header = QHBoxLayout()
+        exp_header.setContentsMargins(0, 0, 0, 0)
         exp_label = QLabel("Exposure (ms):")
-        exp_label.setAlignment(Qt.AlignCenter)
-        exposure_layout.addWidget(exp_label)
-        
+        exp_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        exp_header.addWidget(exp_label)
+        exp_header.addStretch()
+        self.exposure_value_label = QLabel("50")
+        self.exposure_value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        exp_header.addWidget(self.exposure_value_label)
+        exp_header_widget = QWidget()
+        exp_header_widget.setLayout(exp_header)
+        exposure_layout.addWidget(exp_header_widget)
+
         self.exposure_slider = QSlider(Qt.Horizontal)
         self.exposure_slider.setMinimum(1)
         self.exposure_slider.setMaximum(1000)
@@ -361,11 +370,20 @@ class CameraControlWidget(QWidget):
         gain_layout = QVBoxLayout()
         gain_layout.setSpacing(0)
         gain_layout.setContentsMargins(0, 0, 0, 0)
-        
+
+        gain_header = QHBoxLayout()
+        gain_header.setContentsMargins(0, 0, 0, 0)
         gain_label = QLabel("Gain:")
-        gain_label.setAlignment(Qt.AlignCenter)
-        gain_layout.addWidget(gain_label)
-        
+        gain_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        gain_header.addWidget(gain_label)
+        gain_header.addStretch()
+        self.gain_value_label = QLabel("300")
+        self.gain_value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        gain_header.addWidget(self.gain_value_label)
+        gain_header_widget = QWidget()
+        gain_header_widget.setLayout(gain_header)
+        gain_layout.addWidget(gain_header_widget)
+
         self.gain_slider = QSlider(Qt.Horizontal)
         self.gain_slider.setMinimum(0)
         self.gain_slider.setMaximum(1000)
@@ -423,13 +441,15 @@ class CameraControlWidget(QWidget):
     
     @pyqtSlot(int)
     def update_exposure(self, value):
+        self.exposure_value_label.setText(str(value))
         if hasattr(self.camera_live_widget, 'camera') and self.camera_live_widget.camera is not None:
             self.camera_live_widget.camera.set_exposure(value * 1000)  # Convert ms to µs
         if hasattr(self.capture_shot_widget, 'camera') and self.capture_shot_widget.camera is not None:
             self.capture_shot_widget.camera.set_exposure(value * 1000)  # Convert ms to µs
-    
+
     @pyqtSlot(int)
     def update_gain(self, value):
+        self.gain_value_label.setText(str(value))
         if hasattr(self.camera_live_widget, 'camera') and self.camera_live_widget.camera is not None:
             self.camera_live_widget.camera.set_gain(value)
         if hasattr(self.capture_shot_widget, 'camera') and self.capture_shot_widget.camera is not None:
