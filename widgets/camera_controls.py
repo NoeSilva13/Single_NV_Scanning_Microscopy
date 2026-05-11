@@ -441,9 +441,17 @@ class CameraControlWidget(QWidget):
     
     @pyqtSlot(int)
     def update_exposure(self, value):
-        self.exposure_value_label.setText(str(value))
         if hasattr(self.camera_live_widget, 'camera') and self.camera_live_widget.camera is not None:
             self.camera_live_widget.camera.set_exposure(value * 1000)  # Convert ms to µs
+            # For USB webcam the driver quantises to integer log₂ steps; read back the
+            # actual settled value so the label matches what the hardware is doing.
+            if self.get_camera_type() == "USB":
+                actual_ms = self.camera_live_widget.camera.get_exposure() // 1000
+                self.exposure_value_label.setText(str(actual_ms))
+            else:
+                self.exposure_value_label.setText(str(value))
+        else:
+            self.exposure_value_label.setText(str(value))
         if hasattr(self.capture_shot_widget, 'camera') and self.capture_shot_widget.camera is not None:
             self.capture_shot_widget.camera.set_exposure(value * 1000)  # Convert ms to µs
 

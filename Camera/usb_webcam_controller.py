@@ -160,9 +160,10 @@ class USBWebcamController:
     def _apply_exposure(self, exposure_us: int) -> None:
         """Push exposure to the driver.
 
-        Windows DirectShow (CAP_DSHOW) expects CAP_PROP_EXPOSURE in log₂(seconds),
-        e.g. 50 ms → log2(0.05) ≈ -4.32. Passing raw ms values produces values
-        that clamp to maximum or behave non-monotonically.
+        Windows DirectShow (CAP_DSHOW) requires CAP_PROP_EXPOSURE in integer log₂(seconds)
+        steps: -1=500ms, -2=250ms, -3=125ms, -4=62.5ms, -5=31.25ms, etc.
+        Passing a float causes the driver to snap silently to an unpredictable step, so we
+        round to the nearest integer before writing.
         """
         if self.cap is None or not self.cap.isOpened():
             return
@@ -170,7 +171,8 @@ class USBWebcamController:
             # Disable auto-exposure so the manual value takes effect
             self.cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 0.25)  # 0.25 = manual on DirectShow
             exposure_s = max(exposure_us, 1) / 1_000_000.0
-            exposure_log2 = math.log2(exposure_s)  # e.g. 50 ms → ~-4.32
+            # Round to nearest integer: DirectShow only honours whole log₂ steps
+            exposure_log2 = round(math.log2(exposure_s))
             self.cap.set(cv2.CAP_PROP_EXPOSURE, exposure_log2)
         except Exception:
             pass  # Webcam drivers routinely ignore unsupported properties
@@ -188,6 +190,15 @@ class USBWebcamController:
         self.exposure = max(100, exposure_us)
         if self.is_connected:
             self._apply_exposure(self.exposure)
+            # Snap self.exposure to the integer log₂ step the driver actually accepted
+            # so that get_exposure() reflects what the hardware is really doing.
+            if self.cap is not None:
+                try:
+                    val_log2 = self.cap.get(cv2.CAP_PROP_EXPOSURE)
+                    if val_log2 <= 0:
+                        self.exposure = int(round((2 ** val_log2) * 1_000_000))
+                except Exception:
+                    pass
         return True
 
     def get_exposure(self) -> int:
