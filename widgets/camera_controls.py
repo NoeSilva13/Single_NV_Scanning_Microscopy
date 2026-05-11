@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, 
 from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot, Qt
 from magicgui import magicgui, widgets
 from napari.utils.notifications import show_info
-from Camera import POACameraController, ZWOCameraController
+from Camera import POACameraController, ZWOCameraController, USBWebcamController
 
 
 class CameraUpdateThread(QThread):
@@ -53,6 +53,8 @@ def camera_live(viewer, get_camera_type_func=None):
             
             if camera_type == "ZWO":
                 _camera_live.camera = ZWOCameraController()
+            elif camera_type == "USB":
+                _camera_live.camera = USBWebcamController()
             else:
                 _camera_live.camera = POACameraController()
             
@@ -107,8 +109,8 @@ def camera_live(viewer, get_camera_type_func=None):
                 if get_camera_type_func:
                     camera_type = get_camera_type_func()
                 
-                if camera_type == "ZWO":
-                    # ZWO is a color camera - create RGB frame
+                if camera_type in ("ZWO", "USB"):
+                    # Color camera - create RGB frame
                     initial_frame = np.zeros((height, width, 3), dtype=np.uint8)
                     colormap = None  # Use default RGB display
                 else:
@@ -188,6 +190,8 @@ def capture_shot(viewer, settings_callback=None, get_camera_type_func=None):
             
             if camera_type == "ZWO":
                 _capture_shot.camera = ZWOCameraController()
+            elif camera_type == "USB":
+                _capture_shot.camera = USBWebcamController()
             else:
                 _capture_shot.camera = POACameraController()
             
@@ -305,6 +309,7 @@ class CameraControlWidget(QWidget):
         self.camera_type_combo = QComboBox()
         self.camera_type_combo.addItem("POA Camera")
         self.camera_type_combo.addItem("ZWO Camera")
+        self.camera_type_combo.addItem("USB Webcam")
         self.camera_type_combo.currentTextChanged.connect(self.on_camera_type_changed)
         camera_type_layout.addWidget(self.camera_type_combo)
         
@@ -361,8 +366,11 @@ class CameraControlWidget(QWidget):
     
     def get_camera_type(self):
         """Get the currently selected camera type"""
-        if self.camera_type_combo.currentText() == "ZWO Camera":
+        text = self.camera_type_combo.currentText()
+        if text == "ZWO Camera":
             return "ZWO"
+        elif text == "USB Webcam":
+            return "USB"
         else:
             return "POA"
     
@@ -394,7 +402,8 @@ class CameraControlWidget(QWidget):
             self.capture_shot_widget.camera = None
         
         # Show info about the change
-        camera_type = "ZWO" if camera_type_text == "ZWO Camera" else "POA"
+        type_map = {"ZWO Camera": "ZWO", "USB Webcam": "USB Webcam"}
+        camera_type = type_map.get(camera_type_text, "POA")
         show_info(f"📷 Switched to {camera_type} camera mode")
     
     @pyqtSlot(int)
