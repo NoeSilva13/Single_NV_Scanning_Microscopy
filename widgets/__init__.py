@@ -30,6 +30,7 @@ from .single_axis_scan import SingleAxisScanWidget
 
 from .file_operations import load_scan
 from .piezo_controls import PiezoControlWidget
+from .laser_control import LaserControlWidget
 
 __all__ = [
     # Scan controls
@@ -58,5 +59,8 @@ __all__ = [
     'load_scan',
     
     # Piezo controls
-    'PiezoControlWidget'
+    'PiezoControlWidget',
+
+    # Laser control
+    'LaserControlWidget'
 ] 

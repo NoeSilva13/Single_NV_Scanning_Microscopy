@@ -122,6 +122,54 @@ class SwabianPulseController:
             print("🔄 Pulse Streamer reset to OFF state")
         except Exception as e:
             print(f"❌ Error resetting device: {e}")
+
+    def set_constant_channels(self, high_channels: List[int]) -> bool:
+        """Drive the Pulse Streamer in constant-output mode with the given digital
+        channels held HIGH and all others LOW.
+
+        Args:
+            high_channels: List of digital channel indices to hold HIGH. Pass an
+                empty list to drive all channels LOW (equivalent to ZERO state).
+
+        Returns:
+            bool: True on success, False if the device is not connected or an
+            error occurs.
+        """
+        if not self.is_connected:
+            print("❌ Cannot set constant output: device not connected")
+            return False
+
+        try:
+            if high_channels:
+                self.pulse_streamer.constant(OutputState(list(high_channels), 0.0, 0.0))
+            else:
+                self.pulse_streamer.constant(OutputState.ZERO())
+            return True
+        except Exception as e:
+            print(f"❌ Error setting constant output: {e}")
+            return False
+
+    def laser_on(self) -> bool:
+        """Hold the AOM/laser channel (channel 0) HIGH continuously.
+
+        Returns:
+            bool: True if the command succeeded, False otherwise.
+        """
+        ok = self.set_constant_channels([self.CHANNEL_AOM])
+        if ok:
+            print("💡 Laser ON  (PS channel 0 = HIGH)")
+        return ok
+
+    def laser_off(self) -> bool:
+        """Drive all Pulse Streamer channels LOW (laser OFF).
+
+        Returns:
+            bool: True if the command succeeded, False otherwise.
+        """
+        ok = self.set_constant_channels([])
+        if ok:
+            print("💡 Laser OFF (PS channel 0 = LOW)")
+        return ok
     
     def create_odmr_sequence_contrast(self,
                            laser_duration: int = None,

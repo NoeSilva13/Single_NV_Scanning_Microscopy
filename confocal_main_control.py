@@ -60,6 +60,8 @@ from widgets.auto_focus import (
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan as create_load_scan
 from widgets.piezo_controls import PiezoControlWidget
+from widgets.laser_control import LaserControlWidget
+from PulseBlaster.swabian_pulse_streamer import SwabianPulseController
 
 # --------------------- SCAN PARAMETERS MANAGER CLASS ---------------------
 class ScanParametersManager:
@@ -172,6 +174,15 @@ data_manager = DataManager()
 piezo_controller = PiezoController()
 if not piezo_controller.connect():
     show_info("⚠️ Failed to connect to piezo controller")
+
+# Initialize Pulse Streamer controller (laser via channel 0). The constructor
+# already attempts to connect and resets all channels to LOW, guaranteeing
+# the laser is OFF by default at startup.
+pulse_controller = SwabianPulseController()
+if pulse_controller.is_connected:
+    pulse_controller.laser_off()  # explicit safety: laser OFF on startup
+else:
+    show_info("⚠️ Failed to connect to Pulse Streamer (laser control disabled)")
 
 # Extract scan parameters for initial setup (using defaults)
 x_res = 50  # Default resolution
@@ -369,6 +380,14 @@ def scan_pattern(x_points, y_points):
 
     height, width = len(y_points), len(x_points)
 
+    # Force laser ON for the duration of the scan; restored afterwards.
+    laser_widget = globals().get('laser_control_widget')
+    if laser_widget is not None:
+        try:
+            laser_widget.begin_scan_override()
+        except Exception as e:
+            bridge.notify(f"⚠️ Could not turn laser ON for scan: {e}")
+
     try:
         output_task.write([x_points[0], y_points[0]])
         n_flyback = max(1, int(np.ceil(GALVO_FLYBACK_TIME / dwell_time)))
@@ -558,6 +577,13 @@ def scan_pattern(x_points, y_points):
         except Exception as e:
             bridge.notify(f"⚠️ Failed to restart galvo control: {e}")
 
+        # Release the laser scan override (returns to OFF unless it was ON before).
+        if laser_widget is not None:
+            try:
+                laser_widget.end_scan_override()
+            except Exception as e:
+                bridge.notify(f"⚠️ Failed to release laser after scan: {e}")
+
         bridge.notify("🎯 Scanner returned to zero position")
         with scan_lock:
             scan_in_progress[0] = False
@@ -622,6 +648,9 @@ piezo_control_widget = PiezoControlWidget(piezo_controller)
 
 # Set the Z control widget reference in the signal bridge
 signal_bridge.z_control_widget = piezo_control_widget
+
+# Create laser control widget (toggles Pulse Streamer channel 0)
+laser_control_widget = LaserControlWidget(pulse_controller)
 
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
@@ -714,6 +743,7 @@ viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
 viewer.window.add_dock_widget(piezo_control_widget, area="bottom")
+viewer.window.add_dock_widget(laser_control_widget, area="bottom", name="Laser")
 update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
 camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
 viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
@@ -732,7 +762,16 @@ def _on_close():
         # Set scanner to zero position before closing
         output_task.write([0, 0])
         show_info("🎯 Scanner set to zero position")
-        
+
+        # Ensure the laser is OFF and disconnect Pulse Streamer
+        try:
+            laser_control_widget.cleanup()
+        except Exception:
+            pass
+        if pulse_controller and pulse_controller.is_connected:
+            pulse_controller.disconnect()
+            show_info("✓ Pulse Streamer disconnected (laser OFF)")
+
         # Clean up piezo controller
         if piezo_controller and piezo_controller._is_connected:
             piezo_controller.disconnect()
