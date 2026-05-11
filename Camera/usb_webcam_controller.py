@@ -52,14 +52,14 @@ class USBWebcamController:
                 cap.release()
         return available
 
-    def connect(self, camera_index: int = 0, width: int = 640, height: int = 480) -> bool:
+    def connect(self, camera_index: int = 0, width: int = None, height: int = None) -> bool:
         """
         Connect to a USB webcam by index.
 
         Args:
             camera_index: Index of the camera to connect to
-            width: Desired image width
-            height: Desired image height
+            width: Desired image width. If None, the camera's native maximum is used.
+            height: Desired image height. If None, the camera's native maximum is used.
 
         Returns:
             bool: True if connection was successful, False otherwise
@@ -75,9 +75,12 @@ class USBWebcamController:
                 self.cap = None
                 return False
 
-            # Request desired resolution
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            # Only set resolution if explicitly requested; otherwise the driver
+            # keeps its default (usually the highest supported mode)
+            if width is not None:
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            if height is not None:
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 
             # Read back the actual resolution the driver settled on
             self.img_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
