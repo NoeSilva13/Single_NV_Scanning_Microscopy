@@ -64,7 +64,6 @@ class LaserControlWidget(QWidget):
 
         title = QLabel("Laser (PS Ch 0)")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet("font-weight: bold;")
         layout.addWidget(title)
 
         controls_layout = QHBoxLayout()
@@ -72,7 +71,7 @@ class LaserControlWidget(QWidget):
         self.toggle_button = QPushButton("Laser OFF")
         self.toggle_button.setCheckable(True)
         self.toggle_button.setChecked(False)
-        self.toggle_button.setFixedSize(140, 40)
+        self.toggle_button.setFixedSize(140, 28)
         self.toggle_button.clicked.connect(self._on_button_clicked)
         self._style_button(False)
         controls_layout.addWidget(self.toggle_button)
@@ -84,7 +83,7 @@ class LaserControlWidget(QWidget):
         controls_layout.addStretch()
 
         layout.addLayout(controls_layout)
-        self.setFixedSize(320, 90)
+        self.setFixedSize(320, 60)
 
     def _style_button(self, is_on: bool):
         """Update button label, color and checked state to reflect laser state."""
