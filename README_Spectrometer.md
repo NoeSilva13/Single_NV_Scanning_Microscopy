@@ -5,7 +5,7 @@ A Qt-based spectrometer application that uses a POA (Player One Astronomy) camer
 ## Features
 
 - **Real-time spectral analysis** - Processes horizontal line spectra from camera images
-- **1920x1080 resolution** - Uses full HD resolution for maximum spectral detail
+- **6252x480 line-scan resolution** - Uses the camera's full sensor width as the dispersion axis for maximum spectral detail
 - **Wavelength calibration** - Linear calibration from pixel to wavelength mapping
 - **Dark frame correction** - Subtracts dark current noise
 - **Reference normalization** - Normalizes spectra against reference measurements
@@ -110,7 +110,7 @@ The application processes camera frames as follows:
 ### Camera Interface
 
 - Uses POA camera API through `pyPOACamera` wrapper
-- Supports RAW8 and RAW16 formats for maximum dynamic range
+- Configured for RAW8 format (better streaming performance); the underlying `pyPOACamera` bindings also support RAW16 if higher dynamic range is needed
 - Thread-safe camera operations for real-time performance
 - Automatic exposure and gain control
 

@@ -1,6 +1,6 @@
-# Widgets Package for Napari Scanning SPD
+# Widgets Package for the Confocal Scanning GUI
 
-This package contains all the GUI widgets extracted from the main `napari_scanning_SPD.py` file, organized into logical modules for better maintainability and reusability.
+This package contains all the GUI widgets used by the confocal scanning application ([confocal_main_control.py](../confocal_main_control.py)), organized into logical modules for better maintainability and reusability.
 
 ## Module Structure
 
@@ -26,13 +26,17 @@ from widgets.scan_controls import (
     close_scanner,
     save_image,
     reset_zoom,
-    update_scan_parameters
+    update_scan_parameters,
+    update_scan_parameters_widget,
+    stop_scan
 )
 
 from widgets.camera_controls import (
     camera_live,
     capture_shot,
-    CameraControlWidget
+    CameraControlWidget,
+    CameraUpdateThread,
+    create_camera_control_widget
 )
 
 from widgets.auto_focus import (
@@ -59,12 +63,12 @@ Most widgets are implemented as factory functions that take dependencies as para
 ```python
 # Dependencies
 scan_pattern_func = my_scan_function
-original_x_points = np.linspace(-1, 1, 10)
-original_y_points = np.linspace(-1, 1, 10)
+scan_points_manager = ScanPointsManager(scan_params_manager)
 shapes_layer = viewer.layers['shapes']
+bridge = GUIBridge()  # from thread_safe_bridge, for thread-safe UI updates
 
 # Create widget
-new_scan_widget = new_scan(scan_pattern_func, original_x_points, original_y_points, shapes_layer)
+new_scan_widget = new_scan(scan_pattern_func, scan_points_manager, shapes_layer, bridge, scan_in_progress=[False])
 
 # Add to viewer
 viewer.window.add_dock_widget(new_scan_widget, area="bottom")
@@ -72,97 +76,105 @@ viewer.window.add_dock_widget(new_scan_widget, area="bottom")
 
 ### State Management Classes
 
-The refactored code includes helper classes for managing application state:
+`confocal_main_control.py` defines three helper classes for managing application state, which are passed into the widget factories above as dependencies:
 
 ```python
-class ConfigManager:
-    """Manages configuration loading, saving, and updates"""
-    def __init__(self, config_file="config_template.json")
-    def get_config(self)
-    def update_scan_parameters(self, **kwargs)
+class ScanParametersManager:
+    """Reads/writes scan range, resolution, and dwell time from the
+    ScanParametersWidget instance created by widgets.scan_controls.update_scan_parameters"""
+    def __init__(self, widget_instance=None)
+    def set_widget_instance(self, widget_instance)
+    def get_params(self)
+    def update_scan_parameters(self, x_range=None, y_range=None, x_res=None, y_res=None, dwell_time=None)
 
 class ScanPointsManager:
-    """Manages scan point generation and updates"""
-    def __init__(self, config_manager)
-    def update_points(self, **kwargs)
+    """Manages the X/Y voltage linspace grids used for scanning"""
+    def __init__(self, scan_params_manager)
+    def update_points(self, x_range=None, y_range=None, x_res=None, y_res=None)
     def get_points(self)
 
 class ZoomLevelManager:
-    """Manages zoom level state"""
-    def __init__(self, max_zoom=3)
+    """Tracks nested zoom-region depth (default max: utils.MAX_ZOOM_LEVEL = 9)"""
+    def __init__(self, max_zoom=MAX_ZOOM_LEVEL)
     def get_zoom_level(self)
     def set_zoom_level(self, level)
+    def can_zoom_in(self)
 ```
 
 ## Widget Reference
 
 ### Scan Controls (`scan_controls.py`)
 
-- **`new_scan(scan_pattern_func, original_x_points, original_y_points, shapes)`**
-  - Creates a "New Scan" button widget
-  - Runs scan in background thread
-  
+- **`new_scan(scan_pattern_func, scan_points_manager, shapes, bridge=None, scan_in_progress=None)`**
+  - Creates a "🔬 New Scan" button widget
+  - Runs the scan in a background thread; clears the zoom-region shape when done
+
 - **`close_scanner(output_task)`**
-  - Creates a "Set to Zero" button widget
-  - Moves galvo scanner to zero position
-  
+  - Creates a "🎯 Set to Zero" button widget
+  - Writes [0, 0] V to the galvo AO channels in a background thread
+
 - **`save_image(viewer, data_path_func)`**
-  - Creates a "Save Image" button widget
-  - Screenshots current napari view
-  
-- **`reset_zoom(...)`**
-  - Creates a "Reset Zoom" button widget
-  - Returns to original scan range
-  
-- **`update_scan_parameters(config_manager, scan_points_manager)`**
-  - Creates scan parameter control widget
-  - Float/Int spinboxes for scan range and resolution
+  - Creates a "📷 Save Image" button widget
+  - Screenshots the current napari canvas, named after the last saved scan's data path
+
+- **`reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points_manager, shapes, update_scan_parameters_func, update_scan_parameters_widget_func, zoom_level_manager, bridge=None, scan_in_progress=None)`**
+  - Creates a "🔄 Reset Zoom" button widget
+  - Returns to the original (level-0) scan range and resets zoom level to 0
+
+- **`update_scan_parameters(scan_params_manager, scan_points_manager)`**
+  - Returns a `ScanParametersWidget` (`QWidget`) with X/Y range, resolution, and dwell-time spinboxes (plus live µm distance labels)
+  - Registers itself as the `scan_params_manager`'s widget instance
+
+- **`update_scan_parameters_widget(widget_instance, scan_params_manager, bridge=None)`**
+  - Returns a callback that refreshes the parameter widget's displayed values from the manager; marshals to the main thread via `bridge` if provided
+
+- **`stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref=None, cbm_ref=None, scan_lock=None)`**
+  - Creates a "🛑 Stop Scan" button widget
+  - Signals an in-progress scan to abort and stops the active DAQ task / TimeTagger `CountBetweenMarkers` measurement
 
 ### Camera Controls (`camera_controls.py`)
 
-- **`camera_live(viewer)`**
-  - Creates a "Camera Live" toggle button
-  - Starts/stops live camera feed
-  
-- **`capture_shot(viewer)`**
-  - Creates a "Single Shot" button
-  - Captures single camera image
-  
-- **`CameraControlWidget(camera_live_widget, capture_shot_widget)`**
-  - Composite widget with camera controls and sliders
-  - Exposure and gain control sliders
-  
+- **`camera_live(viewer, get_camera_type_func=None)`**
+  - Creates a "🎥 Camera Live" toggle button
+  - Starts/stops a live camera feed as a napari image layer; supports POA, ZWO, and USB webcam backends via `get_camera_type_func`
+
+- **`capture_shot(viewer, settings_callback=None, get_camera_type_func=None)`**
+  - Creates a "📸 Single Shot" button
+  - Captures a single frame from the selected camera backend and adds it as a new napari layer
+
+- **`CameraControlWidget(camera_live_widget, capture_shot_widget, parent=None)`**
+  - Composite `QWidget` with a camera-type dropdown (POA / ZWO / USB), the live/capture buttons, and exposure & gain sliders whose ranges adapt per camera type
+
 - **`CameraUpdateThread(camera)`**
-  - Background thread for camera updates
-  - Emits frames via Qt signals
+  - Background `QThread` polling the active camera at ~30 FPS, emitting frames via a Qt signal
+
+- **`create_camera_control_widget(viewer)`**
+  - Factory that wires `camera_live`, `capture_shot`, and `CameraControlWidget` together into one ready-to-dock widget (this is what `confocal_main_control.py` actually imports)
 
 ### Auto Focus (`auto_focus.py`)
 
-- **`auto_focus(counter, binwidth, signal_bridge)`**
-  - Creates "Auto Focus" button widget
-  - Performs Z-scan optimization
-  
+- **`auto_focus(counter, binwidth, signal_bridge, piezo_controller)`**
+  - Creates "🎯 Auto Focus" button widget
+  - Runs a coarse + optional fine Z-piezo sweep (`PiezoController.perform_auto_focus`), maximizing SPD count rate
+
 - **`SignalBridge(viewer)`**
-  - Thread-safe bridge for GUI updates
-  - Handles focus plot creation and updates
-  
+  - Thread-safe `QObject` bridge for GUI updates emitted from the auto-focus worker thread
+  - Handles focus-plot creation/updates and forwards Z position updates to the piezo control widget (`z_control_widget`)
+
 - **`create_focus_plot_widget(positions, counts)`**
-  - Creates plot widget for focus results
-  - Uses SingleAxisPlot from plot_widgets
+  - Creates a `SingleAxisPlot`-based plot widget (from `plot_widgets`) for auto-focus results
 
 ### Single Axis Scan (`single_axis_scan.py`)
 
-- **`SingleAxisScanWidget(config_manager, layer, output_task, counter, binwidth)`**
-  - Complete widget for X/Y axis scanning
-  - Includes scan buttons and result plot
-  - Tracks current scanner position internally
+- **`SingleAxisScanWidget(scan_params_manager, layer, output_task, counter, binwidth)`**
+  - Complete widget for 1D X/Y line scans at the current galvo position
+  - Includes scan buttons, a result plot (`SingleAxisPlot`), and `update_current_position(x, y)` for tracking the galvo's last commanded position
 
 ### File Operations (`file_operations.py`)
 
-- **`load_scan(viewer)`**
-  - Creates "Load Scan" button widget
-  - Opens file dialog for .npz files
-  - Adds loaded scan as new layer
+- **`load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update_widget_func=None)`**
+  - Creates a "Load Scan" button widget
+  - Opens a file dialog for `.npz` files, adds the loaded scan as a new napari layer at the correct physical scale, and optionally re-applies its saved parameters to the scan-parameters widget
 
 ### Piezo Controls (`piezo_controls.py`)
 
@@ -183,16 +195,11 @@ class ZoomLevelManager:
     - Position updates
     - Hardware cleanup
 
-## Migration from Original Code
+## Design Pattern: Factory Functions Over Globals
 
-To migrate from the original monolithic file:
+This package was originally extracted from a monolithic script that used `@magicgui`-decorated functions reading/writing module-level globals. The widgets here instead follow a factory pattern:
 
-1. **Replace direct widget usage** with factory function calls
-2. **Create state management classes** instead of global variables
-3. **Pass dependencies explicitly** to widget factories
-4. **Import widgets** from the widgets package
-
-### Before (Original)
+### Anti-pattern (globals)
 ```python
 @magicgui(call_button="🔬 New Scan")
 def new_scan():
@@ -200,12 +207,12 @@ def new_scan():
     # ... implementation
 ```
 
-### After (Refactored)
+### Current pattern (explicit dependencies)
 ```python
 from widgets.scan_controls import new_scan as create_new_scan
 
-# Create widget with explicit dependencies
-new_scan_widget = create_new_scan(scan_pattern, original_x_points, original_y_points, shapes)
+# Create widget with explicit dependencies (see confocal_main_control.py for the real wiring)
+new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes, bridge, scan_in_progress)
 ```
 
 ## Benefits of This Structure
@@ -229,12 +236,11 @@ from widgets.scan_controls import new_scan
 def test_new_scan_widget():
     # Mock dependencies
     scan_func = Mock()
-    x_points = np.array([1, 2, 3])
-    y_points = np.array([4, 5, 6])
+    scan_points_manager = Mock()
     shapes = Mock()
     
     # Create widget
-    widget = new_scan(scan_func, x_points, y_points, shapes)
+    widget = new_scan(scan_func, scan_points_manager, shapes)
     
     # Test widget properties
     assert widget.call_button.text == "🔬 New Scan"

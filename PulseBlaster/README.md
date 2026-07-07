@@ -27,11 +27,13 @@ RIGOL DSG836 Signal Generator controller providing:
 - Error handling and status monitoring
 
 ### `odmr_experiments.py`
-Integrated experiment implementations including:
-- Continuous Wave ODMR with automatic MW frequency control
-- Rabi oscillation measurements with MW power management
-- Automated ODMR sweeps using RIGOL's internal frequency sweep
-- Ramsey coherence and spin echo experiments
+Integrated experiment implementations (all using the interleaved signal/reference **contrast** method for common-mode noise rejection), consumed directly by `odmr_gui_qt.py`:
+- `odmr_contrast()` - Continuous-wave frequency sweep with interleaved MW-off/MW-on measurement per point
+- `rabi_oscillation_contrast()` - Microwave-duration sweep at fixed frequency to observe Rabi oscillations
+- `t1_decay_contrast()` - Dark-time delay sweep between init/readout laser pulses to measure T1, with automatic stretched-exponential curve fitting (`scipy.optimize.curve_fit`)
+- `plot_results()` - Generates and saves PDF summary plots for any of the three experiment types
+
+> Note: Ramsey and spin-echo sequences are not currently implemented; only ODMR, Rabi, and T1 are available.
 
 ## Installation
 
@@ -41,8 +43,8 @@ pip install pulsestreamer
 ```
 
 2. Ensure your instruments are connected and accessible:
-   - Pulse Streamer 8/2 at IP address `192.168.0.201` (default)
-   - RIGOL DSG836 Signal Generator at IP address `192.168.0.222` (default)
+   - Pulse Streamer 8/2 at IP address `192.168.0.203` (default used by `odmr_gui_qt.py`; the `SwabianPulseController` class default is also `192.168.0.203`)
+   - RIGOL DSG836 Signal Generator at IP address `192.168.0.223` (default used by `odmr_gui_qt.py`; note the standalone `RigolDSG836Controller` class default differs at `192.168.0.224` - always confirm the IP configured in the GUI's Device Settings tab)
 
 ## Quick Start
 
@@ -50,14 +52,21 @@ pip install pulsestreamer
 ```python
 from PulseBlaster.swabian_pulse_streamer import SwabianPulseController
 
-# Initialize controller
-controller = SwabianPulseController("192.168.0.201")
+# Initialize controller (connects automatically on construction)
+controller = SwabianPulseController("192.168.0.203")
 
-# Create a simple laser pulse
-laser_seq = controller.create_simple_laser_pulse(1000)  # 1 µs pulse
+# Create a laser-only pulse sequence for a T1 measurement
+sequence, duration_ns = controller._create_t1_sequence_contrast(
+    init_laser_duration=1000,
+    readout_laser_duration=1000,
+    detection_duration=500,
+    delay_time=2000,
+    init_laser_delay=0,
+    sequence_interval=10000
+)
 
-# Run the sequence
-controller.run_sequence(laser_seq)
+# Run the sequence for a fixed number of repetitions
+controller.run_sequence(sequence, n_runs=1000)
 
 # Stop and disconnect
 controller.stop_sequence()
@@ -67,55 +76,64 @@ controller.disconnect()
 ### ODMR with RIGOL Signal Generator
 ```python
 from PulseBlaster import SwabianPulseController, RigolDSG836Controller, ODMRExperiments
+import numpy as np
 
-# Initialize instruments
-pulse_controller = SwabianPulseController("192.168.0.201")
-rigol = RigolDSG836Controller("192.168.0.222")
-
-# Connect to both instruments
-pulse_controller.connect()
+# Initialize instruments (SwabianPulseController connects automatically)
+pulse_controller = SwabianPulseController("192.168.0.203")
+rigol = RigolDSG836Controller("192.168.0.223")
 rigol.connect()
 
-# Initialize experiments
+# Initialize experiments (also connects to TimeTagger: real -> network -> virtual fallback)
 experiments = ODMRExperiments(pulse_controller, rigol)
 
-# Run ODMR sweep
-frequencies = [2.85e9, 2.87e9, 2.89e9]  # MHz
-results = experiments.odmr(frequencies)
+# Run an ODMR contrast sweep
+frequencies = np.linspace(2.80e9, 2.90e9, 101)
+results = experiments.odmr_contrast(
+    mw_frequencies=frequencies,
+    laser_duration=2000,
+    mw_duration=2000,
+    detection_duration=1000,
+    repetitions=100
+)
 
-# Plot results
-experiments.plot_results('odmr')
+# Plot + save summary figures
+experiments.plot_results('odmr_contrast')
 
 # Clean up
 rigol.set_rf_output(False)
 rigol.disconnect()
 pulse_controller.disconnect()
+experiments.cleanup()
 ```
 
 ## ODMR Sequence Example
 
 ```python
-# Create ODMR sequence
-odmr_seq = controller.create_odmr_sequence(
+# Create an ODMR contrast sequence (MW-off + MW-on sub-sequences back-to-back)
+odmr_seq, total_duration_ns = controller.create_odmr_sequence_contrast(
     laser_duration=1000,      # 1 µs laser pulse
-    mw_duration=100,          # 100 ns MW pulse
-    detection_duration=500,   # 500 ns detection window
-    repetitions=1000          # 1000 repetitions
+    mw_duration=104,          # MW pulse (rounded up to nearest 8 ns)
+    detection_duration=504,   # Detection window (rounded up to nearest 8 ns)
+    sequence_interval=10000
 )
 
-# Run the sequence
-controller.run_sequence(odmr_seq)
+# Run the sequence for a fixed number of repetitions
+controller.run_sequence(odmr_seq, n_runs=1000)
 ```
 
 ## Default Timing Parameters
 
-- Laser duration: 1 µs
-- MW duration: 100 ns
-- Detection duration: 500 ns
-- Laser delay: 50 ns
-- MW delay: 100 ns
+`SwabianPulseController.default_params` (all values in nanoseconds, aligned to 8 ns boundaries by `align_timing`):
+
+- Laser duration: 1000 ns (1 µs)
+- MW duration: 104 ns
+- Detection duration: 504 ns
+- Laser delay: 48 ns
+- MW delay: 104 ns
 - Detection delay: 200 ns
-- Sequence interval: 10 µs
+- Sequence interval: 10000 ns (10 µs)
+
+These are only starting points; `odmr_gui_qt.py` and `odmr_experiments.py` methods accept explicit overrides for every parameter per-measurement.
 
 ## Hardware Requirements
 

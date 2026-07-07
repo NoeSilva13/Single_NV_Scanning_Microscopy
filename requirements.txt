@@ -1,6 +1,46 @@
+# =============================================================================
+# Single NV Scanning & ODMR Control Suite - Python dependencies
+# =============================================================================
+# Install with:  pip install -r requirements.txt
+#
+# Some hardware SDKs are NOT distributed on PyPI and must be installed
+# separately from the vendor (see the "Vendor SDKs" section below and the
+# main README.md "Installation" section for download links).
+# =============================================================================
+
+# --- Core scientific stack -------------------------------------------------
+numpy>=1.21.0
+pandas>=1.3.0
+matplotlib>=3.5.0
+scipy>=1.7.0
+opencv-python>=4.5.0
+tifffile>=2021.11.2
+
+# --- GUI frameworks ----------------------------------------------------------
 PyQt5>=5.15.0
 pyqtgraph>=0.12.0
-numpy>=1.21.0
-opencv-python>=4.5.0
-matplotlib>=3.5.0
-ctypes-callable>=1.0.0 
+qtpy>=2.0.0
+napari[pyqt5]>=0.4.16
+magicgui>=0.5.0
+
+# --- Hardware I/O -------------------------------------------------------------
+nidaqmx>=0.6.0          # National Instruments USB-6453 DAQ (galvo control, confocal_main_control.py)
+pyvisa>=1.11.0           # VISA/Ethernet SCPI control of RIGOL DSG836 (PulseBlaster/rigol_dsg836.py)
+pythonnet>=3.0.0         # .NET interop ("clr" module) for Thorlabs Kinesis piezo control (piezo_controller.py)
+
+# =============================================================================
+# Vendor SDKs (NOT installable via pip - install manually, see README.md)
+# =============================================================================
+# - Swabian Instruments TimeTagger SDK   -> https://www.swabianinstruments.com/time-tagger/downloads/
+#   Provides the `TimeTagger` Python module used for photon counting.
+# - Swabian Instruments Pulse Streamer   -> pip install pulsestreamer
+#   (This one IS on PyPI, listed separately since it's optional if you don't use odmr_gui_qt.py)
+# - Thorlabs Kinesis                      -> https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=Motion_Control
+#   Provides the .NET DLLs referenced via `pythonnet`/`clr` in piezo_controller.py.
+# - Player One Astronomy (POA) Camera SDK -> https://player-one-astronomy.com/service/software/
+#   Provides the native `PlayerOneCamera` / `ASICamera2` libraries wrapped by Camera/pyPOACamera.py.
+# - ZWO ASI Camera SDK (optional)         -> https://astronomy-imaging-camera.com/software-drivers
+#   Only required if using the ZWO camera backend in widgets/camera_controls.py.
+
+# --- Optional (only needed for odmr_gui_qt.py pulse-sequence control) -------
+pulsestreamer>=1.6.0

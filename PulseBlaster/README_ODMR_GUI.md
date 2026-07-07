@@ -14,10 +14,15 @@ A professional graphical interface for controlling continuous wave ODMR (Optical
 - **Progress Monitoring**: Real-time progress tracking and status updates with terminal-style logging
 - **Professional Interface**: Dark theme (#262930) with green accents (#00d4aa) matching napari viewer
 
+### Three Measurement Tabs
+- **ODMR**: Continuous-wave frequency sweep (contrast method: interleaved MW-off/MW-on) to locate the NV resonance
+- **Rabi**: Microwave-duration sweep to observe coherent Rabi oscillations and calibrate π/2, π pulses
+- **T1**: Dark-time delay sweep to measure spin-lattice relaxation, with an automatic stretched-exponential fit
+
 ### Hardware Integration
-- **Swabian Pulse Streamer**: Complete pulse sequence control via IP connection (default: 192.168.0.201)
-- **RIGOL DSG836**: Microwave signal generation and frequency sweeping via Ethernet
-- **TimeTagger**: Single photon detection and counting
+- **Swabian Pulse Streamer**: Complete pulse sequence control via IP connection (default: 192.168.0.203)
+- **RIGOL DSG836**: Microwave signal generation and frequency sweeping via Ethernet (default: 192.168.0.223)
+- **TimeTagger**: Single photon detection and counting (real, network, or virtual/replay fallback)
 - **Safety Features**: Automatic RF output control and hardware cleanup
 
 ### Data Management
@@ -48,9 +53,9 @@ A professional graphical interface for controlling continuous wave ODMR (Optical
 ### Quick Start
 
 1. **Clone or download** the repository
-2. **Navigate** to the PulseBlaster directory:
+2. **Navigate** to the repository root (the GUI entry point lives at the top level, not inside `PulseBlaster/`):
    ```bash
-   cd Single_NV_Scannig_Microscopy/PulseBlaster
+   cd Single_NV_Scannig_Microscopy
    ```
 3. **Run the application**:
    ```bash
@@ -59,7 +64,7 @@ A professional graphical interface for controlling continuous wave ODMR (Optical
 
 ## 🎛️ User Interface
 
-The application features a clean tabbed interface with two main sections:
+The application features a clean tabbed interface with four main sections: **ODMR**, **Rabi**, **T1**, and **Device Settings**.
 
 ### 🔬 ODMR Control Tab
 **Main measurement control with all functional parameters organized in logical groups:**
@@ -95,12 +100,18 @@ The application features a clean tabbed interface with two main sections:
   - Save/Load parameter configurations
   - Export measurement results
 
+### 🌀 Rabi Control Tab
+Sweeps microwave pulse duration instead of frequency, at a fixed MW frequency. Same organization as the ODMR tab (timing/delay/sequence parameters, MW power, measurement control, and save/load), plus its own live plot and pulse-pattern preview. Used to calibrate π/2 and π pulse durations from the resulting Rabi oscillation.
+
+### ⏱️ T1 Control Tab
+Sweeps the dark-time delay between an initialization laser pulse and a readout laser pulse to measure the NV spin-lattice relaxation time (T1). No microwave is required for this measurement. Results are automatically fit to a stretched-exponential decay, and the fitted T1 value (with uncertainty) is reported after the sweep completes.
+
 ### ⚙️ Device Settings Tab
 **Hardware connection management and system information:**
 
 - **Device Connections**
-  - Pulse Streamer IP: Network connection to Pulse Streamer (default: 192.168.0.201)
-  - RIGOL DSG836 IP: Network connection to signal generator (default: 192.168.0.222)
+  - Pulse Streamer IP: Network connection to Pulse Streamer (default: 192.168.0.203)
+  - RIGOL DSG836 IP: Network connection to signal generator (default: 192.168.0.223)
   - Connection status indicators (🟢 Connected / 🔴 Disconnected)
 
 - **System Information**
@@ -117,8 +128,8 @@ The application features a clean tabbed interface with two main sections:
 
 ### 1. Hardware Setup
 1. **Connect hardware**:
-   - Swabian Pulse Streamer via IP network (default IP: 192.168.0.201)
-   - RIGOL DSG836 via Ethernet (default IP: 192.168.0.222)
+   - Swabian Pulse Streamer via IP network (default IP: 192.168.0.203)
+   - RIGOL DSG836 via Ethernet (default IP: 192.168.0.223)
    - TimeTagger via USB
    - Optical setup with NV sample
 
@@ -195,15 +206,15 @@ MW Power: -5 dBm
 
 **Pulse Streamer not connecting:**
 - Check network connection to device
-- Verify IP address (default: 192.168.0.201)
-- Try pinging the device: `ping 192.168.0.201`
+- Verify IP address (default: 192.168.0.203)
+- Try pinging the device: `ping 192.168.0.203`
 - Check firewall settings
 - Verify pulsestreamer Python package is installed
 
 **RIGOL not connecting:**
 - Check Ethernet connection
-- Verify IP address (default: 192.168.0.222)
-- Try pinging the device: `ping 192.168.0.222`
+- Verify IP address (default: 192.168.0.223)
+- Try pinging the device: `ping 192.168.0.223`
 - Check network settings and firewall
 - Use "Test RIGOL Signal" button in Device Settings
 
@@ -336,13 +347,14 @@ For technical support:
 - **v1.3**: Code quality cleanup - removed non-functional parameters
 - **v1.4**: Interface reorganization - moved MW Power to main control tab
 - **v1.5**: Updated Pulse Streamer connection to IP-only (USB not supported)
+- **v1.6**: Added Rabi oscillation and T1 relaxation measurement tabs alongside ODMR
 
 ## 📚 Related Documentation
 
 - **ODMR Experiments**: See `odmr_experiments.py` for measurement implementation details
 - **Pulse Control**: See `swabian_pulse_streamer.py` for pulse sequence programming
 - **Signal Generation**: See `rigol_dsg836.py` for MW source control
-- **Main Scanning Software**: See `napari_scanning_SPD_refactored.py` for overall system integration
+- **Main Scanning Software**: See `confocal_main_control.py` for the separate confocal scanning application
 
 ## 📄 License
 
