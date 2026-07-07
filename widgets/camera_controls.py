@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, 
 from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot, Qt
 from magicgui import magicgui, widgets
 from napari.utils.notifications import show_info
-from Camera import POACameraController, ZWOCameraController
+from Camera import POACameraController, ZWOCameraController, USBWebcamController
 
 
 class CameraUpdateThread(QThread):
@@ -53,6 +53,8 @@ def camera_live(viewer, get_camera_type_func=None):
             
             if camera_type == "ZWO":
                 _camera_live.camera = ZWOCameraController()
+            elif camera_type == "USB":
+                _camera_live.camera = USBWebcamController()
             else:
                 _camera_live.camera = POACameraController()
             
@@ -85,7 +87,12 @@ def camera_live(viewer, get_camera_type_func=None):
             # Start camera feed
             if not hasattr(_camera_live, 'camera_layer') or _camera_live.camera_layer not in viewer.layers:
                 # Connect to camera
-                if not _camera_live.camera.connect(camera_index=0, width=1024, height=1024):  # Set desired resolution
+                camera_type_for_connect = get_camera_type_func() if get_camera_type_func else "POA"
+                if camera_type_for_connect == "USB":
+                    if not _camera_live.camera.connect(camera_index=0, width=960, height=720):
+                        show_info("❌ Failed to connect to camera")
+                        return
+                elif not _camera_live.camera.connect(camera_index=0, width=1024, height=1024):
                     show_info("❌ Failed to connect to camera")
                     return
                 
@@ -107,8 +114,8 @@ def camera_live(viewer, get_camera_type_func=None):
                 if get_camera_type_func:
                     camera_type = get_camera_type_func()
                 
-                if camera_type == "ZWO":
-                    # ZWO is a color camera - create RGB frame
+                if camera_type in ("ZWO", "USB"):
+                    # Color camera - create RGB frame
                     initial_frame = np.zeros((height, width, 3), dtype=np.uint8)
                     colormap = None  # Use default RGB display
                 else:
@@ -125,7 +132,12 @@ def camera_live(viewer, get_camera_type_func=None):
                 )
             else:
                 # Reuse existing layer but reconnect camera
-                if not _camera_live.camera.connect(camera_index=0, width=1024, height=1024):
+                camera_type_for_connect = get_camera_type_func() if get_camera_type_func else "POA"
+                if camera_type_for_connect == "USB":
+                    if not _camera_live.camera.connect(camera_index=0, width=960, height=720):
+                        show_info("❌ Failed to connect to camera")
+                        return
+                elif not _camera_live.camera.connect(camera_index=0, width=1024, height=1024):
                     show_info("❌ Failed to connect to camera")
                     return
                 
@@ -188,6 +200,8 @@ def capture_shot(viewer, settings_callback=None, get_camera_type_func=None):
             
             if camera_type == "ZWO":
                 _capture_shot.camera = ZWOCameraController()
+            elif camera_type == "USB":
+                _capture_shot.camera = USBWebcamController()
             else:
                 _capture_shot.camera = POACameraController()
             
@@ -206,7 +220,12 @@ def capture_shot(viewer, settings_callback=None, get_camera_type_func=None):
             
             # Connect to camera if not already connected
             if not _capture_shot.camera.is_connected:
-                if not _capture_shot.camera.connect(camera_index=0, width=1024, height=1024):
+                camera_type_for_connect = get_camera_type_func() if get_camera_type_func else "POA"
+                if camera_type_for_connect == "USB":
+                    if not _capture_shot.camera.connect(camera_index=0, width=960, height=720):
+                        show_info("❌ Failed to connect to camera")
+                        return
+                elif not _capture_shot.camera.connect(camera_index=0, width=1024, height=1024):
                     show_info("❌ Failed to connect to camera")
                     return
                 
@@ -305,6 +324,7 @@ class CameraControlWidget(QWidget):
         self.camera_type_combo = QComboBox()
         self.camera_type_combo.addItem("POA Camera")
         self.camera_type_combo.addItem("ZWO Camera")
+        self.camera_type_combo.addItem("USB Webcam")
         self.camera_type_combo.currentTextChanged.connect(self.on_camera_type_changed)
         camera_type_layout.addWidget(self.camera_type_combo)
         
@@ -322,10 +342,19 @@ class CameraControlWidget(QWidget):
         exposure_layout.setSpacing(0)
         exposure_layout.setContentsMargins(0, 0, 0, 0)
         
+        exp_header = QHBoxLayout()
+        exp_header.setContentsMargins(0, 0, 0, 0)
         exp_label = QLabel("Exposure (ms):")
-        exp_label.setAlignment(Qt.AlignCenter)
-        exposure_layout.addWidget(exp_label)
-        
+        exp_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        exp_header.addWidget(exp_label)
+        exp_header.addStretch()
+        self.exposure_value_label = QLabel("50")
+        self.exposure_value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        exp_header.addWidget(self.exposure_value_label)
+        exp_header_widget = QWidget()
+        exp_header_widget.setLayout(exp_header)
+        exposure_layout.addWidget(exp_header_widget)
+
         self.exposure_slider = QSlider(Qt.Horizontal)
         self.exposure_slider.setMinimum(1)
         self.exposure_slider.setMaximum(1000)
@@ -341,11 +370,20 @@ class CameraControlWidget(QWidget):
         gain_layout = QVBoxLayout()
         gain_layout.setSpacing(0)
         gain_layout.setContentsMargins(0, 0, 0, 0)
-        
+
+        gain_header = QHBoxLayout()
+        gain_header.setContentsMargins(0, 0, 0, 0)
         gain_label = QLabel("Gain:")
-        gain_label.setAlignment(Qt.AlignCenter)
-        gain_layout.addWidget(gain_label)
-        
+        gain_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        gain_header.addWidget(gain_label)
+        gain_header.addStretch()
+        self.gain_value_label = QLabel("300")
+        self.gain_value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        gain_header.addWidget(self.gain_value_label)
+        gain_header_widget = QWidget()
+        gain_header_widget.setLayout(gain_header)
+        gain_layout.addWidget(gain_header_widget)
+
         self.gain_slider = QSlider(Qt.Horizontal)
         self.gain_slider.setMinimum(0)
         self.gain_slider.setMaximum(1000)
@@ -356,16 +394,47 @@ class CameraControlWidget(QWidget):
         gain_widget.setLayout(gain_layout)
         layout.addWidget(gain_widget, 2, 1)
         
+        # Apply correct slider ranges for the initially selected camera type
+        self._apply_slider_ranges(self.get_camera_type())
+
         # Set fixed height for better appearance
         self.setFixedHeight(150)  # Increased to accommodate camera selection
     
+    # Slider ranges per camera type
+    _SLIDER_RANGES = {
+        "USB": {"exp_max": 8,    "exp_default": 4,   "gain_max": 255, "gain_default": 128},
+        "POA": {"exp_max": 1000, "exp_default": 50,  "gain_max": 1000, "gain_default": 300},
+        "ZWO": {"exp_max": 1000, "exp_default": 50,  "gain_max": 1000, "gain_default": 300},
+    }
+
     def get_camera_type(self):
         """Get the currently selected camera type"""
-        if self.camera_type_combo.currentText() == "ZWO Camera":
+        text = self.camera_type_combo.currentText()
+        if text == "ZWO Camera":
             return "ZWO"
+        elif text == "USB Webcam":
+            return "USB"
         else:
             return "POA"
-    
+
+    def _apply_slider_ranges(self, camera_type: str):
+        """Adjust slider limits and defaults for the selected camera type."""
+        ranges = self._SLIDER_RANGES.get(camera_type, self._SLIDER_RANGES["POA"])
+
+        self.exposure_slider.blockSignals(True)
+        self.exposure_slider.setMaximum(ranges["exp_max"])
+        self.exposure_slider.setValue(min(self.exposure_slider.value(), ranges["exp_max"]))
+        self.exposure_slider.setValue(ranges["exp_default"])
+        self.exposure_value_label.setText(str(ranges["exp_default"]))
+        self.exposure_slider.blockSignals(False)
+
+        self.gain_slider.blockSignals(True)
+        self.gain_slider.setMaximum(ranges["gain_max"])
+        self.gain_slider.setValue(min(self.gain_slider.value(), ranges["gain_max"]))
+        self.gain_slider.setValue(ranges["gain_default"])
+        self.gain_value_label.setText(str(ranges["gain_default"]))
+        self.gain_slider.blockSignals(False)
+
     @pyqtSlot(str)
     def on_camera_type_changed(self, camera_type_text):
         """Handle camera type change"""
@@ -393,19 +462,33 @@ class CameraControlWidget(QWidget):
             # Remove camera reference without using del
             self.capture_shot_widget.camera = None
         
+        # Adjust slider ranges for the new camera type
+        self._apply_slider_ranges(self.get_camera_type())
+
         # Show info about the change
-        camera_type = "ZWO" if camera_type_text == "ZWO Camera" else "POA"
+        type_map = {"ZWO Camera": "ZWO", "USB Webcam": "USB Webcam"}
+        camera_type = type_map.get(camera_type_text, "POA")
         show_info(f"📷 Switched to {camera_type} camera mode")
     
     @pyqtSlot(int)
     def update_exposure(self, value):
         if hasattr(self.camera_live_widget, 'camera') and self.camera_live_widget.camera is not None:
             self.camera_live_widget.camera.set_exposure(value * 1000)  # Convert ms to µs
+            # For USB webcam the driver quantises to integer log₂ steps; read back the
+            # actual settled value so the label matches what the hardware is doing.
+            if self.get_camera_type() == "USB":
+                actual_ms = self.camera_live_widget.camera.get_exposure() // 1000
+                self.exposure_value_label.setText(str(actual_ms))
+            else:
+                self.exposure_value_label.setText(str(value))
+        else:
+            self.exposure_value_label.setText(str(value))
         if hasattr(self.capture_shot_widget, 'camera') and self.capture_shot_widget.camera is not None:
             self.capture_shot_widget.camera.set_exposure(value * 1000)  # Convert ms to µs
-    
+
     @pyqtSlot(int)
     def update_gain(self, value):
+        self.gain_value_label.setText(str(value))
         if hasattr(self.camera_live_widget, 'camera') and self.camera_live_widget.camera is not None:
             self.camera_live_widget.camera.set_gain(value)
         if hasattr(self.capture_shot_widget, 'camera') and self.capture_shot_widget.camera is not None:
