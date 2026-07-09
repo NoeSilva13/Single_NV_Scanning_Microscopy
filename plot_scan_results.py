@@ -17,8 +17,10 @@ from pathlib import Path
 
 from utils import calculate_scale
 
-# ── Style (mirrors nv_style.py) ───────────────────────────────────────────────
-matplotlib.rcParams.update({
+# ── Style (mirrors nv_style.py) — applied only inside plot_scan_results ───────
+# Use rc_context so importing this module does not mutate global rcParams
+# (which would affect live-plot widgets in confocal_main_control).
+_SCAN_RCPARAMS = {
     "font.family":          "serif",
     "font.size":            8,
     "axes.labelsize":       8,
@@ -41,7 +43,7 @@ matplotlib.rcParams.update({
     "savefig.dpi":          300,
     "savefig.bbox":         "tight",
     "savefig.pad_inches":   0.02,
-})
+}
 
 # Figure dimensions: single-column width (inches) and aspect ratio for images
 _W1     = 3.5
@@ -99,57 +101,59 @@ def plot_scan_results(scan_data: dict, save_path: str | Path, *,
     vmax = float(np.percentile(image, VMAX_PCT))
     print(f"[display] {VMIN_PCT}th={vmin:.3g} – {VMAX_PCT}th={vmax:.3g} counts")
 
-    # ── Figure ────────────────────────────────────────────────────────────────
-    fig = Figure(figsize=(_W1, _W1 * _ASPECT))
-    FigureCanvasAgg(fig)
-    ax = fig.add_subplot(111)
+    # Style is scoped so global rcParams (and other GUI widgets) are unchanged.
+    with matplotlib.rc_context(_SCAN_RCPARAMS):
+        # ── Figure ────────────────────────────────────────────────────────────
+        fig = Figure(figsize=(_W1, _W1 * _ASPECT))
+        FigureCanvasAgg(fig)
+        ax = fig.add_subplot(111)
 
-    extent = [x_range[0], x_range[1], y_range[0], y_range[1]]
-    im = ax.imshow(
-        image,
-        extent=extent,
-        origin="lower",
-        cmap="inferno",
-        norm=Normalize(vmin=vmin, vmax=vmax),
-        aspect="equal",
-        interpolation="nearest",
-        rasterized=True,
-    )
+        extent = [x_range[0], x_range[1], y_range[0], y_range[1]]
+        im = ax.imshow(
+            image,
+            extent=extent,
+            origin="lower",
+            cmap="inferno",
+            norm=Normalize(vmin=vmin, vmax=vmax),
+            aspect="equal",
+            interpolation="nearest",
+            rasterized=True,
+        )
 
-    # ── Colorbar ──────────────────────────────────────────────────────────────
-    cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cb.set_label(CBLABEL, fontsize=7)
-    cb.ax.tick_params(labelsize=6)
+        # ── Colorbar ──────────────────────────────────────────────────────────
+        cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+        cb.set_label(CBLABEL, fontsize=7)
+        cb.ax.tick_params(labelsize=6)
 
-    # ── Axes style ────────────────────────────────────────────────────────────
-    ax.spines["top"].set_visible(True)
-    ax.spines["right"].set_visible(True)
-    ax.tick_params(which="both", direction="out", top=False, right=False)
-    ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
-    ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
+        # ── Axes style ────────────────────────────────────────────────────────
+        ax.spines["top"].set_visible(True)
+        ax.spines["right"].set_visible(True)
+        ax.tick_params(which="both", direction="out", top=False, right=False)
+        ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
+        ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
 
-    ax.set_xlabel(r"$x$ ($\mu$m)")
-    ax.set_ylabel(r"$y$ ($\mu$m)")
-    if show_title:
-        ax.set_title(title)
+        ax.set_xlabel(r"$x$ ($\mu$m)")
+        ax.set_ylabel(r"$y$ ($\mu$m)")
+        if show_title:
+            ax.set_title(title)
 
-    # ── Scale bar (~20 % of FOV, bottom-left corner) ──────────────────────────
-    if show_scalebar:
-        scale_len = round(scan_width_um / 5)
-        pad       = scan_width_um * 0.08
-        x0 = x_range[0] + pad
-        y0 = y_range[0] + pad
-        ax.plot([x0, x0 + scale_len], [y0, y0],
-                "-", color="white", linewidth=1.8, solid_capstyle="butt")
-        ax.text(x0 + scale_len / 2, y0 + scan_width_um * 0.04,
-                fr"${scale_len}\,\mu$m",
-                ha="center", va="bottom", color="white", fontsize=6)
+        # ── Scale bar (~20 % of FOV, bottom-left corner) ──────────────────────
+        if show_scalebar:
+            scale_len = round(scan_width_um / 5)
+            pad       = scan_width_um * 0.08
+            x0 = x_range[0] + pad
+            y0 = y_range[0] + pad
+            ax.plot([x0, x0 + scale_len], [y0, y0],
+                    "-", color="white", linewidth=1.8, solid_capstyle="butt")
+            ax.text(x0 + scale_len / 2, y0 + scan_width_um * 0.04,
+                    fr"${scale_len}\,\mu$m",
+                    ha="center", va="bottom", color="white", fontsize=6)
 
-    # ── Save ──────────────────────────────────────────────────────────────────
-    save_path.parent.mkdir(parents=True, exist_ok=True)
-    png_path = save_path.with_suffix(".png")
-    # pdf_path = save_path.with_suffix(".pdf")
-    fig.savefig(png_path, format="png", dpi=300, bbox_inches="tight", pad_inches=0.02)
-    # fig.savefig(pdf_path, format="pdf",          bbox_inches="tight", pad_inches=0.02)
-    print(f"[saved] {png_path.name}")
+        # ── Save ──────────────────────────────────────────────────────────────
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        png_path = save_path.with_suffix(".png")
+        # pdf_path = save_path.with_suffix(".pdf")
+        fig.savefig(png_path, format="png", dpi=300, bbox_inches="tight", pad_inches=0.02)
+        # fig.savefig(pdf_path, format="pdf",          bbox_inches="tight", pad_inches=0.02)
+        print(f"[saved] {png_path.name}")
     return png_path
