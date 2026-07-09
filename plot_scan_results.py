@@ -57,10 +57,10 @@ CBLABEL = "SPD counts"
 
 def plot_scan_results(scan_data: dict, save_path: str | Path, *,
                       title: str = "Confocal scan",
-                      show_title: bool = True,
+                      show_title: bool = False,
                       show_scalebar: bool = True) -> Path:
     """
-    Save a 2D confocal scan as a publication-quality PNG + PDF.
+    Save a 2D confocal scan as a publication-quality PNG.
 
     Thread-safe: uses Figure + FigureCanvasAgg — no pyplot global state.
 
@@ -148,8 +148,8 @@ def plot_scan_results(scan_data: dict, save_path: str | Path, *,
     # ── Save ──────────────────────────────────────────────────────────────────
     save_path.parent.mkdir(parents=True, exist_ok=True)
     png_path = save_path.with_suffix(".png")
-    pdf_path = save_path.with_suffix(".pdf")
+    # pdf_path = save_path.with_suffix(".pdf")
     fig.savefig(png_path, format="png", dpi=300, bbox_inches="tight", pad_inches=0.02)
-    fig.savefig(pdf_path, format="pdf",          bbox_inches="tight", pad_inches=0.02)
-    print(f"[saved] {png_path.name}  +  {pdf_path.name}")
+    # fig.savefig(pdf_path, format="pdf",          bbox_inches="tight", pad_inches=0.02)
+    print(f"[saved] {png_path.name}")
     return png_path
