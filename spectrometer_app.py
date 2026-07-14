@@ -122,7 +122,9 @@ class SpectrumProcessor:
     """Process camera frames to extract spectral data"""
     
     def __init__(self):
-        self.wavelength_calibration = None
+        # Linear λ calibration relative to current ROI X edges (None = use pixel indices)
+        self.wavelength_start_nm = None
+        self.wavelength_end_nm = None
         self.roi_start_y = 0
         self.roi_height = 480
         self.roi_start_x = 0
@@ -136,9 +138,15 @@ class SpectrumProcessor:
         self.roi_start_x = start_x
         self.roi_width = width
     
-    def set_wavelength_calibration(self, wavelengths: np.ndarray):
-        """Set wavelength calibration array"""
-        self.wavelength_calibration = wavelengths
+    def set_wavelength_calibration(self, start_nm: float, end_nm: float):
+        """Set linear wavelength calibration for ROI X edges (start → left, end → right)"""
+        self.wavelength_start_nm = float(start_nm)
+        self.wavelength_end_nm = float(end_nm)
+    
+    def clear_wavelength_calibration(self):
+        """Clear wavelength calibration (spectrum X axis uses pixel indices)"""
+        self.wavelength_start_nm = None
+        self.wavelength_end_nm = None
     
     @staticmethod
     def _to_grayscale(frame: np.ndarray) -> np.ndarray:
@@ -179,21 +187,14 @@ class SpectrumProcessor:
                                        self.roi_start_x:self.roi_start_x + self.roi_width]
             spectrum = spectrum - np.mean(dark_roi, axis=0)
         
-        # Create x-axis (wavelengths or pixels)
-        if self.wavelength_calibration is not None:
-            # Extract the wavelength range corresponding to the selected x ROI
-            x_axis = self.wavelength_calibration[self.roi_start_x:self.roi_start_x + self.roi_width]
+        # X axis: λ mapped to current ROI edges, or absolute pixel indices
+        if self.wavelength_start_nm is not None and self.wavelength_end_nm is not None:
+            x_axis = np.linspace(
+                self.wavelength_start_nm, self.wavelength_end_nm, len(spectrum))
         else:
-            # Use pixel indices relative to the ROI start
             x_axis = np.arange(self.roi_start_x, self.roi_start_x + len(spectrum))
         
         return x_axis, spectrum
-    
-    def create_default_wavelength_calibration(self, num_pixels: int, 
-                                           start_wavelength: float = 400.0,
-                                           end_wavelength: float = 800.0) -> np.ndarray:
-        """Create default linear wavelength calibration"""
-        return np.linspace(start_wavelength, end_wavelength, num_pixels)
 
 
 class SpectrometerMainWindow(QMainWindow):
@@ -430,6 +431,7 @@ class SpectrometerMainWindow(QMainWindow):
         self.start_wavelength_spinbox.setRange(200, 1000)
         self.start_wavelength_spinbox.setValue(400)
         self.start_wavelength_spinbox.setSuffix(" nm")
+        self.start_wavelength_spinbox.setToolTip("Wavelength at the left edge of the ROI")
         cal_layout.addWidget(self.start_wavelength_spinbox, 0, 1)
         
         cal_layout.addWidget(QLabel("End λ (nm):"), 1, 0)
@@ -437,6 +439,7 @@ class SpectrometerMainWindow(QMainWindow):
         self.end_wavelength_spinbox.setRange(200, 1000)
         self.end_wavelength_spinbox.setValue(800)
         self.end_wavelength_spinbox.setSuffix(" nm")
+        self.end_wavelength_spinbox.setToolTip("Wavelength at the right edge of the ROI")
         cal_layout.addWidget(self.end_wavelength_spinbox, 1, 1)
         
         self.apply_calibration_button = QPushButton("Apply Calibration")
@@ -646,22 +649,17 @@ class SpectrometerMainWindow(QMainWindow):
 
     
     def apply_wavelength_calibration(self):
-        """Apply wavelength calibration"""
+        """Apply linear wavelength calibration to current ROI X edges"""
         start_wl = self.start_wavelength_spinbox.value()
         end_wl = self.end_wavelength_spinbox.value()
         
-        # Get camera width (6252 pixels for spectrometer)
-        info = self.camera_worker.get_camera_info()
-        width = info.get('width', 6252)
+        self.spectrum_processor.set_wavelength_calibration(start_wl, end_wl)
         
-        # Create linear calibration
-        wavelengths = self.spectrum_processor.create_default_wavelength_calibration(
-            width, start_wl, end_wl)
-        self.spectrum_processor.set_wavelength_calibration(wavelengths)
-        
-        # Update plot labels
         self.spectrum_plot.setLabel('bottom', 'Wavelength (nm)')
-        self.status_bar.showMessage(f"Wavelength calibration applied: {start_wl}-{end_wl} nm")
+        self.status_bar.showMessage(
+            f"ROI wavelength calibration applied: {start_wl}-{end_wl} nm "
+            f"(ROI width={self.spectrum_processor.roi_width} px)"
+        )
     
     def _get_calibration_dict(self) -> dict:
         """Collect current ROI, camera, and wavelength settings"""
