@@ -6,6 +6,7 @@ Uses POA camera to capture horizontal line spectra and display wavelength vs int
 
 import sys
 import time
+import json
 import numpy as np
 from typing import Optional, Tuple
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
@@ -348,39 +349,33 @@ class SpectrometerMainWindow(QMainWindow):
         roi_group = QGroupBox("ROI Settings")
         roi_layout = QGridLayout(roi_group)
         
-        # Add instruction label
-        instruction_label = QLabel("1. Start camera first\n2. Click ROI button in camera view\n3. Drag rectangle over spectral region\n4. Click 'Apply Visual ROI' button")
-        instruction_label.setWordWrap(True)
-        instruction_label.setStyleSheet("color: #00d4aa; font-size: 9pt; font-style: italic;")
-        roi_layout.addWidget(instruction_label, 0, 0, 1, 2)
-        
-        roi_layout.addWidget(QLabel("Start Y:"), 1, 0)
+        roi_layout.addWidget(QLabel("Start Y:"), 0, 0)
         self.roi_start_spinbox = QSpinBox()
         self.roi_start_spinbox.setRange(0, 480)
         self.roi_start_spinbox.setValue(0)
-        roi_layout.addWidget(self.roi_start_spinbox, 1, 1)
+        roi_layout.addWidget(self.roi_start_spinbox, 0, 1)
         
-        roi_layout.addWidget(QLabel("Height:"), 2, 0)
+        roi_layout.addWidget(QLabel("Height:"), 1, 0)
         self.roi_height_spinbox = QSpinBox()
         self.roi_height_spinbox.setRange(1, 480)
         self.roi_height_spinbox.setValue(480)
-        roi_layout.addWidget(self.roi_height_spinbox, 2, 1)
+        roi_layout.addWidget(self.roi_height_spinbox, 1, 1)
         
-        roi_layout.addWidget(QLabel("Start X:"), 3, 0)
+        roi_layout.addWidget(QLabel("Start X:"), 2, 0)
         self.roi_start_x_spinbox = QSpinBox()
         self.roi_start_x_spinbox.setRange(0, 6252)
         self.roi_start_x_spinbox.setValue(0)
-        roi_layout.addWidget(self.roi_start_x_spinbox, 3, 1)
+        roi_layout.addWidget(self.roi_start_x_spinbox, 2, 1)
         
-        roi_layout.addWidget(QLabel("Width:"), 4, 0)
+        roi_layout.addWidget(QLabel("Width:"), 3, 0)
         self.roi_width_spinbox = QSpinBox()
         self.roi_width_spinbox.setRange(1, 6252)
         self.roi_width_spinbox.setValue(6252)
-        roi_layout.addWidget(self.roi_width_spinbox, 4, 1)
+        roi_layout.addWidget(self.roi_width_spinbox, 3, 1)
         
         # Add the ROI button after it's created
         if hasattr(self, 'apply_visual_roi_button'):
-            roi_layout.addWidget(self.apply_visual_roi_button, 5, 0, 1, 2)
+            roi_layout.addWidget(self.apply_visual_roi_button, 4, 0, 1, 2)
         
         left_layout.addWidget(roi_group)
         
@@ -426,8 +421,8 @@ class SpectrometerMainWindow(QMainWindow):
         
         left_layout.addWidget(camera_group)
         
-        # Calibration controls
-        cal_group = QGroupBox("Wavelength Calibration")
+        # Calibration controls (wavelength + save/load of full setup)
+        cal_group = QGroupBox("Calibration")
         cal_layout = QGridLayout(cal_group)
         
         cal_layout.addWidget(QLabel("Start λ (nm):"), 0, 0)
@@ -446,6 +441,13 @@ class SpectrometerMainWindow(QMainWindow):
         
         self.apply_calibration_button = QPushButton("Apply Calibration")
         cal_layout.addWidget(self.apply_calibration_button, 2, 0, 1, 2)
+        
+        self.save_calibration_button = QPushButton("Save Calibration")
+        self.save_calibration_button.setToolTip("Save ROI, camera controls, and wavelength range to a file")
+        self.load_calibration_button = QPushButton("Load Calibration")
+        self.load_calibration_button.setToolTip("Load ROI, camera controls, and wavelength range from a file")
+        cal_layout.addWidget(self.save_calibration_button, 3, 0)
+        cal_layout.addWidget(self.load_calibration_button, 3, 1)
         
         left_layout.addWidget(cal_group)
         
@@ -505,6 +507,8 @@ class SpectrometerMainWindow(QMainWindow):
         self.start_button.clicked.connect(self.start_camera)
         self.stop_button.clicked.connect(self.stop_camera)
         self.apply_calibration_button.clicked.connect(self.apply_wavelength_calibration)
+        self.save_calibration_button.clicked.connect(self.save_calibration)
+        self.load_calibration_button.clicked.connect(self.load_calibration)
         self.capture_dark_button.clicked.connect(self.capture_dark)
         self.clear_dark_button.clicked.connect(self.clear_dark)
         
@@ -658,6 +662,85 @@ class SpectrometerMainWindow(QMainWindow):
         # Update plot labels
         self.spectrum_plot.setLabel('bottom', 'Wavelength (nm)')
         self.status_bar.showMessage(f"Wavelength calibration applied: {start_wl}-{end_wl} nm")
+    
+    def _get_calibration_dict(self) -> dict:
+        """Collect current ROI, camera, and wavelength settings"""
+        return {
+            "version": 1,
+            "roi": {
+                "start_y": self.roi_start_spinbox.value(),
+                "height": self.roi_height_spinbox.value(),
+                "start_x": self.roi_start_x_spinbox.value(),
+                "width": self.roi_width_spinbox.value(),
+            },
+            "camera": {
+                "exposure_ms": self.exposure_slider.value() / 10.0,
+                "gain": self.gain_slider.value(),
+            },
+            "wavelength": {
+                "start_nm": self.start_wavelength_spinbox.value(),
+                "end_nm": self.end_wavelength_spinbox.value(),
+            },
+        }
+    
+    def save_calibration(self):
+        """Save ROI, camera controls, and wavelength range to JSON"""
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Save Calibration", "", "Calibration Files (*.json);;All Files (*)")
+        if not filename:
+            return
+        if not filename.lower().endswith(".json"):
+            filename += ".json"
+        
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(self._get_calibration_dict(), f, indent=2)
+            self.status_bar.showMessage(f"Calibration saved to {filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error", f"Failed to save calibration: {str(e)}")
+    
+    def load_calibration(self):
+        """Load ROI, camera controls, and wavelength range from JSON"""
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Load Calibration", "", "Calibration Files (*.json);;All Files (*)")
+        if not filename:
+            return
+        
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            roi = data.get("roi", {})
+            camera = data.get("camera", {})
+            wavelength = data.get("wavelength", {})
+            
+            # ROI (signals update spectrum processor)
+            if "start_y" in roi:
+                self.roi_start_spinbox.setValue(int(roi["start_y"]))
+            if "height" in roi:
+                self.roi_height_spinbox.setValue(int(roi["height"]))
+            if "start_x" in roi:
+                self.roi_start_x_spinbox.setValue(int(roi["start_x"]))
+            if "width" in roi:
+                self.roi_width_spinbox.setValue(int(roi["width"]))
+            
+            # Camera controls
+            if "exposure_ms" in camera:
+                exposure_ms = float(camera["exposure_ms"])
+                self.exposure_slider.setValue(int(round(exposure_ms * 10)))
+            if "gain" in camera:
+                self.gain_slider.setValue(int(camera["gain"]))
+            
+            # Wavelength range + apply
+            if "start_nm" in wavelength:
+                self.start_wavelength_spinbox.setValue(float(wavelength["start_nm"]))
+            if "end_nm" in wavelength:
+                self.end_wavelength_spinbox.setValue(float(wavelength["end_nm"]))
+            self.apply_wavelength_calibration()
+            
+            self.status_bar.showMessage(f"Calibration loaded from {filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Load Error", f"Failed to load calibration: {str(e)}")
     
     def capture_dark(self):
         """Capture current frame as dark for subtraction"""
