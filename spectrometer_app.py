@@ -126,8 +126,7 @@ class SpectrumProcessor:
         self.roi_height = 480
         self.roi_start_x = 0
         self.roi_width = 6252
-        self.dark_frame = None
-        self.reference_frame = None
+        self.dark_frame = None  # Full 2D grayscale frame for dark subtraction
         
     def set_roi(self, start_y: int, height: int, start_x: int = 0, width: int = 6252):
         """Set region of interest for spectrum extraction"""
@@ -140,21 +139,23 @@ class SpectrumProcessor:
         """Set wavelength calibration array"""
         self.wavelength_calibration = wavelengths
     
-    def set_dark_frame(self, frame: np.ndarray):
-        """Set dark frame for subtraction"""
-        if frame is not None:
-            # Extract ROI with both x and y dimensions and average vertically
-            roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, 
-                       self.roi_start_x:self.roi_start_x + self.roi_width]
-            self.dark_frame = np.mean(roi, axis=0)
+    @staticmethod
+    def _to_grayscale(frame: np.ndarray) -> np.ndarray:
+        """Convert frame to 2D grayscale if needed"""
+        if len(frame.shape) == 3:
+            if frame.shape[2] == 3:
+                return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            return frame[:, :, 0]
+        return frame
     
-    def set_reference_frame(self, frame: np.ndarray):
-        """Set reference frame for normalization"""
+    def set_dark_frame(self, frame: np.ndarray):
+        """Store full frame for dark subtraction (ROI applied at process time)"""
         if frame is not None:
-            # Extract ROI with both x and y dimensions and average vertically
-            roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, 
-                       self.roi_start_x:self.roi_start_x + self.roi_width]
-            self.reference_frame = np.mean(roi, axis=0)
+            self.dark_frame = self._to_grayscale(frame).astype(np.float64)
+    
+    def clear_dark_frame(self):
+        """Clear stored dark frame"""
+        self.dark_frame = None
     
     def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Extract spectrum from frame
@@ -162,13 +163,7 @@ class SpectrumProcessor:
         Returns:
             tuple: (wavelengths, intensities) or (pixels, intensities) if no calibration
         """
-        # Handle different frame formats
-        if len(frame.shape) == 3:
-            # Color or multi-channel image, convert to grayscale
-            if frame.shape[2] == 3:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            else:
-                frame = frame[:, :, 0]  # Take first channel
+        frame = self._to_grayscale(frame)
         
         # Extract ROI with both x and y dimensions
         roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, 
@@ -177,19 +172,11 @@ class SpectrumProcessor:
         # Average vertically to get horizontal line spectrum
         spectrum = np.mean(roi, axis=0, dtype=np.float64)
         
-        # Apply dark frame subtraction
+        # Apply dark frame subtraction using current ROI
         if self.dark_frame is not None:
-            spectrum = spectrum - self.dark_frame
-        
-        # Apply reference normalization
-        if self.reference_frame is not None:
-            ref_corrected = self.reference_frame
-            if self.dark_frame is not None:
-                ref_corrected = ref_corrected - self.dark_frame
-            
-            # Avoid division by zero
-            ref_corrected = np.where(ref_corrected > 0, ref_corrected, 1)
-            spectrum = spectrum / ref_corrected
+            dark_roi = self.dark_frame[self.roi_start_y:self.roi_start_y + self.roi_height,
+                                       self.roi_start_x:self.roi_start_x + self.roi_width]
+            spectrum = spectrum - np.mean(dark_roi, axis=0)
         
         # Create x-axis (wavelengths or pixels)
         if self.wavelength_calibration is not None:
@@ -462,7 +449,19 @@ class SpectrometerMainWindow(QMainWindow):
         
         left_layout.addWidget(cal_group)
         
-
+        # Dark correction controls
+        dark_group = QGroupBox("Dark Correction")
+        dark_layout = QHBoxLayout(dark_group)
+        
+        self.capture_dark_button = QPushButton("Capture Dark")
+        self.capture_dark_button.setToolTip("Use current camera frame as dark (subtract from spectrum)")
+        self.clear_dark_button = QPushButton("Clear Dark")
+        self.clear_dark_button.setToolTip("Disable dark subtraction")
+        self.clear_dark_button.setEnabled(False)
+        dark_layout.addWidget(self.capture_dark_button)
+        dark_layout.addWidget(self.clear_dark_button)
+        
+        left_layout.addWidget(dark_group)
         
         # Right panel - Spectrum display
         right_widget = QWidget()
@@ -506,6 +505,8 @@ class SpectrometerMainWindow(QMainWindow):
         self.start_button.clicked.connect(self.start_camera)
         self.stop_button.clicked.connect(self.stop_camera)
         self.apply_calibration_button.clicked.connect(self.apply_wavelength_calibration)
+        self.capture_dark_button.clicked.connect(self.capture_dark)
+        self.clear_dark_button.clicked.connect(self.clear_dark)
         
         # Control connections
         self.exposure_slider.valueChanged.connect(self.update_exposure)
@@ -514,8 +515,6 @@ class SpectrometerMainWindow(QMainWindow):
         self.roi_height_spinbox.valueChanged.connect(self.update_roi)
         self.roi_start_x_spinbox.valueChanged.connect(self.update_roi)
         self.roi_width_spinbox.valueChanged.connect(self.update_roi)
-        
-
         
         # Recording controls
         self.record_button.clicked.connect(self.toggle_recording)
@@ -660,7 +659,22 @@ class SpectrometerMainWindow(QMainWindow):
         self.spectrum_plot.setLabel('bottom', 'Wavelength (nm)')
         self.status_bar.showMessage(f"Wavelength calibration applied: {start_wl}-{end_wl} nm")
     
-
+    def capture_dark(self):
+        """Capture current frame as dark for subtraction"""
+        if self.current_frame is None:
+            QMessageBox.warning(self, "Dark Capture", "No camera frame available. Start the camera first.")
+            return
+        
+        self.spectrum_processor.set_dark_frame(self.current_frame)
+        self.clear_dark_button.setEnabled(True)
+        self.status_bar.showMessage("Dark captured — subtraction enabled")
+    
+    def clear_dark(self):
+        """Clear dark frame and disable subtraction"""
+        self.spectrum_processor.clear_dark_frame()
+        self.clear_dark_button.setEnabled(False)
+        self.status_bar.showMessage("Dark cleared — subtraction disabled")
+    
     def toggle_recording(self):
         """Toggle spectrum recording"""
         if self.is_recording:
