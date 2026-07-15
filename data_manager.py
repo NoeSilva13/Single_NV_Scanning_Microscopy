@@ -63,8 +63,8 @@ class DataManager:
             # Write scan ranges
             x_range = scan_params['scan_range']['x']
             y_range = scan_params['scan_range']['y']
-            f.write(f"# X Range: {x_range[0]:.3f} to {x_range[1]:.3f} V\n")
-            f.write(f"# Y Range: {y_range[0]:.3f} to {y_range[1]:.3f} V\n")
+            f.write(f"# X Range: {x_range[0]:.6f} to {x_range[1]:.6f} V\n")
+            f.write(f"# Y Range: {y_range[0]:.6f} to {y_range[1]:.6f} V\n")
                 
             # Write resolutions
             x_res = scan_params['resolution']['x']
@@ -74,11 +74,11 @@ class DataManager:
                 
             # Write dwell time
             dwell_time = scan_params['dwell_time']
-            f.write(f"# Dwell Time: {dwell_time:.3f} s\n")
+            f.write(f"# Dwell Time: {dwell_time:.6f} s\n")
             
             # Write scan points information
-            f.write(f"# X Points: {len(x_points)} points from {x_points[0]:.3f}V to {x_points[-1]:.3f}V\n")
-            f.write(f"# Y Points: {len(y_points)} points from {y_points[0]:.3f}V to {y_points[-1]:.3f}V\n")
+            f.write(f"# X Points: {len(x_points)} points from {x_points[0]:.6f}V to {x_points[-1]:.6f}V\n")
+            f.write(f"# Y Points: {len(y_points)} points from {y_points[0]:.6f}V to {y_points[-1]:.6f}V\n")
             
             f.write("#\n")  # Empty line to separate header from data
             
