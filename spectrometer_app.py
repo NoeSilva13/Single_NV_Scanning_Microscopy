@@ -6,6 +6,7 @@ Uses POA camera to capture horizontal line spectra and display wavelength vs int
 
 import sys
 import time
+import json
 import numpy as np
 from typing import Optional, Tuple
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
@@ -121,13 +122,14 @@ class SpectrumProcessor:
     """Process camera frames to extract spectral data"""
     
     def __init__(self):
-        self.wavelength_calibration = None
+        # Linear λ calibration relative to current ROI X edges (None = use pixel indices)
+        self.wavelength_start_nm = None
+        self.wavelength_end_nm = None
         self.roi_start_y = 0
         self.roi_height = 480
         self.roi_start_x = 0
         self.roi_width = 6252
-        self.dark_frame = None
-        self.reference_frame = None
+        self.dark_frame = None  # Full 2D grayscale frame for dark subtraction
         
     def set_roi(self, start_y: int, height: int, start_x: int = 0, width: int = 6252):
         """Set region of interest for spectrum extraction"""
@@ -136,25 +138,33 @@ class SpectrumProcessor:
         self.roi_start_x = start_x
         self.roi_width = width
     
-    def set_wavelength_calibration(self, wavelengths: np.ndarray):
-        """Set wavelength calibration array"""
-        self.wavelength_calibration = wavelengths
+    def set_wavelength_calibration(self, start_nm: float, end_nm: float):
+        """Set linear wavelength calibration for ROI X edges (start → left, end → right)"""
+        self.wavelength_start_nm = float(start_nm)
+        self.wavelength_end_nm = float(end_nm)
+    
+    def clear_wavelength_calibration(self):
+        """Clear wavelength calibration (spectrum X axis uses pixel indices)"""
+        self.wavelength_start_nm = None
+        self.wavelength_end_nm = None
+    
+    @staticmethod
+    def _to_grayscale(frame: np.ndarray) -> np.ndarray:
+        """Convert frame to 2D grayscale if needed"""
+        if len(frame.shape) == 3:
+            if frame.shape[2] == 3:
+                return cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            return frame[:, :, 0]
+        return frame
     
     def set_dark_frame(self, frame: np.ndarray):
-        """Set dark frame for subtraction"""
+        """Store full frame for dark subtraction (ROI applied at process time)"""
         if frame is not None:
-            # Extract ROI with both x and y dimensions and average vertically
-            roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, 
-                       self.roi_start_x:self.roi_start_x + self.roi_width]
-            self.dark_frame = np.mean(roi, axis=0)
+            self.dark_frame = self._to_grayscale(frame).astype(np.float64)
     
-    def set_reference_frame(self, frame: np.ndarray):
-        """Set reference frame for normalization"""
-        if frame is not None:
-            # Extract ROI with both x and y dimensions and average vertically
-            roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, 
-                       self.roi_start_x:self.roi_start_x + self.roi_width]
-            self.reference_frame = np.mean(roi, axis=0)
+    def clear_dark_frame(self):
+        """Clear stored dark frame"""
+        self.dark_frame = None
     
     def process_frame(self, frame: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """Extract spectrum from frame
@@ -162,13 +172,7 @@ class SpectrumProcessor:
         Returns:
             tuple: (wavelengths, intensities) or (pixels, intensities) if no calibration
         """
-        # Handle different frame formats
-        if len(frame.shape) == 3:
-            # Color or multi-channel image, convert to grayscale
-            if frame.shape[2] == 3:
-                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            else:
-                frame = frame[:, :, 0]  # Take first channel
+        frame = self._to_grayscale(frame)
         
         # Extract ROI with both x and y dimensions
         roi = frame[self.roi_start_y:self.roi_start_y + self.roi_height, 
@@ -177,35 +181,20 @@ class SpectrumProcessor:
         # Average vertically to get horizontal line spectrum
         spectrum = np.mean(roi, axis=0, dtype=np.float64)
         
-        # Apply dark frame subtraction
+        # Apply dark frame subtraction using current ROI
         if self.dark_frame is not None:
-            spectrum = spectrum - self.dark_frame
+            dark_roi = self.dark_frame[self.roi_start_y:self.roi_start_y + self.roi_height,
+                                       self.roi_start_x:self.roi_start_x + self.roi_width]
+            spectrum = spectrum - np.mean(dark_roi, axis=0)
         
-        # Apply reference normalization
-        if self.reference_frame is not None:
-            ref_corrected = self.reference_frame
-            if self.dark_frame is not None:
-                ref_corrected = ref_corrected - self.dark_frame
-            
-            # Avoid division by zero
-            ref_corrected = np.where(ref_corrected > 0, ref_corrected, 1)
-            spectrum = spectrum / ref_corrected
-        
-        # Create x-axis (wavelengths or pixels)
-        if self.wavelength_calibration is not None:
-            # Extract the wavelength range corresponding to the selected x ROI
-            x_axis = self.wavelength_calibration[self.roi_start_x:self.roi_start_x + self.roi_width]
+        # X axis: λ mapped to current ROI edges, or absolute pixel indices
+        if self.wavelength_start_nm is not None and self.wavelength_end_nm is not None:
+            x_axis = np.linspace(
+                self.wavelength_start_nm, self.wavelength_end_nm, len(spectrum))
         else:
-            # Use pixel indices relative to the ROI start
             x_axis = np.arange(self.roi_start_x, self.roi_start_x + len(spectrum))
         
         return x_axis, spectrum
-    
-    def create_default_wavelength_calibration(self, num_pixels: int, 
-                                           start_wavelength: float = 400.0,
-                                           end_wavelength: float = 800.0) -> np.ndarray:
-        """Create default linear wavelength calibration"""
-        return np.linspace(start_wavelength, end_wavelength, num_pixels)
 
 
 class SpectrometerMainWindow(QMainWindow):
@@ -361,39 +350,33 @@ class SpectrometerMainWindow(QMainWindow):
         roi_group = QGroupBox("ROI Settings")
         roi_layout = QGridLayout(roi_group)
         
-        # Add instruction label
-        instruction_label = QLabel("1. Start camera first\n2. Click ROI button in camera view\n3. Drag rectangle over spectral region\n4. Click 'Apply Visual ROI' button")
-        instruction_label.setWordWrap(True)
-        instruction_label.setStyleSheet("color: #00d4aa; font-size: 9pt; font-style: italic;")
-        roi_layout.addWidget(instruction_label, 0, 0, 1, 2)
-        
-        roi_layout.addWidget(QLabel("Start Y:"), 1, 0)
+        roi_layout.addWidget(QLabel("Start Y:"), 0, 0)
         self.roi_start_spinbox = QSpinBox()
         self.roi_start_spinbox.setRange(0, 480)
         self.roi_start_spinbox.setValue(0)
-        roi_layout.addWidget(self.roi_start_spinbox, 1, 1)
+        roi_layout.addWidget(self.roi_start_spinbox, 0, 1)
         
-        roi_layout.addWidget(QLabel("Height:"), 2, 0)
+        roi_layout.addWidget(QLabel("Height:"), 1, 0)
         self.roi_height_spinbox = QSpinBox()
         self.roi_height_spinbox.setRange(1, 480)
         self.roi_height_spinbox.setValue(480)
-        roi_layout.addWidget(self.roi_height_spinbox, 2, 1)
+        roi_layout.addWidget(self.roi_height_spinbox, 1, 1)
         
-        roi_layout.addWidget(QLabel("Start X:"), 3, 0)
+        roi_layout.addWidget(QLabel("Start X:"), 2, 0)
         self.roi_start_x_spinbox = QSpinBox()
         self.roi_start_x_spinbox.setRange(0, 6252)
         self.roi_start_x_spinbox.setValue(0)
-        roi_layout.addWidget(self.roi_start_x_spinbox, 3, 1)
+        roi_layout.addWidget(self.roi_start_x_spinbox, 2, 1)
         
-        roi_layout.addWidget(QLabel("Width:"), 4, 0)
+        roi_layout.addWidget(QLabel("Width:"), 3, 0)
         self.roi_width_spinbox = QSpinBox()
         self.roi_width_spinbox.setRange(1, 6252)
         self.roi_width_spinbox.setValue(6252)
-        roi_layout.addWidget(self.roi_width_spinbox, 4, 1)
+        roi_layout.addWidget(self.roi_width_spinbox, 3, 1)
         
         # Add the ROI button after it's created
         if hasattr(self, 'apply_visual_roi_button'):
-            roi_layout.addWidget(self.apply_visual_roi_button, 5, 0, 1, 2)
+            roi_layout.addWidget(self.apply_visual_roi_button, 4, 0, 1, 2)
         
         left_layout.addWidget(roi_group)
         
@@ -439,8 +422,8 @@ class SpectrometerMainWindow(QMainWindow):
         
         left_layout.addWidget(camera_group)
         
-        # Calibration controls
-        cal_group = QGroupBox("Wavelength Calibration")
+        # Calibration controls (wavelength + save/load of full setup)
+        cal_group = QGroupBox("Calibration")
         cal_layout = QGridLayout(cal_group)
         
         cal_layout.addWidget(QLabel("Start λ (nm):"), 0, 0)
@@ -448,6 +431,7 @@ class SpectrometerMainWindow(QMainWindow):
         self.start_wavelength_spinbox.setRange(200, 1000)
         self.start_wavelength_spinbox.setValue(400)
         self.start_wavelength_spinbox.setSuffix(" nm")
+        self.start_wavelength_spinbox.setToolTip("Wavelength at the left edge of the ROI")
         cal_layout.addWidget(self.start_wavelength_spinbox, 0, 1)
         
         cal_layout.addWidget(QLabel("End λ (nm):"), 1, 0)
@@ -455,14 +439,34 @@ class SpectrometerMainWindow(QMainWindow):
         self.end_wavelength_spinbox.setRange(200, 1000)
         self.end_wavelength_spinbox.setValue(800)
         self.end_wavelength_spinbox.setSuffix(" nm")
+        self.end_wavelength_spinbox.setToolTip("Wavelength at the right edge of the ROI")
         cal_layout.addWidget(self.end_wavelength_spinbox, 1, 1)
         
         self.apply_calibration_button = QPushButton("Apply Calibration")
         cal_layout.addWidget(self.apply_calibration_button, 2, 0, 1, 2)
         
+        self.save_calibration_button = QPushButton("Save Calibration")
+        self.save_calibration_button.setToolTip("Save ROI, camera controls, and wavelength range to a file")
+        self.load_calibration_button = QPushButton("Load Calibration")
+        self.load_calibration_button.setToolTip("Load ROI, camera controls, and wavelength range from a file")
+        cal_layout.addWidget(self.save_calibration_button, 3, 0)
+        cal_layout.addWidget(self.load_calibration_button, 3, 1)
+        
         left_layout.addWidget(cal_group)
         
-
+        # Dark correction controls
+        dark_group = QGroupBox("Dark Correction")
+        dark_layout = QHBoxLayout(dark_group)
+        
+        self.capture_dark_button = QPushButton("Capture Dark")
+        self.capture_dark_button.setToolTip("Use current camera frame as dark (subtract from spectrum)")
+        self.clear_dark_button = QPushButton("Clear Dark")
+        self.clear_dark_button.setToolTip("Disable dark subtraction")
+        self.clear_dark_button.setEnabled(False)
+        dark_layout.addWidget(self.capture_dark_button)
+        dark_layout.addWidget(self.clear_dark_button)
+        
+        left_layout.addWidget(dark_group)
         
         # Right panel - Spectrum display
         right_widget = QWidget()
@@ -506,6 +510,10 @@ class SpectrometerMainWindow(QMainWindow):
         self.start_button.clicked.connect(self.start_camera)
         self.stop_button.clicked.connect(self.stop_camera)
         self.apply_calibration_button.clicked.connect(self.apply_wavelength_calibration)
+        self.save_calibration_button.clicked.connect(self.save_calibration)
+        self.load_calibration_button.clicked.connect(self.load_calibration)
+        self.capture_dark_button.clicked.connect(self.capture_dark)
+        self.clear_dark_button.clicked.connect(self.clear_dark)
         
         # Control connections
         self.exposure_slider.valueChanged.connect(self.update_exposure)
@@ -514,8 +522,6 @@ class SpectrometerMainWindow(QMainWindow):
         self.roi_height_spinbox.valueChanged.connect(self.update_roi)
         self.roi_start_x_spinbox.valueChanged.connect(self.update_roi)
         self.roi_width_spinbox.valueChanged.connect(self.update_roi)
-        
-
         
         # Recording controls
         self.record_button.clicked.connect(self.toggle_recording)
@@ -643,24 +649,113 @@ class SpectrometerMainWindow(QMainWindow):
 
     
     def apply_wavelength_calibration(self):
-        """Apply wavelength calibration"""
+        """Apply linear wavelength calibration to current ROI X edges"""
         start_wl = self.start_wavelength_spinbox.value()
         end_wl = self.end_wavelength_spinbox.value()
         
-        # Get camera width (6252 pixels for spectrometer)
-        info = self.camera_worker.get_camera_info()
-        width = info.get('width', 6252)
+        self.spectrum_processor.set_wavelength_calibration(start_wl, end_wl)
         
-        # Create linear calibration
-        wavelengths = self.spectrum_processor.create_default_wavelength_calibration(
-            width, start_wl, end_wl)
-        self.spectrum_processor.set_wavelength_calibration(wavelengths)
-        
-        # Update plot labels
         self.spectrum_plot.setLabel('bottom', 'Wavelength (nm)')
-        self.status_bar.showMessage(f"Wavelength calibration applied: {start_wl}-{end_wl} nm")
+        self.status_bar.showMessage(
+            f"ROI wavelength calibration applied: {start_wl}-{end_wl} nm "
+            f"(ROI width={self.spectrum_processor.roi_width} px)"
+        )
     
-
+    def _get_calibration_dict(self) -> dict:
+        """Collect current ROI, camera, and wavelength settings"""
+        return {
+            "version": 1,
+            "roi": {
+                "start_y": self.roi_start_spinbox.value(),
+                "height": self.roi_height_spinbox.value(),
+                "start_x": self.roi_start_x_spinbox.value(),
+                "width": self.roi_width_spinbox.value(),
+            },
+            "camera": {
+                "exposure_ms": self.exposure_slider.value() / 10.0,
+                "gain": self.gain_slider.value(),
+            },
+            "wavelength": {
+                "start_nm": self.start_wavelength_spinbox.value(),
+                "end_nm": self.end_wavelength_spinbox.value(),
+            },
+        }
+    
+    def save_calibration(self):
+        """Save ROI, camera controls, and wavelength range to JSON"""
+        filename, _ = QFileDialog.getSaveFileName(
+            self, "Save Calibration", "", "Calibration Files (*.json);;All Files (*)")
+        if not filename:
+            return
+        if not filename.lower().endswith(".json"):
+            filename += ".json"
+        
+        try:
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(self._get_calibration_dict(), f, indent=2)
+            self.status_bar.showMessage(f"Calibration saved to {filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Save Error", f"Failed to save calibration: {str(e)}")
+    
+    def load_calibration(self):
+        """Load ROI, camera controls, and wavelength range from JSON"""
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Load Calibration", "", "Calibration Files (*.json);;All Files (*)")
+        if not filename:
+            return
+        
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            
+            roi = data.get("roi", {})
+            camera = data.get("camera", {})
+            wavelength = data.get("wavelength", {})
+            
+            # ROI (signals update spectrum processor)
+            if "start_y" in roi:
+                self.roi_start_spinbox.setValue(int(roi["start_y"]))
+            if "height" in roi:
+                self.roi_height_spinbox.setValue(int(roi["height"]))
+            if "start_x" in roi:
+                self.roi_start_x_spinbox.setValue(int(roi["start_x"]))
+            if "width" in roi:
+                self.roi_width_spinbox.setValue(int(roi["width"]))
+            
+            # Camera controls
+            if "exposure_ms" in camera:
+                exposure_ms = float(camera["exposure_ms"])
+                self.exposure_slider.setValue(int(round(exposure_ms * 10)))
+            if "gain" in camera:
+                self.gain_slider.setValue(int(camera["gain"]))
+            
+            # Wavelength range + apply
+            if "start_nm" in wavelength:
+                self.start_wavelength_spinbox.setValue(float(wavelength["start_nm"]))
+            if "end_nm" in wavelength:
+                self.end_wavelength_spinbox.setValue(float(wavelength["end_nm"]))
+            self.apply_wavelength_calibration()
+            
+            self.status_bar.showMessage(f"Calibration loaded from {filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "Load Error", f"Failed to load calibration: {str(e)}")
+    
+    def capture_dark(self):
+        """Capture current frame as dark for subtraction"""
+        if self.current_frame is None:
+            QMessageBox.warning(self, "Dark Capture", "No camera frame available. Start the camera first.")
+            return
+        
+        self.spectrum_processor.set_dark_frame(self.current_frame)
+        self.clear_dark_button.setEnabled(True)
+        self.status_bar.showMessage("Dark captured — subtraction enabled")
+    
+    def clear_dark(self):
+        """Clear dark frame and disable subtraction"""
+        self.spectrum_processor.clear_dark_frame()
+        self.clear_dark_button.setEnabled(False)
+        self.status_bar.showMessage("Dark cleared — subtraction disabled")
+    
     def toggle_recording(self):
         """Toggle spectrum recording"""
         if self.is_recording:
