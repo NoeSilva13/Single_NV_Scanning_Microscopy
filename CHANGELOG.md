@@ -2,12 +2,22 @@
 
 All notable changes to this project will be documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) guidelines.
 
-## [Unreleased] - 2026-07-07
+## [Unreleased] - 2026-07-17
+### Changed
+- Replaced Thorlabs Kinesis USB Z control with DAQ analog output (`Dev1/ao2` → piezo EXT IN) via new `daq_z_controller.py` (`DAQZController`).
+- Moved the auto-focus Z-sweep algorithm into `widgets/auto_focus.py` (`run_focus_sweep`); the Z controller is now a minimal voltage/position mapper.
+- Simplified `widgets/piezo_controls.py` for commanded-position display (no USB connection / no analog readback).
+
+### Removed
+- Deleted `piezo_controller.py` (Thorlabs Kinesis `.NET`/USB path); no longer imported by the confocal app.
+- Dropped `pythonnet` and the Thorlabs Kinesis SDK install step from `requirements.txt` / README (piezo is initialized externally; this app only writes EXT IN voltage).
+
 ### Documentation
+- Updated `README.md`, `widgets/README.md`, and architecture diagram for `daq_z_controller.py` and Z calibration constants (`Z_UM_PER_VOLT`, `Z_MAX_TRAVEL_UM`, `Z_VOLTAGE_RANGE`).
 - Overhauled `README.md`: corrected calibration constants (`MICRONS_PER_VOLT = 24`, `MAX_ZOOM_LEVEL = 9`), default device IPs (Pulse Streamer `192.168.0.203`, RIGOL `192.168.0.223`), and spectrometer camera resolution (`6252x480`, not `1920x1080`).
 - Documented the T1 relaxation measurement tab in `odmr_gui_qt.py`, previously missing from all documentation (ODMR/Rabi were documented, T1 was not).
-- Expanded the repository overview with every supporting module (`data_manager.py`, `odmr_data_manager.py`, `galvo_controller.py`, `piezo_controller.py`, `plot_scan_results.py`, `thread_safe_bridge.py`, `plot_widgets/`, `widgets/`) and added an architecture diagram.
-- Rewrote `requirements.txt` to include all actual runtime dependencies (`napari`, `nidaqmx`, `pandas`, `tifffile`, `magicgui`, `qtpy`, `pyvisa`, `pythonnet`, `scipy`) with vendor-SDK installation notes.
+- Expanded the repository overview with every supporting module (`data_manager.py`, `odmr_data_manager.py`, `galvo_controller.py`, `daq_z_controller.py`, `plot_scan_results.py`, `thread_safe_bridge.py`, `plot_widgets/`, `widgets/`) and added an architecture diagram.
+- Rewrote `requirements.txt` to include all actual runtime dependencies (`napari`, `nidaqmx`, `pandas`, `tifffile`, `magicgui`, `qtpy`, `pyvisa`, `scipy`) with vendor-SDK installation notes.
 - Corrected `PulseBlaster/README.md` and `PulseBlaster/README_ODMR_GUI.md`: fixed stale run instructions and example code referencing non-existent methods (`create_simple_laser_pulse`, `create_odmr_sequence`, `experiments.odmr()`), updated default IPs, documented the Rabi/T1 tabs, and clarified that Ramsey/spin-echo are not implemented.
 - Corrected `widgets/README.md`: replaced references to the retired `napari_scanning_SPD.py` / `ConfigManager` with the current `confocal_main_control.py` entry point and real `ScanParametersManager` / `ScanPointsManager` / `ZoomLevelManager` classes; fixed widget factory signatures and documented `stop_scan`, `update_scan_parameters_widget`, and `create_camera_control_widget`.
 - Corrected `README_Spectrometer.md` resolution and image-format claims to match `spectrometer_app.py`.

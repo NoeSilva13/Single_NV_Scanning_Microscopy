@@ -24,9 +24,8 @@ napari[pyqt5]>=0.4.16
 magicgui>=0.5.0
 
 # --- Hardware I/O -------------------------------------------------------------
-nidaqmx>=0.6.0          # National Instruments USB-6453 DAQ (galvo control, confocal_main_control.py)
+nidaqmx>=0.6.0          # National Instruments USB-6453 DAQ (galvo X/Y + Z piezo via ao2)
 pyvisa>=1.11.0           # VISA/Ethernet SCPI control of RIGOL DSG836 (PulseBlaster/rigol_dsg836.py)
-pythonnet>=3.0.0         # .NET interop ("clr" module) for Thorlabs Kinesis piezo control (piezo_controller.py)
 
 # =============================================================================
 # Vendor SDKs (NOT installable via pip - install manually, see README.md)
@@ -35,12 +34,12 @@ pythonnet>=3.0.0         # .NET interop ("clr" module) for Thorlabs Kinesis piez
 #   Provides the `TimeTagger` Python module used for photon counting.
 # - Swabian Instruments Pulse Streamer   -> pip install pulsestreamer
 #   (This one IS on PyPI, listed separately since it's optional if you don't use odmr_gui_qt.py)
-# - Thorlabs Kinesis                      -> https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=Motion_Control
-#   Provides the .NET DLLs referenced via `pythonnet`/`clr` in piezo_controller.py.
 # - Player One Astronomy (POA) Camera SDK -> https://player-one-astronomy.com/service/software/
 #   Provides the native `PlayerOneCamera` / `ASICamera2` libraries wrapped by Camera/pyPOACamera.py.
 # - ZWO ASI Camera SDK (optional)         -> https://astronomy-imaging-camera.com/software-drivers
 #   Only required if using the ZWO camera backend in widgets/camera_controls.py.
+# - Thorlabs piezo Z-stage: initialize/keep closed-loop with Thorlabs software; this app
+#   commands position via DAQ ao2 wired to the controller EXT IN (daq_z_controller.py).
 
 # --- Optional (only needed for odmr_gui_qt.py pulse-sequence control) -------
 pulsestreamer>=1.6.0

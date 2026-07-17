@@ -12,7 +12,7 @@ widgets/
 ├── auto_focus.py           # Auto-focus functionality and signal bridge
 ├── single_axis_scan.py     # Single axis scan widget
 ├── file_operations.py      # File loading/saving widgets
-├── piezo_controls.py      # Z-axis piezo stage control widget
+├── piezo_controls.py      # Manual Z position widget (DAQ ao2 → piezo EXT IN)
 └── README.md               # This file
 ```
 
@@ -153,9 +153,13 @@ class ZoomLevelManager:
 
 ### Auto Focus (`auto_focus.py`)
 
-- **`auto_focus(counter, binwidth, signal_bridge, piezo_controller)`**
-  - Creates "🎯 Auto Focus" button widget
-  - Runs a coarse + optional fine Z-piezo sweep (`PiezoController.perform_auto_focus`), maximizing SPD count rate
+- **`run_focus_sweep(z_controller, count_function, progress_callback=None, ...)`**
+  - Coarse + fine Z sweep that maximizes SPD count rate
+  - Moves via `DAQZController.set_position`; returns `(positions, counts, optimal_pos)`
+
+- **`auto_focus(counter, binwidth, signal_bridge, z_controller)`**
+  - Creates "🔍 Auto Focus" button widget
+  - Runs `run_focus_sweep` in a background thread and updates the focus plot / Z widget
 
 - **`SignalBridge(viewer)`**
   - Thread-safe `QObject` bridge for GUI updates emitted from the auto-focus worker thread
@@ -178,22 +182,14 @@ class ZoomLevelManager:
 
 ### Piezo Controls (`piezo_controls.py`)
 
-- **`PiezoControlWidget`**
-  - Complete widget for Z-axis piezo stage control
+- **`PiezoControlWidget(z_controller)`**
+  - Manual Z-axis control via `DAQZController` (DAQ `ao2` → piezo EXT IN)
   - Features:
-    - Position control via spinbox (1 nm resolution)
-    - Slider for quick adjustments (0.1 µm resolution)
-    - Current position display in micrometers
-    - Connection status indicator
-  - Specifications:
-    - Travel range: 0-450 µm
-    - Resolution: 1 nm (0.001 µm)
-    - Settling time: 25ms for 1-100µm steps, 50ms for larger steps
-  - Size: 400x80 pixels
-  - Thread-safe operation with background tasks for:
-    - Initial connection
-    - Position updates
-    - Hardware cleanup
+    - Debounced position spinbox (0–450 µm)
+    - Status label (`Ready` / `No DAQ`)
+    - Displays last commanded position (no analog readback)
+  - Size: 320x60 pixels
+  - Moves run in a short background thread so the GUI stays responsive
 
 ## Design Pattern: Factory Functions Over Globals
 

@@ -23,7 +23,7 @@ Each application can be run independently and only requires the hardware/drivers
 - Integrated **auto-focus** routine (coarse + fine piezo Z-sweep) and **single-axis line scans** along X or Y.
 - Multi-backend **live camera preview** (POA / ZWO / USB webcam) and single-shot capture, docked in the viewer.
 - Real-time photon-count **strip-chart plot** with overflow indication.
-- Manual **Z-axis piezo control** widget (Thorlabs Kinesis) alongside the auto-focus routine.
+- Manual **Z-axis piezo control** widget (DAQ analog output `ao2` → piezo EXT IN) alongside the auto-focus routine.
 - Automatic data saving after every scan: `.csv` (metadata header), `.npz` (image + full metadata), `.tiff` (ImageJ/Fiji-compatible with scale calibration) and a `.png` heatmap.
 - **Load Scan** widget to reopen previously saved `.npz` scans at the correct physical scale.
 
@@ -48,7 +48,7 @@ Each application can be run independently and only requires the hardware/drivers
 - Automatic exposure/gain control with GUI/hardware value sync.
 
 ### Common infrastructure
-- Modular **hardware controller** classes: [galvo_controller.py](galvo_controller.py) (NI-DAQ galvo I/O), [piezo_controller.py](piezo_controller.py) (Thorlabs Kinesis piezo + auto-focus routine), [PulseBlaster/swabian_pulse_streamer.py](PulseBlaster/swabian_pulse_streamer.py) and [PulseBlaster/rigol_dsg836.py](PulseBlaster/rigol_dsg836.py).
+- Modular **hardware controller** classes: [galvo_controller.py](galvo_controller.py) (NI-DAQ galvo I/O), [daq_z_controller.py](daq_z_controller.py) (NI-DAQ `ao2` → piezo EXT IN for Z position), [PulseBlaster/swabian_pulse_streamer.py](PulseBlaster/swabian_pulse_streamer.py) and [PulseBlaster/rigol_dsg836.py](PulseBlaster/rigol_dsg836.py).
 - [data_manager.py](data_manager.py) / [odmr_data_manager.py](odmr_data_manager.py) - automatic, date-stamped CSV folder hierarchies for confocal scans and ODMR-family experiments respectively.
 - [utils.py](utils.py) - centralized calibration constants and TIFF metadata export shared by the confocal app.
 - Reusable **napari/magicgui widgets** ([widgets/](widgets/)) and **matplotlib plot widgets** ([plot_widgets/](plot_widgets/)) shared across applications.
@@ -62,7 +62,7 @@ Mandatory for confocal scans (`confocal_main_control.py`)
 - NI **USB-6453** DAQ (static + hardware-timed AO for galvos, sample clock export)
 - **Single-photon detector** (e.g. Excelitas SPCM-AQRH-10-FC)
 - **Swabian TimeTagger** (real, network, or virtual/replay fallback)
-- Optional: Thorlabs Kinesis **piezo Z-stage** for auto-focus; POA/ZWO/USB camera for live preview
+- Optional: Thorlabs **piezo Z-stage** (initialized in closed loop by Thorlabs software; position commanded via DAQ `ao2` → EXT IN) for auto-focus; POA/ZWO/USB camera for live preview
 
 Additional for ODMR / advanced timing (`odmr_gui_qt.py`)
 - **Swabian Pulse Streamer 8/2** (default IP `192.168.0.203`)
@@ -95,7 +95,6 @@ $ pip install -r requirements.txt
 - Swabian TimeTagger SDK              https://www.swabianinstruments.com/time-tagger/downloads/
 - Swabian Pulse Streamer package      pip install pulsestreamer (already in requirements.txt)
 - Rigol DSG836 (Ethernet/VISA)        Requires a VISA runtime (e.g. NI-VISA or Keysight IO Libraries); no vendor driver otherwise
-- Thorlabs Kinesis (piezo stage)      https://www.thorlabs.com/software_pages/ViewSoftwarePage.cfm?Code=Motion_Control
 - Player One Astronomy (POA) SDK      https://player-one-astronomy.com/service/software/
 - ZWO ASI Camera SDK (optional)       https://astronomy-imaging-camera.com/software-drivers
 ```
@@ -149,6 +148,13 @@ The confocal system's calibration parameters and constants are centrally defined
 - `PIEZO_FINE_STEP = 0.5` - Step size for fine focus scan (µm)
 - `PIEZO_FINE_RANGE = 10.0` - Range around peak for fine scan (µm)
 
+### Z Piezo Analog Control (DAQ `ao2` → EXT IN)
+- `Z_UM_PER_VOLT = 45.0` - Closed-loop calibration (µm/V); 0–10 V maps to 0–450 µm
+- `Z_MAX_TRAVEL_UM = 450.0` - Full travel of the piezo stage (µm)
+- `Z_VOLTAGE_RANGE = (0.0, 10.0)` - Allowed EXT IN voltage range in closed loop
+
+The piezo controller is initialized and kept in closed loop by external Thorlabs software; this app only commands position through the DAQ analog output wired to EXT IN.
+
 ### Timing Parameters
 - `BINWIDTH = int(5e9)` - Default binwidth for the TimeTagger live-count strip chart (picoseconds; 5e9 = 5 milliseconds)
 
@@ -196,7 +202,7 @@ Single_NV_Scannig_Microscopy/
 ├─ data_manager.py               # DataManager: saves confocal scan CSVs with metadata
 ├─ odmr_data_manager.py          # ODMRDataManager: saves ODMR/Rabi/T1 CSVs per experiment type
 ├─ galvo_controller.py           # GalvoScannerController: NI-DAQ channel setup & voltage I/O
-├─ piezo_controller.py           # PiezoController: Thorlabs Kinesis Z-stage + auto-focus routine
+├─ daq_z_controller.py           # DAQZController: NI-DAQ ao2 → piezo EXT IN for Z position
 ├─ plot_scan_results.py          # Thread-safe PNG heatmap export after each confocal scan
 ├─ thread_safe_bridge.py         # GUIBridge: marshal background-thread updates onto the Qt/napari main thread
 ├─ utils.py                      # Calibration constants + ImageJ-compatible TIFF export
@@ -204,10 +210,10 @@ Single_NV_Scannig_Microscopy/
 ├─ widgets/                      # Re-usable magicgui/PyQt5 widgets for the confocal napari GUI
 │   ├─ scan_controls.py          #   New Scan / Stop / Reset Zoom / Scan Parameters panel
 │   ├─ camera_controls.py        #   Multi-backend (POA/ZWO/USB) live view + single shot
-│   ├─ auto_focus.py             #   Auto-focus button + thread-safe signal bridge
+│   ├─ auto_focus.py             #   Auto-focus sweep + button + thread-safe signal bridge
 │   ├─ single_axis_scan.py       #   1D X/Y line-scan widget with plot
 │   ├─ file_operations.py        #   Load a saved .npz scan back into napari
-│   └─ piezo_controls.py         #   Manual Z-axis piezo position widget
+│   └─ piezo_controls.py         #   Manual Z position widget (via DAQZController)
 │
 ├─ plot_widgets/                 # Matplotlib plot widgets shared across apps
 │   ├─ single_axis_plot.py       #   Dark-themed 1D plot (auto-focus, line scans)
@@ -241,7 +247,7 @@ flowchart TD
     subgraph confocalApp [confocal_main_control.py]
         DataManager
         GalvoController[galvo_controller]
-        PiezoController[piezo_controller]
+        DAQZController[daq_z_controller]
         PlotScanResults[plot_scan_results]
         ThreadSafeBridge[thread_safe_bridge]
         Utils[utils]
@@ -261,7 +267,7 @@ flowchart TD
         POACamera["Camera.camera_video_mode"]
     end
 
-    Widgets --> PiezoController
+    Widgets --> DAQZController
     Widgets --> Camera["Camera/* backends"]
     Experiments --> ODMRDataManager
     Experiments --> TimeTagger
