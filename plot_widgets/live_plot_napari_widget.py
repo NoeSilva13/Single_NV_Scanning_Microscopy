@@ -42,7 +42,10 @@ class LivePlotNapariWidget(QWidget):
         self.overflow_detected = False
         self._dt_ms = int(dt)
 
+        # Fix the height so the plot stays compact and doesn't stretch to fill
+        # extra vertical space in the dock area.
         self.setMinimumHeight(widget_height)
+        self.setMaximumHeight(widget_height)
 
         # Ring buffers for the rolling window
         self.x_data = deque(maxlen=self.histogram_range)

@@ -59,7 +59,14 @@ class SingleAxisScanWidget(QWidget):
         layout.addWidget(self.tabs)
 
         self._initialize_plot()
+        # Constrain the height so the tabs stay compact and don't stretch to
+        # fill extra vertical space in the dock area.
         self.setMinimumHeight(320)
+        self.setMaximumHeight(420)
+
+    def add_z_tab(self, widget, title='Z Axis'):
+        """Embed an external widget (e.g. the Scan Z / auto-focus panel) as a tab."""
+        self.tabs.addTab(widget, title)
 
     # ------------------------------------------------------------------
     # UI

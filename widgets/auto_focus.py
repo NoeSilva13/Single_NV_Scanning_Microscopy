@@ -233,12 +233,13 @@ class AutoFocusWidget(QWidget):
         controls.addWidget(self.fine_range_spin, 1, 3)
 
         # Second column: the start button spanning both rows
-        self.focus_btn = QPushButton('🔍 Auto Focus')
+        self.focus_btn = QPushButton('🔍 Scan Z')
         self.focus_btn.clicked.connect(self._start)
-        self.focus_btn.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        self.focus_btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         controls.addWidget(self.focus_btn, 0, 4, 2, 1)
 
-        controls.setColumnStretch(5, 1)
+        # Give the extra horizontal space to the button's column so it widens.
+        controls.setColumnStretch(4, 1)
         layout.addLayout(controls)
 
         self.plot_widget = pg.PlotWidget()
@@ -264,8 +265,8 @@ class AutoFocusWidget(QWidget):
             [], [], pen=None, symbol='o', symbolSize=12,
             symbolBrush=None, symbolPen=pg.mkPen('red', width=2)
         )
-        self.plot_widget.setMinimumHeight(140)
-        self.plot_widget.setMaximumHeight(200)
+        # Let the plot expand to fill the tab so the Z tab matches X/Y.
+        self.plot_widget.setMinimumHeight(160)
         layout.addWidget(self.plot_widget)
 
     @staticmethod

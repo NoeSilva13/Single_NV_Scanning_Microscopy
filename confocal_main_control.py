@@ -570,6 +570,9 @@ single_axis_scan_widget = SingleAxisScanWidget(
 # Set the global reference for position tracking
 single_axis_widget_ref = single_axis_scan_widget
 
+# Embed the Scan Z (auto-focus) panel as a third tab of the single-axis widget
+single_axis_scan_widget.add_z_tab(auto_focus_widget, title="Z Axis")
+
 # Create file operation widgets
 load_scan_widget = create_load_scan(
     viewer,
@@ -676,7 +679,6 @@ viewer.window.add_dock_widget(piezo_control_widget, area="bottom")
 update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
 camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
 viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
-viewer.window.add_dock_widget(auto_focus_widget, name="Auto-Focus", area="right")
 viewer.window._qt_window.tabifyDockWidget(update_scan_parameters_dock, camera_control_dock)
 
 # --------------------- CLEANUP ON CLOSE ---------------------
