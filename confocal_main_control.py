@@ -720,10 +720,8 @@ viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", 
 viewer.window._qt_window.tabifyDockWidget(update_scan_parameters_dock, camera_control_dock)
 
 
-# Initialize empty auto-focus plot
-empty_positions = [0, 1]
-empty_counts = [0, 0]
-signal_bridge.update_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto-Focus Plot')
+# Initialize empty auto-focus plot (coarse + fine series)
+signal_bridge.update_focus_plot_signal.emit([0, 1], [0, 0], [], [], 'Auto-Focus Plot')
 
 # --------------------- CLEANUP ON CLOSE ---------------------
 def _on_close():

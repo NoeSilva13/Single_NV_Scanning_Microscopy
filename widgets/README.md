@@ -186,9 +186,9 @@ class ZoomLevelManager:
   - Manual Z-axis control via `DAQZController` (DAQ `ao2` → piezo EXT IN)
   - Features:
     - Debounced position spinbox (0–450 µm)
-    - Status label (`Ready` / `No DAQ`)
     - Displays last commanded position (no analog readback)
-  - Size: 320x60 pixels
+    - Spinbox disabled if the DAQ channel is unavailable at startup
+  - Size: 220x60 pixels
   - Moves run in a short background thread so the GUI stays responsive
 
 ## Design Pattern: Factory Functions Over Globals

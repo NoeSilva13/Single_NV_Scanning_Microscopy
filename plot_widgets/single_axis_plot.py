@@ -112,18 +112,18 @@ class SingleAxisPlot(QWidget):
         y_label,
         title,
         mark_peak=True,
-        peak_annotation=None,
-        clear_previous=True
+        clear_previous=True,
+        series=None,
     ):
         """
-        Plot the data and optionally mark the peak.
+        Plot the data and optionally mark the peak with a colored marker.
         
         Parameters
         ----------
         x_data : array-like
-            The x-axis data
+            The x-axis data (ignored if ``series`` is provided)
         y_data : array-like
-            The y-axis data
+            The y-axis data (ignored if ``series`` is provided)
         x_label : str
             Label for x-axis
         y_label : str
@@ -132,38 +132,49 @@ class SingleAxisPlot(QWidget):
             Plot title
         mark_peak : bool, optional
             Whether to mark the peak point, by default True
-        peak_annotation : str, optional
-            Custom annotation for the peak point. If None, will use x-value
         clear_previous : bool, optional
             Whether to clear previous plot, by default True
+        series : list of dict, optional
+            Multiple independent traces to avoid connecting unrelated segments.
+            Each dict: ``{"x", "y"}`` and optionally ``"label"``, ``"color"``.
+            Peak is taken from the last non-empty series (typically the fine scan).
         """
         if clear_previous:
             self.ax.clear()
-            
-        # Plot main data
-        self.ax.plot(x_data, y_data, 'o-', color=self.plot_color)
-        
-        # Mark peak if requested
-        if mark_peak and len(y_data) > 0:
-            peak_idx = np.argmax(y_data)
-            peak_x = x_data[peak_idx]
-            peak_y = y_data[peak_idx]
-            
-            # Plot peak point
+
+        if series:
+            colors = [self.plot_color, '#4fc3f7', '#ffb74d', '#ce93d8']
+            peak_x = peak_y = None
+            for i, s in enumerate(series):
+                sx = np.asarray(s.get("x", []), dtype=float)
+                sy = np.asarray(s.get("y", []), dtype=float)
+                if sx.size == 0:
+                    continue
+                color = s.get("color", colors[i % len(colors)])
+                label = s.get("label")
+                self.ax.plot(sx, sy, 'o-', color=color, label=label)
+                if mark_peak and sy.size > 0:
+                    peak_idx = int(np.nanargmax(sy))
+                    peak_x, peak_y = sx[peak_idx], sy[peak_idx]
+            if any(s.get("label") for s in series):
+                legend = self.ax.legend(loc='best', fontsize=8)
+                if legend is not None:
+                    for text in legend.get_texts():
+                        text.set_color('white')
+                    legend.get_frame().set_facecolor(self.bg_color)
+                    legend.get_frame().set_edgecolor('white')
+        else:
+            x_data = np.asarray(x_data, dtype=float)
+            y_data = np.asarray(y_data, dtype=float)
+            self.ax.plot(x_data, y_data, 'o-', color=self.plot_color)
+            peak_x = peak_y = None
+            if mark_peak and y_data.size > 0:
+                peak_idx = int(np.nanargmax(y_data))
+                peak_x, peak_y = x_data[peak_idx], y_data[peak_idx]
+
+        # Mark peak with a marker only (no text/arrow — those resize the axes via tight_layout)
+        if mark_peak and peak_x is not None:
             self.ax.plot(peak_x, peak_y, 'o', color=self.peak_color, markersize=8)
-            
-            # Add peak annotation
-            if peak_annotation is None:
-                peak_annotation = f'Peak: {peak_x:.2f}'
-                
-            self.ax.annotate(
-                peak_annotation,
-                xy=(peak_x, peak_y),
-                xytext=(10, -20),
-                textcoords='offset points',
-                color='white',
-                arrowprops=dict(arrowstyle='->', color='white')
-            )
         
         # Set labels and styling
         self.ax.set_xlabel(x_label, color='white')
