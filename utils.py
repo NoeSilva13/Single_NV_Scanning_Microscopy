@@ -19,11 +19,6 @@ MAX_ZOOM_LEVEL = 9
 # Default binwidth for TimeTagger counter in picoseconds (5e9 = 5 milliseconds)
 BINWIDTH = int(5e9)
 
-# Piezo auto-focus parameters (in micrometers)
-PIEZO_COARSE_STEP = 5.0  # Step size for coarse focus scan
-PIEZO_FINE_STEP = 0.5    # Step size for fine focus scan
-PIEZO_FINE_RANGE = 10.0  # Range around peak for fine scan
-
 # Z piezo analog control calibration (DAQ ao2 -> EXT IN of the piezo controller)
 # The piezo is initialized/kept in closed loop by external Thorlabs software; the
 # DAQ only commands position through the EXT IN BNC. In closed loop, 0-10 V maps

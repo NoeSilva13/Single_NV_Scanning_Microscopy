@@ -54,10 +54,7 @@ from widgets.scan_controls import (
 from widgets.camera_controls import (
     create_camera_control_widget
 )
-from widgets.auto_focus import (
-    auto_focus as create_auto_focus,
-    SignalBridge
-)
+from widgets.auto_focus import AutoFocusWidget
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan as create_load_scan
 from widgets.piezo_controls import PiezoControlWidget
@@ -558,10 +555,9 @@ reset_zoom_widget = create_reset_zoom(
 # Create camera control widgets
 camera_control_widget = create_camera_control_widget(viewer)
 
-# Create auto-focus widgets
-signal_bridge = SignalBridge(viewer)
-auto_focus_widget = create_auto_focus(
-    tagger, scan_params_manager, signal_bridge, z_controller,
+# Create auto-focus widget (dwell control + button + progress + pyqtgraph plot)
+auto_focus_widget = AutoFocusWidget(
+    tagger, z_controller,
     scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref
 )
 
@@ -585,8 +581,8 @@ load_scan_widget = create_load_scan(
 # Create piezo control widget
 piezo_control_widget = PiezoControlWidget(z_controller)
 
-# Set the Z control widget reference in the signal bridge
-signal_bridge.z_control_widget = piezo_control_widget
+# Let auto-focus refresh the Z control widget after a successful focus
+auto_focus_widget.z_control_widget = piezo_control_widget
 
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
@@ -667,7 +663,6 @@ new_scan_widget.native.setFixedSize(150, 50)
 save_image_widget.native.setFixedSize(150, 50)
 reset_zoom_widget.native.setFixedSize(150, 50)
 close_scanner_widget.native.setFixedSize(150, 50)
-auto_focus_widget.native.setFixedSize(150, 50)
 load_scan_widget.native.setFixedSize(150, 50)
 
 # Add widgets to viewer
@@ -676,17 +671,13 @@ viewer.window.add_dock_widget(stop_scan_widget, area="bottom")
 viewer.window.add_dock_widget(save_image_widget, area="bottom")
 viewer.window.add_dock_widget(reset_zoom_widget, area="bottom")
 viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
-viewer.window.add_dock_widget(auto_focus_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
 viewer.window.add_dock_widget(piezo_control_widget, area="bottom")
 update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
 camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
 viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
+viewer.window.add_dock_widget(auto_focus_widget, name="Auto-Focus", area="right")
 viewer.window._qt_window.tabifyDockWidget(update_scan_parameters_dock, camera_control_dock)
-
-
-# Initialize empty auto-focus plot (coarse + fine series)
-signal_bridge.update_focus_plot_signal.emit([0, 1], [0, 0], [], [], 'Auto-Focus Plot')
 
 # --------------------- CLEANUP ON CLOSE ---------------------
 def _on_close():

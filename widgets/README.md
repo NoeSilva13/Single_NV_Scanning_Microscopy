@@ -9,7 +9,7 @@ widgets/
 ├── __init__.py              # Package initialization and exports
 ├── scan_controls.py         # Scan control widgets (new scan, reset zoom, etc.)
 ├── camera_controls.py       # Camera control widgets and threads
-├── auto_focus.py           # Auto-focus functionality and signal bridge
+├── auto_focus.py           # Unified auto-focus widget (pyqtgraph plot + button + dwell) & sweep logic
 ├── single_axis_scan.py     # Single axis scan widget
 ├── file_operations.py      # File loading/saving widgets
 ├── piezo_controls.py      # Manual Z position widget (DAQ ao2 → piezo EXT IN)
@@ -39,10 +39,7 @@ from widgets.camera_controls import (
     create_camera_control_widget
 )
 
-from widgets.auto_focus import (
-    auto_focus,
-    SignalBridge
-)
+from widgets.auto_focus import AutoFocusWidget
 
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan
@@ -153,21 +150,16 @@ class ZoomLevelManager:
 
 ### Auto Focus (`auto_focus.py`)
 
-- **`run_focus_sweep(tagger, z_controller, dwell_time, progress_callback=None, ...)`**
+- **`run_focus_sweep(tagger, z_controller, dwell_time, plot_callback=None, ...)`**
   - Coarse + fine Z sweep that maximizes SPD count rate
   - Each phase is a hardware-timed piezo ramp on `ao2`; photons are counted per point by `CountBetweenMarkers` (via `scanning_core.run_hardware_timed_sweep`)
+  - `plot_callback(stage, positions, rates)` is invoked during each phase with the accumulated data for real-time plotting
   - Returns `(coarse_positions, coarse_counts, fine_positions, fine_counts, optimal_pos)`
 
-- **`auto_focus(tagger, scan_params_manager, signal_bridge, z_controller, scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref)`**
-  - Creates "🔍 Auto Focus" button widget
-  - Runs `run_focus_sweep` in a background thread (mutually exclusive with the raster/single-axis scans via the shared `scan_lock`/`scan_in_progress`) and updates the focus plot / Z widget
-
-- **`SignalBridge(viewer)`**
-  - Thread-safe `QObject` bridge for GUI updates emitted from the auto-focus worker thread
-  - Handles focus-plot creation/updates and forwards Z position updates to the piezo control widget (`z_control_widget`)
-
-- **`create_focus_plot_widget(coarse_pos, coarse_counts, fine_pos=None, fine_counts=None)`**
-  - Creates a `SingleAxisPlot`-based plot widget (from `plot_widgets`) that shows the coarse and fine sweeps as separate series
+- **`AutoFocusWidget(tagger, z_controller, scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref, default_dwell_ms=25.0)`**
+  - Self-contained `QWidget` that bundles, in one dock: a **"Dwell (ms)"** field (default 25 ms, independent of the scan `dwell_time` because the piezo settles much slower than the galvos), editable **sweep parameters** ("Coarse", "Fine", "Range" in µm, defaulting to the module-level `DEFAULT_COARSE_STEP` / `DEFAULT_FINE_STEP` / `DEFAULT_FINE_RANGE` in `auto_focus.py`), the **"🔍 Auto Focus"** button, and a **pyqtgraph** plot of the coarse/fine sweeps with a red peak marker
+  - Plots each point in real time as it is acquired (no progress bar); runs `run_focus_sweep` in a background thread (mutually exclusive with the raster/single-axis scans via the shared `scan_lock`/`scan_in_progress`) using internal Qt signals for thread-safe UI updates
+  - Set `.z_control_widget` to have the piezo control widget refreshed after a successful focus
 
 ### Single Axis Scan (`single_axis_scan.py`)
 

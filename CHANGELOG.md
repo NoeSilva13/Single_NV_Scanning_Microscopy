@@ -6,6 +6,8 @@ All notable changes to this project will be documented in this file following [K
 ### Changed
 - Rewrote the live signal plot (`plot_widgets/live_plot_napari_widget.py`) on `pyqtgraph` with a ring buffer and added lightweight controls (pause/resume, clear, refresh rate, window length, auto-Y, log-Y); the widget width is constrained to the controls row.
 - Migrated the auto-focus and single-axis scans to hardware-timed DAQ sweeps counted by `CountBetweenMarkers` (DAQ clock defines the bins), matching the 2D raster scan. Both previously used the free-running `Counter`/`binwidth`, which was incorrect since both move the DAQ and the DAQ clock is routed to the Time Tagger.
+- Gave the auto-focus widget its own **"Dwell (ms)"** control (default 25 ms), independent of the scan `dwell_time`, since the piezo objective settles far slower than the galvos (~25 ms for a 1-100 µm step per the datasheet).
+- Consolidated auto-focus into a single self-contained `AutoFocusWidget` (pyqtgraph): the dwell field, editable sweep parameters (coarse step / fine step / fine range), "Auto Focus" button, and coarse/fine result plot now live in one dock, and the sweep plots each point in real time as it is acquired (no progress bar). Replaced the previous `magicgui` button + separate matplotlib `SingleAxisPlot` dock and the `SignalBridge` (the widget now uses its own internal Qt signals for thread-safe updates).
 - Extracted the shared AO + `CountBetweenMarkers` primitive into `scanning_core.py` (`run_hardware_timed_sweep`, `counts_to_rate`); the 2D raster scan, auto-focus, and single-axis scan now all use it and share the same `scan_lock`/`scan_in_progress` mutual exclusion and Stop-button integration.
 - The free-running `Counter`/`binwidth` in `confocal_main_control.py` now feeds only the live signal plot.
 - Migrated the whole GUI stack from PyQt5 to PySide6 (Qt6) through the `qtpy` abstraction layer: all `PyQt5.*` imports now go through `qtpy.*`, so the binding can be swapped without touching source.
@@ -15,6 +17,7 @@ All notable changes to this project will be documented in this file following [K
 - Simplified `widgets/piezo_controls.py` for commanded-position display (no USB connection / no analog readback).
 
 ### Removed
+- Removed `PIEZO_COARSE_STEP`, `PIEZO_FINE_STEP`, and `PIEZO_FINE_RANGE` from `utils.py`; the auto-focus sweep parameters are now edited from the widget, with initial values defined as `DEFAULT_COARSE_STEP` / `DEFAULT_FINE_STEP` / `DEFAULT_FINE_RANGE` in `widgets/auto_focus.py`.
 - Removed the PyQt5 dependency: `requirements.txt` now pins `PySide6>=6.6.0` and the `napari[pyside6]` extra (set `QT_API=pyside6`).
 - Cleaned up unused Qt imports in `odmr_gui_qt.py` (`QFrame`, `QSpacerItem`, `QSizePolicy`, `QFont`, `QPalette`, `QColor`) and `spectrometer_app.py` (`QPixmap`, `QImage`, `QFont`).
 - Deleted `piezo_controller.py` (Thorlabs Kinesis `.NET`/USB path); no longer imported by the confocal app.

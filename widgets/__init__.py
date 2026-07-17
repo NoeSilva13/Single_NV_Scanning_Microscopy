@@ -21,9 +21,8 @@ from .camera_controls import (
 )
 
 from .auto_focus import (
-    auto_focus,
-    SignalBridge,
-    create_focus_plot_widget
+    AutoFocusWidget,
+    run_focus_sweep
 )
 
 from .single_axis_scan import SingleAxisScanWidget
@@ -47,9 +46,8 @@ __all__ = [
     'CameraUpdateThread',
     
     # Auto focus
-    'auto_focus',
-    'SignalBridge',
-    'create_focus_plot_widget',
+    'AutoFocusWidget',
+    'run_focus_sweep',
     
     # Single axis scan
     'SingleAxisScanWidget',

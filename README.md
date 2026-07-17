@@ -144,9 +144,7 @@ The confocal system's calibration parameters and constants are centrally defined
 - `MAX_ZOOM_LEVEL = 9` - Maximum allowed nested zoom levels in the scanning interface.
 
 ### Auto-Focus Parameters
-- `PIEZO_COARSE_STEP = 5.0` - Step size for coarse focus scan (µm)
-- `PIEZO_FINE_STEP = 0.5` - Step size for fine focus scan (µm)
-- `PIEZO_FINE_RANGE = 10.0` - Range around peak for fine scan (µm)
+The coarse step, fine step, and fine range are edited live in the Auto-Focus dock (Coarse / Fine / Range fields, in µm). Their initial values live in `widgets/auto_focus.py` (`DEFAULT_COARSE_STEP = 5.0`, `DEFAULT_FINE_STEP = 0.5`, `DEFAULT_FINE_RANGE = 10.0`), not in `utils.py`.
 
 ### Z Piezo Analog Control (DAQ `ao2` → EXT IN)
 - `Z_UM_PER_VOLT = 45.0` - Closed-loop calibration (µm/V); 0–10 V maps to 0–450 µm
@@ -217,7 +215,7 @@ Single_NV_Scannig_Microscopy/
 │   └─ piezo_controls.py         #   Manual Z position widget (via DAQZController)
 │
 ├─ plot_widgets/                 # Matplotlib plot widgets shared across apps
-│   ├─ single_axis_plot.py       #   Dark-themed 1D plot (auto-focus, line scans)
+│   ├─ single_axis_plot.py       #   Dark-themed 1D plot (single-axis line scans)
 │   ├─ live_plot_napari_widget.py#   pyqtgraph live count-rate plot with controls (napari dock)
 │   └─ pulse_pattern_visualizer.py# Pulse-timing diagram for ODMR/Rabi/T1 tabs
 │
