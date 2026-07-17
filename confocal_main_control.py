@@ -28,7 +28,7 @@ from magicgui import magicgui
 # Local imports
 from galvo_controller import GalvoScannerController
 from data_manager import DataManager
-from piezo_controller import PiezoController
+from daq_z_controller import DAQZController
 from plot_widgets.live_plot_napari_widget import live_plot
 from plot_scan_results import plot_scan_results
 from utils import (
@@ -168,10 +168,10 @@ zoom_manager = ZoomLevelManager()
 galvo_controller = GalvoScannerController()
 data_manager = DataManager()
 
-# Initialize piezo controller
-piezo_controller = PiezoController()
-if not piezo_controller.connect():
-    show_info("⚠️ Failed to connect to piezo controller")
+# Initialize DAQ-based Z (piezo) controller (commands position via Dev1/ao2)
+z_controller = DAQZController()
+if not z_controller.available:
+    show_info("⚠️ Z control via DAQ (ao2) not available")
 
 # Extract scan parameters for initial setup (using defaults)
 x_res = 50  # Default resolution
@@ -599,7 +599,7 @@ camera_control_widget = create_camera_control_widget(viewer)
 
 # Create auto-focus widgets
 signal_bridge = SignalBridge(viewer)
-auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge, piezo_controller)
+auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge, z_controller)
 
 # Create single axis scan widget
 single_axis_scan_widget = SingleAxisScanWidget(
@@ -618,7 +618,7 @@ load_scan_widget = create_load_scan(
 )
 
 # Create piezo control widget
-piezo_control_widget = PiezoControlWidget(piezo_controller)
+piezo_control_widget = PiezoControlWidget(z_controller)
 
 # Set the Z control widget reference in the signal bridge
 signal_bridge.z_control_widget = piezo_control_widget
@@ -733,10 +733,10 @@ def _on_close():
         output_task.write([0, 0])
         show_info("🎯 Scanner set to zero position")
         
-        # Clean up piezo controller
-        if piezo_controller and piezo_controller._is_connected:
-            piezo_controller.disconnect()
-            show_info("✓ Piezo controller disconnected")
+        # Clean up Z (piezo) controller
+        if z_controller:
+            z_controller.close()
+            show_info("✓ Z controller released")
     except Exception as e:
         show_info(f"❌ Error during app closure: {str(e)}")
 

@@ -24,6 +24,14 @@ PIEZO_COARSE_STEP = 5.0  # Step size for coarse focus scan
 PIEZO_FINE_STEP = 0.5    # Step size for fine focus scan
 PIEZO_FINE_RANGE = 10.0  # Range around peak for fine scan
 
+# Z piezo analog control calibration (DAQ ao2 -> EXT IN of the piezo controller)
+# The piezo is initialized/kept in closed loop by external Thorlabs software; the
+# DAQ only commands position through the EXT IN BNC. In closed loop, 0-10 V maps
+# to 0-450 um, i.e. 45 um/V.
+Z_UM_PER_VOLT = 45.0            # Calibration factor (micrometers per volt)
+Z_MAX_TRAVEL_UM = 450.0        # Full travel of the piezo stage in micrometers
+Z_VOLTAGE_RANGE = (0.0, 10.0)  # Allowed EXT IN voltage range for closed-loop control
+
 
 def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):
     """
