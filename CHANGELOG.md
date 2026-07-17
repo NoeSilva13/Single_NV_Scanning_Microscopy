@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file following [K
 
 ## [Unreleased] - 2026-07-17
 ### Changed
+- Rewrote the live signal plot (`plot_widgets/live_plot_napari_widget.py`) on `pyqtgraph` with a ring buffer and added lightweight controls (pause/resume, clear, refresh rate, window length, auto-Y, log-Y); the widget width is constrained to the controls row.
+- Migrated the auto-focus and single-axis scans to hardware-timed DAQ sweeps counted by `CountBetweenMarkers` (DAQ clock defines the bins), matching the 2D raster scan. Both previously used the free-running `Counter`/`binwidth`, which was incorrect since both move the DAQ and the DAQ clock is routed to the Time Tagger.
+- Extracted the shared AO + `CountBetweenMarkers` primitive into `scanning_core.py` (`run_hardware_timed_sweep`, `counts_to_rate`); the 2D raster scan, auto-focus, and single-axis scan now all use it and share the same `scan_lock`/`scan_in_progress` mutual exclusion and Stop-button integration.
+- The free-running `Counter`/`binwidth` in `confocal_main_control.py` now feeds only the live signal plot.
 - Migrated the whole GUI stack from PyQt5 to PySide6 (Qt6) through the `qtpy` abstraction layer: all `PyQt5.*` imports now go through `qtpy.*`, so the binding can be swapped without touching source.
 - Applied Qt6 compatibility fixes: `QDesktopWidget().screenGeometry()` replaced with `QGuiApplication.primaryScreen().availableGeometry()`; `.exec_()` → `.exec()`; enums fully qualified (`Qt.AlignmentFlag`, `Qt.Orientation`, `QMessageBox.StandardButton`/`Icon`, `QFileDialog.FileMode`).
 - Replaced Thorlabs Kinesis USB Z control with DAQ analog output (`Dev1/ao2` → piezo EXT IN) via new `daq_z_controller.py` (`DAQZController`).

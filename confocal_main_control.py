@@ -17,7 +17,7 @@ import time
 import numpy as np 
 import napari
 import nidaqmx
-from nidaqmx.constants import AcquisitionType, TaskMode
+from nidaqmx.constants import TaskMode
 from napari.utils.notifications import show_info
 from napari._qt.dialogs.qt_notification import NapariQtNotification
 NapariQtNotification.DISMISS_AFTER = 1000
@@ -29,6 +29,7 @@ from magicgui import magicgui
 from galvo_controller import GalvoScannerController
 from data_manager import DataManager
 from daq_z_controller import DAQZController
+from scanning_core import run_hardware_timed_sweep, counts_to_rate
 from plot_widgets.live_plot_napari_widget import live_plot
 from plot_scan_results import plot_scan_results
 from utils import (
@@ -240,7 +241,9 @@ except Exception as e:
     tagger.run()
     show_info("✅ Virtual TimeTagger started")
 
-# Set bin width 
+# Free-running counter used ONLY by the live signal plot. All DAQ-driven
+# acquisitions (2D raster, auto-focus, single-axis) instead count with
+# CountBetweenMarkers clocked by the DAQ (see scanning_core.py).
 binwidth = BINWIDTH
 n_values = 1
 counter = TimeTagger.Counter(tagger, [1], binwidth, n_values)
@@ -374,7 +377,6 @@ def scan_pattern(x_points, y_points):
         output_task.write([x_points[0], y_points[0]])
         n_flyback = max(1, int(np.ceil(GALVO_FLYBACK_TIME / dwell_time)))
         x_waveform, y_waveform = generate_scan_waveform(x_points, y_points, n_flyback=n_flyback)
-        total_samples = len(x_waveform)
         stride = width + n_flyback
         pixel_rate = 1.0 / dwell_time
 
@@ -392,88 +394,60 @@ def scan_pattern(x_points, y_points):
         output_task.stop()
         output_task.control(TaskMode.TASK_UNRESERVE)
 
-        # Create hardware-timed finite AO task
-        scan_task = nidaqmx.Task()
-        with scan_lock:
-            scan_task_ref[0] = scan_task
-        scan_task.ao_channels.add_ao_voltage_chan(galvo_controller.xin_control)
-        scan_task.ao_channels.add_ao_voltage_chan(galvo_controller.yin_control)
-        scan_task.timing.cfg_samp_clk_timing(
-            rate=pixel_rate,
-            sample_mode=AcquisitionType.FINITE,
-            samps_per_chan=total_samples+1
-        )
-        scan_task.export_signals.samp_clk_output_term = "/Dev1/PFI8"
-
-        scan_task.write(np.array([x_waveform, y_waveform]), auto_start=False)
-
-        # Configure CountBetweenMarkers (counts during HIGH phase of each clock cycle)
-        cbm = TimeTagger.CountBetweenMarkers(
-            tagger=tagger,
-            click_channel=1,
-            begin_channel=3,
-            end_channel=-3,
-            n_values=total_samples
-        )
-        with scan_lock:
-            cbm_ref[0] = cbm
-
-        cbm.start()
-        time.sleep(1)
         start_time = time.time()
-        scan_task.start()
 
         def _refresh_and_update():
             layer.refresh()
             update_contrast_limits(layer, image)
 
-        # Poll for progress and update the live display
-        last_completed_row = -1
-        while not cbm.ready():
-            if stop_scan_requested[0]:
-                break
-            time.sleep(0.2)
+        # Update the live display incrementally as full rows complete.
+        progress_state = {'last_completed_row': -1}
 
-            partial_data = cbm.getData()
-            partial_bins = cbm.getBinWidths()
-            #print(f"Partial counts: {partial_data}")
-            #print(f"Partial bins: {partial_bins}")
-
+        def _on_progress(partial_data, partial_bins):
             rows_updated = False
-            for row_idx in range(last_completed_row + 1, height):
+            for row_idx in range(progress_state['last_completed_row'] + 1, height):
                 row_start = row_idx * stride
                 row_end = row_start + width
-
                 row_bins = partial_bins[row_start:row_end]
-                if np.all(row_bins > 0):
-                    row_counts = partial_data[row_start:row_end]
-                    row_bin_s = row_bins / 1e12
-                    image[row_idx, :] = row_counts / row_bin_s
-                    last_completed_row = row_idx
+                if len(row_bins) == width and np.all(row_bins > 0):
+                    image[row_idx, :] = counts_to_rate(
+                        partial_data[row_start:row_end], row_bins
+                    )
+                    progress_state['last_completed_row'] = row_idx
                     rows_updated = True
                 else:
                     break
-
             if rows_updated:
                 bridge.run_on_main(_refresh_and_update)
+
+        # Hardware-timed raster: clock out the waveform on ao0/ao1 while the
+        # Time Tagger counts photons between clock edges (one value per sample).
+        all_counts, bin_widths = run_hardware_timed_sweep(
+            tagger,
+            [galvo_controller.xin_control, galvo_controller.yin_control],
+            np.array([x_waveform, y_waveform]),
+            pixel_rate,
+            stop_check=lambda: stop_scan_requested[0],
+            on_progress=_on_progress,
+            task_ref=scan_task_ref,
+            cbm_ref=cbm_ref,
+            lock=scan_lock,
+        )
 
         if stop_scan_requested[0]:
             bridge.notify("🛑 Scan stopped by user")
             return None, None
 
         # Extract final image from completed measurement
-        all_counts = cbm.getData()
-        bin_widths = cbm.getBinWidths()
         print(f"All counts: {all_counts}")
         print(f"Bin widths: {bin_widths}")
 
         for row_idx in range(height):
             row_start = row_idx * stride
             row_end = row_start + width
-            row_counts = all_counts[row_start:row_end]
-            row_bin_s = bin_widths[row_start:row_end] / 1e12
-            valid = row_bin_s > 0
-            image[row_idx, valid] = row_counts[valid] / row_bin_s[valid]
+            image[row_idx, :] = counts_to_rate(
+                all_counts[row_start:row_end], bin_widths[row_start:row_end]
+            )
 
         def _final_layer_update():
             layer.data = image
@@ -537,22 +511,8 @@ def scan_pattern(x_points, y_points):
         threading.Thread(target=_save_all, daemon=True).start()
 
     finally:
-        with scan_lock:
-            if scan_task_ref[0] is not None:
-                try:
-                    scan_task_ref[0].stop()
-                    scan_task_ref[0].close()
-                except Exception:
-                    pass
-                scan_task_ref[0] = None
-
-            if cbm_ref[0] is not None:
-                try:
-                    cbm_ref[0].stop()
-                except Exception:
-                    pass
-                cbm_ref[0] = None
-
+        # The AO task and CBM lifecycle are owned by run_hardware_timed_sweep;
+        # here we only restore the persistent on-demand galvo task.
         try:
             output_task.start()
             output_task.write([0, 0])
@@ -600,11 +560,15 @@ camera_control_widget = create_camera_control_widget(viewer)
 
 # Create auto-focus widgets
 signal_bridge = SignalBridge(viewer)
-auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge, z_controller)
+auto_focus_widget = create_auto_focus(
+    tagger, scan_params_manager, signal_bridge, z_controller,
+    scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref
+)
 
 # Create single axis scan widget
 single_axis_scan_widget = SingleAxisScanWidget(
-    scan_params_manager, layer, output_task, counter, binwidth
+    scan_params_manager, layer, output_task, tagger, galvo_controller,
+    scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref
 )
 
 # Set the global reference for position tracking

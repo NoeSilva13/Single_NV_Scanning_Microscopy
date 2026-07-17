@@ -5,26 +5,34 @@ Contains the SingleAxisScanWidget class for performing 1D scans along X or Y axi
 """
 
 import threading
-import time
 import numpy as np
+from nidaqmx.constants import TaskMode
 from qtpy.QtWidgets import QWidget, QPushButton, QGridLayout
 from qtpy.QtCore import Signal as pyqtSignal
 from napari.utils.notifications import show_info
 from plot_widgets.single_axis_plot import SingleAxisPlot
+from scanning_core import run_hardware_timed_sweep, counts_to_rate
 
 
 class SingleAxisScanWidget(QWidget):
     """Widget for performing single axis scans at current cursor position"""
     _plot_ready_signal = pyqtSignal(dict)
 
-    def __init__(self, scan_params_manager, layer, output_task, counter, binwidth, parent=None):
+    def __init__(self, scan_params_manager, layer, output_task, tagger,
+                 galvo_controller, scan_lock, scan_in_progress,
+                 stop_scan_requested, scan_task_ref, cbm_ref, parent=None):
         super().__init__(parent)
         self._plot_ready_signal.connect(self._on_plot_ready)
         self.scan_params_manager = scan_params_manager
         self.layer = layer
         self.output_task = output_task
-        self.counter = counter
-        self.binwidth = binwidth
+        self.tagger = tagger
+        self.galvo_controller = galvo_controller
+        self.scan_lock = scan_lock
+        self.scan_in_progress = scan_in_progress
+        self.stop_scan_requested = stop_scan_requested
+        self.scan_task_ref = scan_task_ref
+        self.cbm_ref = cbm_ref
         
         # Track current scanner position internally (default to center)
         self.current_x_voltage = 0.0
@@ -83,54 +91,81 @@ class SingleAxisScanWidget(QWidget):
         return self.current_x_voltage, self.current_y_voltage
     
     def start_scan(self, axis):
-        """Start a single axis scan"""
+        """Start a hardware-timed single axis scan using CountBetweenMarkers."""
         x_pos, y_pos = self.get_current_position()
-        
+
         # Get current parameter values
         params = self.scan_params_manager.get_params()
         x_range = params['scan_range']['x']
         y_range = params['scan_range']['y']
         x_res = params['resolution']['x']
         y_res = params['resolution']['y']
-        
-        # Use resolution and range from parameters
+        dwell_time = params['dwell_time']
+
+        # Build the scanned-axis points and the constant fixed-axis waveform.
         if axis == 'x':
             scan_points = np.linspace(x_range[0], x_range[1], x_res)
-            fixed_pos = y_pos
+            x_waveform = scan_points
+            y_waveform = np.full(len(scan_points), y_pos)
             axis_label = 'X Position (V)'
         else:  # y-axis
             scan_points = np.linspace(y_range[0], y_range[1], y_res)
-            fixed_pos = x_pos
+            x_waveform = np.full(len(scan_points), x_pos)
+            y_waveform = scan_points
             axis_label = 'Y Position (V)'
-        
-        # Perform scan in a separate thread
-        def run_scan():
-            counts = []
-            for point in scan_points:
-                if axis == 'x':
-                    self.output_task.write([point, fixed_pos])
-                else:
-                    self.output_task.write([fixed_pos, point])
 
-                # Get dwell time from parameters
-                dwell_time = params['dwell_time']
-                time.sleep(dwell_time)  # Small delay for settling
-                count = self.counter.getData()[0][0]/(self.binwidth/1e12)
-                print(count)
-                counts.append(count)
-            
-            self._plot_ready_signal.emit({
-                'x_data': scan_points,
-                'y_data': counts,
-                'x_label': axis_label,
-                'y_label': 'Counts',
-                'title': f'Single Axis Scan ({axis.upper()})',
-                'mark_peak': True
-            })
-            
-            # Return to original position
-            self.output_task.write([x_pos, y_pos])
-        
+        def run_scan():
+            # Acquire exclusive access to the DAQ AO engine / Time Tagger clock.
+            with self.scan_lock:
+                if self.scan_in_progress[0]:
+                    show_info('⚠️ A scan is already in progress')
+                    return
+                self.scan_in_progress[0] = True
+                self.stop_scan_requested[0] = False
+
+            try:
+                # Release the galvo channels from the persistent on-demand task.
+                self.output_task.stop()
+                self.output_task.control(TaskMode.TASK_UNRESERVE)
+
+                counts, bin_widths = run_hardware_timed_sweep(
+                    self.tagger,
+                    [self.galvo_controller.xin_control,
+                     self.galvo_controller.yin_control],
+                    np.array([x_waveform, y_waveform]),
+                    1.0 / dwell_time,
+                    stop_check=lambda: self.stop_scan_requested[0],
+                    task_ref=self.scan_task_ref,
+                    cbm_ref=self.cbm_ref,
+                    lock=self.scan_lock,
+                )
+
+                if self.stop_scan_requested[0]:
+                    show_info('🛑 Single-axis scan stopped by user')
+                    return
+
+                count_rates = counts_to_rate(counts, bin_widths)
+                self._plot_ready_signal.emit({
+                    'x_data': scan_points,
+                    'y_data': count_rates,
+                    'x_label': axis_label,
+                    'y_label': 'Counts',
+                    'title': f'Single Axis Scan ({axis.upper()})',
+                    'mark_peak': True
+                })
+
+            except Exception as e:
+                show_info(f'❌ Single-axis scan error: {str(e)}')
+            finally:
+                # Restore the persistent on-demand galvo task and original position.
+                try:
+                    self.output_task.start()
+                    self.output_task.write([x_pos, y_pos])
+                except Exception as e:
+                    show_info(f'⚠️ Failed to restart galvo control: {e}')
+                with self.scan_lock:
+                    self.scan_in_progress[0] = False
+
         threading.Thread(target=run_scan, daemon=True).start()
         show_info(f"🔍 Starting {axis.upper()}-axis scan...")
 

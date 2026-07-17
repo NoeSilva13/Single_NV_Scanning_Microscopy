@@ -153,25 +153,27 @@ class ZoomLevelManager:
 
 ### Auto Focus (`auto_focus.py`)
 
-- **`run_focus_sweep(z_controller, count_function, progress_callback=None, ...)`**
+- **`run_focus_sweep(tagger, z_controller, dwell_time, progress_callback=None, ...)`**
   - Coarse + fine Z sweep that maximizes SPD count rate
-  - Moves via `DAQZController.set_position`; returns `(positions, counts, optimal_pos)`
+  - Each phase is a hardware-timed piezo ramp on `ao2`; photons are counted per point by `CountBetweenMarkers` (via `scanning_core.run_hardware_timed_sweep`)
+  - Returns `(coarse_positions, coarse_counts, fine_positions, fine_counts, optimal_pos)`
 
-- **`auto_focus(counter, binwidth, signal_bridge, z_controller)`**
+- **`auto_focus(tagger, scan_params_manager, signal_bridge, z_controller, scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref)`**
   - Creates "🔍 Auto Focus" button widget
-  - Runs `run_focus_sweep` in a background thread and updates the focus plot / Z widget
+  - Runs `run_focus_sweep` in a background thread (mutually exclusive with the raster/single-axis scans via the shared `scan_lock`/`scan_in_progress`) and updates the focus plot / Z widget
 
 - **`SignalBridge(viewer)`**
   - Thread-safe `QObject` bridge for GUI updates emitted from the auto-focus worker thread
   - Handles focus-plot creation/updates and forwards Z position updates to the piezo control widget (`z_control_widget`)
 
-- **`create_focus_plot_widget(positions, counts)`**
-  - Creates a `SingleAxisPlot`-based plot widget (from `plot_widgets`) for auto-focus results
+- **`create_focus_plot_widget(coarse_pos, coarse_counts, fine_pos=None, fine_counts=None)`**
+  - Creates a `SingleAxisPlot`-based plot widget (from `plot_widgets`) that shows the coarse and fine sweeps as separate series
 
 ### Single Axis Scan (`single_axis_scan.py`)
 
-- **`SingleAxisScanWidget(scan_params_manager, layer, output_task, counter, binwidth)`**
+- **`SingleAxisScanWidget(scan_params_manager, layer, output_task, tagger, galvo_controller, scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref)`**
   - Complete widget for 1D X/Y line scans at the current galvo position
+  - Runs a hardware-timed AO ramp on the scanned galvo axis (holding the other fixed) with per-point photon counting via `CountBetweenMarkers` (`scanning_core.run_hardware_timed_sweep`); mutually exclusive with the raster/auto-focus scans
   - Includes scan buttons, a result plot (`SingleAxisPlot`), and `update_current_position(x, y)` for tracking the galvo's last commanded position
 
 ### File Operations (`file_operations.py`)

@@ -20,7 +20,7 @@ Each application can be run independently and only requires the hardware/drivers
 - Live **XY raster scanning** with per-pixel, hardware-timed photon counting (NI-DAQ sample clock + Swabian TimeTagger `CountBetweenMarkers`).
 - **napari**-based viewer (zoom, pan, live contrast auto-scaling, scale bar in µm).
 - **Click-to-move** galvo positioning and rectangle **ROI zoom** (up to 9 nested zoom levels, with history/undo via "Reset Zoom").
-- Integrated **auto-focus** routine (coarse + fine piezo Z-sweep) and **single-axis line scans** along X or Y.
+- Integrated **auto-focus** routine (coarse + fine piezo Z-sweep) and **single-axis line scans** along X or Y, both hardware-timed with per-point photon counting via the DAQ clock + TimeTagger `CountBetweenMarkers` (shared `scanning_core.py`).
 - Multi-backend **live camera preview** (POA / ZWO / USB webcam) and single-shot capture, docked in the viewer.
 - Real-time photon-count **strip-chart plot** with overflow indication.
 - Manual **Z-axis piezo control** widget (DAQ analog output `ao2` → piezo EXT IN) alongside the auto-focus routine.
@@ -203,6 +203,7 @@ Single_NV_Scannig_Microscopy/
 ├─ odmr_data_manager.py          # ODMRDataManager: saves ODMR/Rabi/T1 CSVs per experiment type
 ├─ galvo_controller.py           # GalvoScannerController: NI-DAQ channel setup & voltage I/O
 ├─ daq_z_controller.py           # DAQZController: NI-DAQ ao2 → piezo EXT IN for Z position
+├─ scanning_core.py              # Shared hardware-timed AO + CountBetweenMarkers sweep primitive
 ├─ plot_scan_results.py          # Thread-safe PNG heatmap export after each confocal scan
 ├─ thread_safe_bridge.py         # GUIBridge: marshal background-thread updates onto the Qt/napari main thread
 ├─ utils.py                      # Calibration constants + ImageJ-compatible TIFF export
@@ -217,7 +218,7 @@ Single_NV_Scannig_Microscopy/
 │
 ├─ plot_widgets/                 # Matplotlib plot widgets shared across apps
 │   ├─ single_axis_plot.py       #   Dark-themed 1D plot (auto-focus, line scans)
-│   ├─ live_plot_napari_widget.py#   Rolling strip-chart for live count rate (napari dock)
+│   ├─ live_plot_napari_widget.py#   pyqtgraph live count-rate plot with controls (napari dock)
 │   └─ pulse_pattern_visualizer.py# Pulse-timing diagram for ODMR/Rabi/T1 tabs
 │
 ├─ PulseBlaster/                 # Pulse Streamer & Rigol drivers + experiment logic
