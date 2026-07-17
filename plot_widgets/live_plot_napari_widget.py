@@ -1,16 +1,24 @@
 """
 live_plot_napari_widget
 ========================================================================
-A napari-compatible widget for live plotting of measurements with overflow detection
+A napari-compatible widget for live plotting of measurements with overflow
+detection, built on pyqtgraph for fast real-time updates.
+
+Provides lightweight user controls: pause/resume, clear, refresh rate,
+window length (number of points), autoscale toggle and log-Y toggle.
 """
 
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
-from matplotlib.patches import Rectangle
-from qtpy.QtCore import QTimer
-from qtpy.QtWidgets import QWidget, QVBoxLayout, QGridLayout
-import numpy as np
+from collections import deque
 from time import time
+
+import numpy as np
+import pyqtgraph as pg
+from qtpy.QtCore import QTimer, Qt
+from qtpy.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
+    QSpinBox, QCheckBox, QLabel
+)
+
 
 class LivePlotNapariWidget(QWidget):
     def __init__(
@@ -19,145 +27,195 @@ class LivePlotNapariWidget(QWidget):
         histogram_range=100,
         dt=100,  # dt in milliseconds
         widget_height=250,
-        figsize=(4, 2),
+        figsize=(4, 2),  # kept for backward compatibility (unused with pyqtgraph)
         bg_color='#262930',
         plot_color='#00ff00',
-        alarm_color='#ff0000',  # Red color for overflow alarm
+        alarm_color='#ff0000',
         parent=None
     ):
         super().__init__(parent)
         self.measure_function = measure_function
-        self.histogram_range = histogram_range
+        self.histogram_range = int(histogram_range)
         self.bg_color = bg_color
         self.plot_color = plot_color
         self.alarm_color = alarm_color
         self.overflow_detected = False
-        self.alarm_rect = None
-        
-        # Setup widget dimensions
-        self.setFixedHeight(widget_height)
-        
-        # Setup the figure with a style that matches napari's dark theme
-        self.fig = Figure(figsize=figsize, facecolor=self.bg_color)
-        self.canvas = FigureCanvas(self.fig)
-        self.ax = self.fig.add_subplot(111)
-        self.ax.set_facecolor(self.bg_color)
-        
-        # Style the plot to match napari's dark theme
-        self.ax.tick_params(colors='white')
-        for spine in self.ax.spines.values():
-            spine.set_color('white')
-        
-        # Setup the layout
-        layout = QGridLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addWidget(self.canvas)
-        self.setLayout(layout)
-        
-        # Initialize data
-        self.x_data = []
-        self.y_data = []
+        self._dt_ms = int(dt)
+
+        self.setMinimumHeight(widget_height)
+
+        # Ring buffers for the rolling window
+        self.x_data = deque(maxlen=self.histogram_range)
+        self.y_data = deque(maxlen=self.histogram_range)
         self.t0 = time()
-        
-        # Setup timer for updates
+
+        self._build_ui()
+
+        # Update timer
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_plot)
-        self.timer.start(dt)  # Update every dt milliseconds
-        
-        # Setup the plot
-        self.line, = self.ax.plot([], [], color=self.plot_color)  # Line with markers
-        self.ax.set_xlabel('Time (s)', color='white')
-        self.ax.set_ylabel('Signal', color='white')
-        self.ax.grid(True, color='gray', alpha=0.3)
-        
-        # Ensure the figure background matches napari
-        self.fig.patch.set_facecolor(self.bg_color)
-        self.fig.tight_layout()
-        self.canvas.draw()
-    
+        self.timer.start(self._dt_ms)
+
+    # --------------------------------------------------------------
+    # UI
+    # --------------------------------------------------------------
+    def _build_ui(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(2, 2, 2, 2)
+        layout.setSpacing(4)
+        self.setLayout(layout)
+
+        layout.addLayout(self._build_controls())
+
+        # pyqtgraph plot
+        self.plot_widget = pg.PlotWidget()
+        self.plot_widget.setBackground(self.bg_color)
+        self.plot_item = self.plot_widget.getPlotItem()
+        self.plot_item.showGrid(x=True, y=True, alpha=0.3)
+        self.plot_item.setLabel('bottom', 'Time (s)', color='white')
+        self.plot_item.setLabel('left', 'Signal', color='white')
+        for axis_name in ('left', 'bottom'):
+            axis = self.plot_item.getAxis(axis_name)
+            axis.setTextPen('white')
+            axis.setPen('white')
+        self.curve = self.plot_item.plot(pen=pg.mkPen(self.plot_color, width=1))
+
+        # Overflow banner drawn over the plot, centered
+        self.overflow_text = pg.TextItem('OVERFLOW', color='white', anchor=(0.5, 0.5))
+        self.overflow_text.setVisible(False)
+        self.plot_item.addItem(self.overflow_text)
+
+        layout.addWidget(self.plot_widget)
+
+        self._apply_autoscale()
+        self._apply_log_mode()
+
+    def _build_controls(self):
+        controls = QHBoxLayout()
+        controls.setSpacing(6)
+
+        self.pause_btn = QPushButton('Pause')
+        self.pause_btn.setCheckable(True)
+        self.pause_btn.toggled.connect(self._on_pause_toggled)
+        controls.addWidget(self.pause_btn)
+
+        self.clear_btn = QPushButton('Clear')
+        self.clear_btn.clicked.connect(self.clear)
+        controls.addWidget(self.clear_btn)
+
+        controls.addWidget(QLabel('Refresh (ms):'))
+        self.refresh_spin = QSpinBox()
+        self.refresh_spin.setRange(10, 5000)
+        self.refresh_spin.setSingleStep(10)
+        self.refresh_spin.setValue(self._dt_ms)
+        self.refresh_spin.valueChanged.connect(self._on_refresh_changed)
+        controls.addWidget(self.refresh_spin)
+
+        controls.addWidget(QLabel('Window:'))
+        self.window_spin = QSpinBox()
+        self.window_spin.setRange(10, 100000)
+        self.window_spin.setSingleStep(10)
+        self.window_spin.setValue(self.histogram_range)
+        self.window_spin.valueChanged.connect(self._on_window_changed)
+        controls.addWidget(self.window_spin)
+
+        self.autoscale_chk = QCheckBox('Auto Y')
+        self.autoscale_chk.setChecked(True)
+        self.autoscale_chk.toggled.connect(self._apply_autoscale)
+        controls.addWidget(self.autoscale_chk)
+
+        self.log_chk = QCheckBox('Log Y')
+        self.log_chk.setChecked(False)
+        self.log_chk.toggled.connect(self._apply_log_mode)
+        controls.addWidget(self.log_chk)
+
+        self.status_label = QLabel('')
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        controls.addWidget(self.status_label, stretch=1)
+
+        return controls
+
+    # --------------------------------------------------------------
+    # Control callbacks
+    # --------------------------------------------------------------
+    def _on_pause_toggled(self, paused):
+        if paused:
+            self.timer.stop()
+            self.pause_btn.setText('Resume')
+        else:
+            self.timer.start(self._dt_ms)
+            self.pause_btn.setText('Pause')
+
+    def _on_refresh_changed(self, value):
+        self._dt_ms = int(value)
+        if self.timer.isActive():
+            self.timer.start(self._dt_ms)
+
+    def _on_window_changed(self, value):
+        self.histogram_range = int(value)
+        # Recreate ring buffers preserving the most recent samples
+        self.x_data = deque(self.x_data, maxlen=self.histogram_range)
+        self.y_data = deque(self.y_data, maxlen=self.histogram_range)
+
+    def _apply_autoscale(self, *_):
+        self.plot_item.enableAutoRange('y', self.autoscale_chk.isChecked())
+
+    def _apply_log_mode(self, *_):
+        self.plot_item.setLogMode(y=self.log_chk.isChecked())
+
+    # --------------------------------------------------------------
+    # Data update
+    # --------------------------------------------------------------
     def update_plot(self):
         try:
-            # Get new data - can be a single value or a tuple (value, overflow_flag)
             result = self.measure_function()
-            
-            # Check if the result includes overflow information
+
             if isinstance(result, tuple) and len(result) == 2:
                 new_data, overflow = result
-                self.overflow_detected = overflow
+                self.overflow_detected = bool(overflow)
             else:
-                # If no overflow info, assume it's just the data value
                 new_data = result
                 self.overflow_detected = False
-                
-            current_time = time() - self.t0
-            
-            # Update data lists
-            self.x_data.append(current_time)
+
+            self.x_data.append(time() - self.t0)
             self.y_data.append(new_data)
-            
-            # Keep only the last histogram_range points
-            if len(self.x_data) > self.histogram_range:
-                self.x_data = self.x_data[-self.histogram_range:]
-                self.y_data = self.y_data[-self.histogram_range:]
-            
-            # Update the plot
-            self.line.set_data(self.x_data, self.y_data)
-            self.ax.relim()
-            self.ax.autoscale_view()
-            
-            # Display or hide overflow alarm
+
+            self.curve.setData(np.fromiter(self.x_data, dtype=float),
+                               np.fromiter(self.y_data, dtype=float))
+
             self._update_overflow_alarm()
-            
-            self.fig.tight_layout()
-            self.canvas.draw()
         except Exception as e:
             print(f"Error updating plot: {e}")
-    
+
+    def _update_overflow_alarm(self):
+        """Show/hide the overflow banner and status text."""
+        if self.overflow_detected:
+            self.status_label.setText('OVERFLOW')
+            self.status_label.setStyleSheet(f'color: {self.alarm_color}; font-weight: bold;')
+            # Center the banner in the current view
+            view_range = self.plot_item.viewRange()
+            cx = (view_range[0][0] + view_range[0][1]) / 2
+            cy = (view_range[1][0] + view_range[1][1]) / 2
+            self.overflow_text.setColor(self.alarm_color)
+            self.overflow_text.setPos(cx, cy)
+            self.overflow_text.setVisible(True)
+        else:
+            self.status_label.setText('')
+            self.overflow_text.setVisible(False)
+
+    def clear(self):
+        """Clear the current plot data."""
+        self.x_data.clear()
+        self.y_data.clear()
+        self.curve.setData([], [])
+        self.overflow_detected = False
+        self.overflow_text.setVisible(False)
+        self.status_label.setText('')
+
     def closeEvent(self, event):
         self.timer.stop()
         super().closeEvent(event)
 
-    def _update_overflow_alarm(self):
-        """Update the overflow alarm visual indicator"""
-        # Remove existing alarm if present
-        if self.alarm_rect is not None:
-            self.alarm_rect.remove()
-            self.alarm_rect = None
-            
-        # If overflow detected, display the alarm
-        if self.overflow_detected:
-            # Get axis dimensions
-            bbox = self.ax.get_window_extent().transformed(self.fig.dpi_scale_trans.inverted())
-            width, height = bbox.width, bbox.height
-            
-            # Create a red rectangle at the top of the plot
-            self.alarm_rect = Rectangle((0, 0), 1, 1, transform=self.ax.transAxes,
-                                       color=self.alarm_color, alpha=0.3,
-                                       zorder=1000)  # Ensure it's on top
-            self.ax.add_patch(self.alarm_rect)
-            
-            # Add "OVERFLOW" text
-            if not hasattr(self, 'overflow_text') or self.overflow_text not in self.ax.texts:
-                self.overflow_text = self.ax.text(0.5, 0.5, "OVERFLOW", 
-                                               transform=self.ax.transAxes,
-                                               ha='center', va='center',
-                                               color='white', fontsize=14, fontweight='bold',
-                                               zorder=1001)  # Ensure text is on top of rectangle
-        else:
-            # Remove overflow text if it exists
-            if hasattr(self, 'overflow_text') and self.overflow_text in self.ax.texts:
-                self.overflow_text.remove()
-                self.overflow_text = None
-    
-    def clear(self):
-        """Clear the current plot"""
-        self.ax.clear()
-        self.overflow_detected = False
-        self.alarm_rect = None
-        if hasattr(self, 'overflow_text'):
-            self.overflow_text = None
-        self.canvas.draw()
 
 def live_plot(
     measure_function,
@@ -170,31 +228,32 @@ def live_plot(
     alarm_color='#ff0000'
 ):
     '''
-    Creates a LivePlotNapariWidget that updates with new measurements
-    
+    Creates a LivePlotNapariWidget that updates with new measurements.
+
     Parameters
     ---------------------------------------------------------------------------------
     measure_function : callable
-        Function that generates a data point or array of points
+        Function returning a data point, or a tuple (value, overflow_flag).
     histogram_range : int
-        Total number of data points plotted before overwriting
+        Number of points shown in the rolling window (adjustable in the UI).
     dt : float
-        Time between datapoints in seconds (converted to milliseconds internally)
+        Time between updates in seconds (converted to milliseconds internally;
+        adjustable in the UI).
     widget_height : int
-        Height of the widget in pixels
+        Minimum height of the widget in pixels.
     figsize : tuple
-        Figure size in inches (width, height)
+        Kept for backward compatibility (unused with pyqtgraph).
     bg_color : str
-        Background color of the plot
+        Background color of the plot.
     plot_color : str
-        Color of the plot line
+        Color of the plot line.
     alarm_color : str
-        Color of the overflow alarm
-    
+        Color of the overflow alarm.
+
     Returns
     ---------------------------------------------------------------------------------
     LivePlotNapariWidget
-        A Qt widget that can be added to napari's viewer
+        A Qt widget that can be added to napari's viewer.
     '''
     return LivePlotNapariWidget(
         measure_function,
