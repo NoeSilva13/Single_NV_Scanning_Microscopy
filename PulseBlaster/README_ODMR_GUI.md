@@ -39,10 +39,10 @@ A professional graphical interface for controlling continuous wave ODMR (Optical
 
 ### Prerequisites
 
-1. **Python 3.7 or higher**
+1. **Python 3.11 or higher**
 2. **Required Python packages**:
    ```bash
-   pip install PyQt5 numpy matplotlib
+   pip install PySide6 qtpy numpy matplotlib
    ```
 
 3. **Hardware drivers**:
@@ -250,10 +250,10 @@ MW Power: -5 dBm
 ### Software Issues
 
 **Application crashes:**
-- Check Python version (3.7+ required)
+- Check Python version (3.11+ required)
 - Verify all dependencies are installed:
   ```bash
-  pip install PyQt5 numpy matplotlib
+  pip install PySide6 qtpy numpy matplotlib
   ```
 - Check system resources (RAM, CPU)
 - Restart application

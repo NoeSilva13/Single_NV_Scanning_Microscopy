@@ -7,8 +7,8 @@ Contains the SingleAxisScanWidget class for performing 1D scans along X or Y axi
 import threading
 import time
 import numpy as np
-from PyQt5.QtWidgets import QWidget, QPushButton, QGridLayout
-from PyQt5.QtCore import pyqtSignal
+from qtpy.QtWidgets import QWidget, QPushButton, QGridLayout
+from qtpy.QtCore import Signal as pyqtSignal
 from napari.utils.notifications import show_info
 from plot_widgets.single_axis_plot import SingleAxisPlot
 

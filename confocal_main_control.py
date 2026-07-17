@@ -21,14 +21,14 @@ from nidaqmx.constants import AcquisitionType, TaskMode
 from napari.utils.notifications import show_info
 from napari._qt.dialogs.qt_notification import NapariQtNotification
 NapariQtNotification.DISMISS_AFTER = 1000
-from PyQt5.QtWidgets import QDesktopWidget
+from qtpy.QtGui import QGuiApplication
 import TimeTagger
 from magicgui import magicgui
 
 # Local imports
 from galvo_controller import GalvoScannerController
 from data_manager import DataManager
-from piezo_controller import PiezoController
+from daq_z_controller import DAQZController
 from plot_widgets.live_plot_napari_widget import live_plot
 from plot_scan_results import plot_scan_results
 from utils import (
@@ -168,10 +168,10 @@ zoom_manager = ZoomLevelManager()
 galvo_controller = GalvoScannerController()
 data_manager = DataManager()
 
-# Initialize piezo controller
-piezo_controller = PiezoController()
-if not piezo_controller.connect():
-    show_info("⚠️ Failed to connect to piezo controller")
+# Initialize DAQ-based Z (piezo) controller (commands position via Dev1/ao2)
+z_controller = DAQZController()
+if not z_controller.available:
+    show_info("⚠️ Z control via DAQ (ao2) not available")
 
 # Extract scan parameters for initial setup (using defaults)
 x_res = 50  # Default resolution
@@ -200,7 +200,7 @@ output_task.start()
 # --------------------- NAPARI VIEWER SETUP ---------------------
 viewer = napari.Viewer(title="NV Scanning Microscopy")
 # Set window size to maximum screen size
-screen = QDesktopWidget().screenGeometry()
+screen = QGuiApplication.primaryScreen().availableGeometry()
 viewer.window.resize(screen.width(), screen.height())
 
 # Thread-safe bridge for GUI updates from background threads
@@ -212,9 +212,8 @@ layer = viewer.add_image(image, name="live scan", colormap="viridis", contrast_l
 # Add a shapes layer to display the zoom area
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
-# Configure scale bar
+# Configure scale bar (units come from layers in napari >= 0.8)
 viewer.scale_bar.visible = True
-viewer.scale_bar.unit = "µm"
 viewer.scale_bar.position = "bottom_left"
 
 # Calculate scale (in microns/pixel) using defaults initially
@@ -223,6 +222,8 @@ y_range = [-1.0, 1.0]  # Default range
 scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
 scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
 layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+layer.units = ('µm', 'µm')
+shapes.units = ('µm', 'µm')
 
 # --------------------- TIMETAGGER SETUP ---------------------
 try:
@@ -599,7 +600,7 @@ camera_control_widget = create_camera_control_widget(viewer)
 
 # Create auto-focus widgets
 signal_bridge = SignalBridge(viewer)
-auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge, piezo_controller)
+auto_focus_widget = create_auto_focus(counter, binwidth, signal_bridge, z_controller)
 
 # Create single axis scan widget
 single_axis_scan_widget = SingleAxisScanWidget(
@@ -618,7 +619,7 @@ load_scan_widget = create_load_scan(
 )
 
 # Create piezo control widget
-piezo_control_widget = PiezoControlWidget(piezo_controller)
+piezo_control_widget = PiezoControlWidget(z_controller)
 
 # Set the Z control widget reference in the signal bridge
 signal_bridge.z_control_widget = piezo_control_widget
@@ -720,10 +721,8 @@ viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", 
 viewer.window._qt_window.tabifyDockWidget(update_scan_parameters_dock, camera_control_dock)
 
 
-# Initialize empty auto-focus plot
-empty_positions = [0, 1]
-empty_counts = [0, 0]
-signal_bridge.update_focus_plot_signal.emit(empty_positions, empty_counts, 'Auto-Focus Plot')
+# Initialize empty auto-focus plot (coarse + fine series)
+signal_bridge.update_focus_plot_signal.emit([0, 1], [0, 0], [], [], 'Auto-Focus Plot')
 
 # --------------------- CLEANUP ON CLOSE ---------------------
 def _on_close():
@@ -733,10 +732,10 @@ def _on_close():
         output_task.write([0, 0])
         show_info("🎯 Scanner set to zero position")
         
-        # Clean up piezo controller
-        if piezo_controller and piezo_controller._is_connected:
-            piezo_controller.disconnect()
-            show_info("✓ Piezo controller disconnected")
+        # Clean up Z (piezo) controller
+        if z_controller:
+            z_controller.close()
+            show_info("✓ Z controller released")
     except Exception as e:
         show_info(f"❌ Error during app closure: {str(e)}")
 
