@@ -13,11 +13,11 @@ readback, so the displayed position is the last commanded value.
 
 import threading
 
-from PyQt5.QtWidgets import (
+from qtpy.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QDoubleSpinBox
 )
-from PyQt5.QtCore import Qt, pyqtSignal, QTimer
+from qtpy.QtCore import Qt, Signal as pyqtSignal, QTimer
 from napari.utils.notifications import show_info
 
 from utils import Z_MAX_TRAVEL_UM
@@ -46,7 +46,7 @@ class PiezoControlWidget(QWidget):
         self.setLayout(layout)
 
         title = QLabel("Z-Axis Control (µm)")
-        title.setAlignment(Qt.AlignCenter)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
         controls_layout = QHBoxLayout()

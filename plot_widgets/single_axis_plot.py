@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QProgressBar, QLabel
+from qtpy.QtWidgets import QWidget, QVBoxLayout, QGridLayout, QProgressBar, QLabel
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 import numpy as np

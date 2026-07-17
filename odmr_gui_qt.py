@@ -18,14 +18,13 @@ from typing import Dict, List, Optional
 import numpy as np
 
 # Qt imports
-from PyQt5.QtWidgets import (
+from qtpy.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QGridLayout, QLabel, QLineEdit, QPushButton, QProgressBar,
     QTextEdit, QGroupBox, QTabWidget, QFileDialog, QMessageBox,
-    QSplitter, QFrame, QScrollArea, QSpacerItem, QSizePolicy
+    QSplitter, QScrollArea
 )
-from PyQt5.QtCore import QThread, pyqtSignal, QTimer, Qt
-from PyQt5.QtGui import QFont, QPalette, QColor
+from qtpy.QtCore import QThread, Signal as pyqtSignal, QTimer, Qt
 
 # Matplotlib imports for real-time plotting
 import matplotlib.pyplot as plt
@@ -367,7 +366,7 @@ class ODMRControlCenter(QMainWindow):
         self.setCentralWidget(central_widget)
         
         # Create main horizontal splitter
-        main_splitter = QSplitter(Qt.Horizontal)
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
         central_widget_layout = QHBoxLayout()
         central_widget_layout.addWidget(main_splitter)
         central_widget.setLayout(central_widget_layout)
@@ -1814,9 +1813,10 @@ class ODMRControlCenter(QMainWindow):
         if self.worker and self.worker.isRunning():
             reply = QMessageBox.question(
                 self, "Quit", "Experiment in progress. Wait for it to finish and quit?",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
             )
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.StandardButton.Yes:
                 self.worker.wait(30000)
             else:
                 event.ignore()
@@ -1851,7 +1851,7 @@ def main():
     window.show()
     
     # Start event loop
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

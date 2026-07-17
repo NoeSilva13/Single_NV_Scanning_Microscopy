@@ -21,7 +21,7 @@ from nidaqmx.constants import AcquisitionType, TaskMode
 from napari.utils.notifications import show_info
 from napari._qt.dialogs.qt_notification import NapariQtNotification
 NapariQtNotification.DISMISS_AFTER = 1000
-from PyQt5.QtWidgets import QDesktopWidget
+from qtpy.QtGui import QGuiApplication
 import TimeTagger
 from magicgui import magicgui
 
@@ -200,7 +200,7 @@ output_task.start()
 # --------------------- NAPARI VIEWER SETUP ---------------------
 viewer = napari.Viewer(title="NV Scanning Microscopy")
 # Set window size to maximum screen size
-screen = QDesktopWidget().screenGeometry()
+screen = QGuiApplication.primaryScreen().availableGeometry()
 viewer.window.resize(screen.width(), screen.height())
 
 # Thread-safe bridge for GUI updates from background threads

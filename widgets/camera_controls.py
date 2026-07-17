@@ -10,8 +10,8 @@ Contains:
 
 import time
 import numpy as np
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QGridLayout, QComboBox, QHBoxLayout
-from PyQt5.QtCore import QThread, pyqtSignal, pyqtSlot, Qt
+from qtpy.QtWidgets import QWidget, QVBoxLayout, QPushButton, QLabel, QSlider, QGridLayout, QComboBox, QHBoxLayout
+from qtpy.QtCore import QThread, Signal as pyqtSignal, Slot as pyqtSlot, Qt
 from magicgui import magicgui, widgets
 from napari.utils.notifications import show_info
 from Camera import POACameraController, ZWOCameraController, USBWebcamController
@@ -345,17 +345,17 @@ class CameraControlWidget(QWidget):
         exp_header = QHBoxLayout()
         exp_header.setContentsMargins(0, 0, 0, 0)
         exp_label = QLabel("Exposure (ms):")
-        exp_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        exp_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         exp_header.addWidget(exp_label)
         exp_header.addStretch()
         self.exposure_value_label = QLabel("50")
-        self.exposure_value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.exposure_value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         exp_header.addWidget(self.exposure_value_label)
         exp_header_widget = QWidget()
         exp_header_widget.setLayout(exp_header)
         exposure_layout.addWidget(exp_header_widget)
 
-        self.exposure_slider = QSlider(Qt.Horizontal)
+        self.exposure_slider = QSlider(Qt.Orientation.Horizontal)
         self.exposure_slider.setMinimum(1)
         self.exposure_slider.setMaximum(1000)
         self.exposure_slider.setValue(50)
@@ -374,17 +374,17 @@ class CameraControlWidget(QWidget):
         gain_header = QHBoxLayout()
         gain_header.setContentsMargins(0, 0, 0, 0)
         gain_label = QLabel("Gain:")
-        gain_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        gain_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         gain_header.addWidget(gain_label)
         gain_header.addStretch()
         self.gain_value_label = QLabel("300")
-        self.gain_value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.gain_value_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         gain_header.addWidget(self.gain_value_label)
         gain_header_widget = QWidget()
         gain_header_widget.setLayout(gain_header)
         gain_layout.addWidget(gain_header_widget)
 
-        self.gain_slider = QSlider(Qt.Horizontal)
+        self.gain_slider = QSlider(Qt.Orientation.Horizontal)
         self.gain_slider.setMinimum(0)
         self.gain_slider.setMaximum(1000)
         self.gain_slider.setValue(300)

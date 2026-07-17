@@ -38,7 +38,7 @@ widget = live_plot(
 )
 
 widget.show()
-app.exec_()
+app.exec()
 
 # Clean up
 TimeTagger.freeTimeTagger(tagger)

@@ -16,8 +16,8 @@ import numpy as np
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 from utils import MICRONS_PER_VOLT
-from PyQt5.QtWidgets import QWidget, QGridLayout, QLabel, QDoubleSpinBox, QSpinBox, QPushButton
-from PyQt5.QtCore import Qt
+from qtpy.QtWidgets import QWidget, QGridLayout, QLabel, QDoubleSpinBox, QSpinBox, QPushButton
+from qtpy.QtCore import Qt
 
 
 def new_scan(scan_pattern_func, scan_points_manager, shapes, bridge=None, scan_in_progress=None):
@@ -182,7 +182,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             layout.addWidget(self.x_min_spinbox, 1, 1)
             
             self.x_min_label = QLabel(f"{default_x_min * MICRONS_PER_VOLT:.2f}")
-            self.x_min_label.setAlignment(Qt.AlignCenter)
+            self.x_min_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(self.x_min_label, 1, 2)
             
             # X Max
@@ -195,7 +195,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             layout.addWidget(self.x_max_spinbox, 2, 1)
             
             self.x_max_label = QLabel(f"{default_x_max * MICRONS_PER_VOLT:.2f}")
-            self.x_max_label.setAlignment(Qt.AlignCenter)
+            self.x_max_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(self.x_max_label, 2, 2)
             
             # Y Min
@@ -208,7 +208,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             layout.addWidget(self.y_min_spinbox, 3, 1)
             
             self.y_min_label = QLabel(f"{default_y_min * MICRONS_PER_VOLT:.2f}")
-            self.y_min_label.setAlignment(Qt.AlignCenter)
+            self.y_min_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(self.y_min_label, 3, 2)
             
             # Y Max
@@ -221,7 +221,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             layout.addWidget(self.y_max_spinbox, 4, 1)
             
             self.y_max_label = QLabel(f"{default_y_max * MICRONS_PER_VOLT:.2f}")
-            self.y_max_label.setAlignment(Qt.AlignCenter)
+            self.y_max_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(self.y_max_label, 4, 2)
             
             # X Resolution

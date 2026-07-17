@@ -11,7 +11,7 @@ Contains:
 import threading
 import time
 import numpy as np
-from PyQt5.QtCore import QObject, pyqtSignal
+from qtpy.QtCore import QObject, Signal as pyqtSignal
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 from plot_widgets.single_axis_plot import SingleAxisPlot

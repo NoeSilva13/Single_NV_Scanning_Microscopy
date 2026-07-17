@@ -8,7 +8,7 @@ A Python toolkit developed at the **[Burke Lab](https://www.burkelab.com/)** for
 It bundles three independent, standalone graphical applications that share common infrastructure (data management, calibration constants, reusable Qt/napari widgets):
 
 1. **Confocal Scan GUI** ([confocal_main_control.py](confocal_main_control.py)) - real-time galvo raster scanning, live photon counting, click-to-move positioning, region zoom, auto-focus and single-axis line scans, built on a [napari](https://napari.org/) viewer.
-2. **ODMR Control Center** ([odmr_gui_qt.py](odmr_gui_qt.py)) - a PyQt5 interface for continuous-wave **ODMR**, **Rabi oscillation**, and **T1 relaxation** pulse-sequence measurements.
+2. **ODMR Control Center** ([odmr_gui_qt.py](odmr_gui_qt.py)) - a Qt (PySide6 via qtpy) interface for continuous-wave **ODMR**, **Rabi oscillation**, and **T1 relaxation** pulse-sequence measurements.
 3. **Spectrometer Control** ([spectrometer_app.py](spectrometer_app.py)) - real-time spectral analysis using a Player One Astronomy (POA) camera in line-scan mode, with wavelength calibration and data recording.
 
 Each application can be run independently and only requires the hardware/drivers relevant to it (see [Hardware requirements](#-hardware-requirements)).
@@ -196,8 +196,8 @@ Each measurement is automatically placed in a date folder by the corresponding `
 ```
 Single_NV_Scannig_Microscopy/
 ├─ confocal_main_control.py     # Entry point: napari GUI for confocal galvo scanning
-├─ odmr_gui_qt.py                # Entry point: PyQt5 GUI for ODMR / Rabi / T1 experiments
-├─ spectrometer_app.py           # Entry point: PyQt5 GUI for POA-camera spectrometer
+├─ odmr_gui_qt.py                # Entry point: Qt (PySide6/qtpy) GUI for ODMR / Rabi / T1 experiments
+├─ spectrometer_app.py           # Entry point: Qt (PySide6/qtpy) GUI for POA-camera spectrometer
 │
 ├─ data_manager.py               # DataManager: saves confocal scan CSVs with metadata
 ├─ odmr_data_manager.py          # ODMRDataManager: saves ODMR/Rabi/T1 CSVs per experiment type
@@ -207,7 +207,7 @@ Single_NV_Scannig_Microscopy/
 ├─ thread_safe_bridge.py         # GUIBridge: marshal background-thread updates onto the Qt/napari main thread
 ├─ utils.py                      # Calibration constants + ImageJ-compatible TIFF export
 │
-├─ widgets/                      # Re-usable magicgui/PyQt5 widgets for the confocal napari GUI
+├─ widgets/                      # Re-usable magicgui/Qt (qtpy) widgets for the confocal napari GUI
 │   ├─ scan_controls.py          #   New Scan / Stop / Reset Zoom / Scan Parameters panel
 │   ├─ camera_controls.py        #   Multi-backend (POA/ZWO/USB) live view + single shot
 │   ├─ auto_focus.py             #   Auto-focus sweep + button + thread-safe signal bridge

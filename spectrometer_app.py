@@ -9,12 +9,11 @@ import time
 import json
 import numpy as np
 from typing import Optional, Tuple
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+from qtpy.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QGridLayout, QLabel, QSlider, QPushButton, 
                             QSpinBox, QDoubleSpinBox, QComboBox, QGroupBox, QSplitter,
                             QCheckBox, QStatusBar, QMessageBox, QFileDialog)
-from PyQt5.QtCore import QTimer, Qt, QThread, pyqtSignal, QMutex
-from PyQt5.QtGui import QPixmap, QImage, QFont
+from qtpy.QtCore import QTimer, Qt, QThread, Signal as pyqtSignal, QMutex
 import pyqtgraph as pg
 import cv2
 
@@ -326,7 +325,7 @@ class SpectrometerMainWindow(QMainWindow):
         main_layout = QHBoxLayout(central_widget)
         
         # Create splitter for resizable panels
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(splitter)
         
         # Left panel - Camera view and controls
@@ -388,10 +387,10 @@ class SpectrometerMainWindow(QMainWindow):
         camera_layout.addWidget(QLabel("Exposure:"), 0, 0)
         self.exposure_label = QLabel("50.0 ms")
         self.exposure_label.setMinimumWidth(60)
-        self.exposure_label.setAlignment(Qt.AlignCenter)
+        self.exposure_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         camera_layout.addWidget(self.exposure_label, 0, 1)
         
-        self.exposure_slider = QSlider(Qt.Horizontal)
+        self.exposure_slider = QSlider(Qt.Orientation.Horizontal)
         self.exposure_slider.setRange(1, 100000)  # 0.1ms to 10000ms (10s, will divide by 10)
         self.exposure_slider.setValue(500)  # 50ms default
         self.exposure_slider.setToolTip("Exposure time in milliseconds")
@@ -401,10 +400,10 @@ class SpectrometerMainWindow(QMainWindow):
         camera_layout.addWidget(QLabel("Gain:"), 1, 0)
         self.gain_label = QLabel("300")
         self.gain_label.setMinimumWidth(60)
-        self.gain_label.setAlignment(Qt.AlignCenter)
+        self.gain_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         camera_layout.addWidget(self.gain_label, 1, 1)
         
-        self.gain_slider = QSlider(Qt.Horizontal)
+        self.gain_slider = QSlider(Qt.Orientation.Horizontal)
         self.gain_slider.setRange(0, 1000)
         self.gain_slider.setValue(300)
         self.gain_slider.setToolTip("Camera gain (0-1000)")
@@ -843,7 +842,7 @@ class SpectrometerMainWindow(QMainWindow):
             self._pause_camera_for_roi()
             
             # Give PyQtGraph time to create the ROI
-            from PyQt5.QtCore import QTimer
+            from qtpy.QtCore import QTimer
             QTimer.singleShot(100, self._setup_roi_rectangle)
             
         except Exception as e:
@@ -945,7 +944,7 @@ class SpectrometerMainWindow(QMainWindow):
             if hasattr(self, '_roi_resize_timer'):
                 self._roi_resize_timer.stop()
             
-            from PyQt5.QtCore import QTimer
+            from qtpy.QtCore import QTimer
             self._roi_resize_timer = QTimer()
             self._roi_resize_timer.setSingleShot(True)
             self._roi_resize_timer.timeout.connect(self._on_roi_resize_timeout)
@@ -1138,7 +1137,7 @@ def main():
     window = SpectrometerMainWindow()
     window.show()
     
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

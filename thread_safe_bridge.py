@@ -4,7 +4,7 @@ Provides a QObject-based bridge that uses pyqtSignal to safely marshal
 GUI operations from background threads to the main Qt thread.
 """
 
-from PyQt5.QtCore import QObject, pyqtSignal
+from qtpy.QtCore import QObject, Signal as pyqtSignal
 from napari.utils.notifications import show_info
 
 

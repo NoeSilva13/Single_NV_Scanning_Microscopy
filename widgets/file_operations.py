@@ -8,7 +8,7 @@ Contains widgets for:
 
 import time
 import numpy as np
-from PyQt5.QtWidgets import QFileDialog, QMessageBox
+from qtpy.QtWidgets import QFileDialog, QMessageBox
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 
@@ -42,7 +42,7 @@ def load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update
             msg = QMessageBox()
             msg.setWindowTitle("Scan Parameters")
             msg.setText("Loaded scan parameters:\n\n" + "\n".join(params))
-            msg.setIcon(QMessageBox.Information)
+            msg.setIcon(QMessageBox.Icon.Information)
             
             # Style the message box to match Napari dark theme
             msg.setStyleSheet("""
@@ -71,11 +71,11 @@ def load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update
             
             # Add option to apply parameters
             if scan_params_manager and scan_points_manager and update_widget_func:
-                msg.setStandardButtons(QMessageBox.Apply | QMessageBox.Ok)
-                result = msg.exec_()
+                msg.setStandardButtons(QMessageBox.StandardButton.Apply | QMessageBox.StandardButton.Ok)
+                result = msg.exec()
                 
                 # If Apply was clicked, update the scan parameters
-                if result == QMessageBox.Apply:
+                if result == QMessageBox.StandardButton.Apply:
                     # Prepare parameters to update
                     update_params = {
                         'x_range': data['x_range'].tolist(),
@@ -98,7 +98,7 @@ def load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update
                     update_widget_func()
                     show_info("✨ Applied scan parameters from loaded file")
             else:
-                msg.exec_()
+                msg.exec()
                 
         except Exception as e:
             show_info(f"⚠️ Could not display all parameters: {str(e)}")
@@ -109,9 +109,9 @@ def load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update
         # Open file dialog to select .npz file
         file_dialog = QFileDialog()
         file_dialog.setNameFilter("Scan files (*.npz)")
-        file_dialog.setFileMode(QFileDialog.ExistingFile)
+        file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
         
-        if file_dialog.exec_():
+        if file_dialog.exec():
             filenames = file_dialog.selectedFiles()
             if filenames:
                 try:
