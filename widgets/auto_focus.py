@@ -212,7 +212,7 @@ class AutoFocusWidget(QWidget):
         self.dwell_spin.setRange(1.0, 2000.0)
         self.dwell_spin.setSingleStep(1.0)
         self.dwell_spin.setValue(default_dwell_ms)
-        self.dwell_spin.setMaximumWidth(80)
+        self.dwell_spin.setMaximumWidth(110)
         self.dwell_spin.setToolTip('Per-point dwell time; allow the piezo to settle')
         self.coarse_step_spin = self._make_um_spin(
             default_coarse_step, 'Coarse step across the full travel (µm)')
@@ -271,11 +271,12 @@ class AutoFocusWidget(QWidget):
     @staticmethod
     def _make_um_spin(value, tooltip):
         spin = QDoubleSpinBox()
-        spin.setRange(0.1, 1000.0)
-        spin.setSingleStep(0.5)
-        spin.setDecimals(2)
+        # 3 decimals -> 0.001 µm (1 nm) steps; the piezo resolves down to ~3 nm.
+        spin.setRange(0.001, 1000.0)
+        spin.setSingleStep(0.001)
+        spin.setDecimals(3)
         spin.setValue(value)
-        spin.setMaximumWidth(80)
+        spin.setMaximumWidth(110)
         spin.setToolTip(tooltip)
         return spin
 
