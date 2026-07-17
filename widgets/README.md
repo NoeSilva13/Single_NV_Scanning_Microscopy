@@ -166,7 +166,7 @@ class ZoomLevelManager:
 - **`SingleAxisScanWidget(scan_params_manager, layer, output_task, tagger, galvo_controller, scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref)`**
   - Complete widget for 1D X/Y line scans at the current galvo position
   - Runs a hardware-timed AO ramp on the scanned galvo axis (holding the other fixed) with per-point photon counting via `CountBetweenMarkers` (`scanning_core.run_hardware_timed_sweep`); mutually exclusive with the raster/auto-focus scans
-  - Includes scan buttons, a result plot (`SingleAxisPlot`), and `update_current_position(x, y)` for tracking the galvo's last commanded position
+  - Uses a `QTabWidget` with separate **X Axis** and **Y Axis** tabs; each tab holds its own scan button and a `pyqtgraph` result plot (with a red peak marker), and `update_current_position(x, y)` tracks the galvo's last commanded position
 
 ### File Operations (`file_operations.py`)
 

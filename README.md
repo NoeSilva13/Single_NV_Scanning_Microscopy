@@ -210,7 +210,7 @@ Single_NV_Scannig_Microscopy/
 │   ├─ scan_controls.py          #   New Scan / Stop / Reset Zoom / Scan Parameters panel
 │   ├─ camera_controls.py        #   Multi-backend (POA/ZWO/USB) live view + single shot
 │   ├─ auto_focus.py             #   Auto-focus sweep + button + thread-safe signal bridge
-│   ├─ single_axis_scan.py       #   1D X/Y line-scan widget with plot
+│   ├─ single_axis_scan.py       #   1D X/Y line-scan widget (pyqtgraph, X/Y tabs)
 │   ├─ file_operations.py        #   Load a saved .npz scan back into napari
 │   └─ piezo_controls.py         #   Manual Z position widget (via DAQZController)
 │
