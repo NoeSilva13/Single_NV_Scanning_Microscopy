@@ -65,7 +65,8 @@ class LivePlotNapariWidget(QWidget):
         layout.setSpacing(4)
         self.setLayout(layout)
 
-        layout.addLayout(self._build_controls())
+        self.controls_container = self._build_controls()
+        layout.addWidget(self.controls_container)
 
         # pyqtgraph plot
         self.plot_widget = pg.PlotWidget()
@@ -90,8 +91,14 @@ class LivePlotNapariWidget(QWidget):
         self._apply_autoscale()
         self._apply_log_mode()
 
+        # Constrain the widget width to the natural width of the controls row,
+        # so the plot is no wider than the buttons above it.
+        controls_width = self.controls_container.sizeHint().width()
+        self.setMaximumWidth(controls_width + 4)
+
     def _build_controls(self):
         controls = QHBoxLayout()
+        controls.setContentsMargins(0, 0, 0, 0)
         controls.setSpacing(6)
 
         self.pause_btn = QPushButton('Pause')
@@ -103,19 +110,27 @@ class LivePlotNapariWidget(QWidget):
         self.clear_btn.clicked.connect(self.clear)
         controls.addWidget(self.clear_btn)
 
-        controls.addWidget(QLabel('Refresh (ms):'))
+        refresh_label = QLabel('ms:')
+        refresh_label.setToolTip('Refresh interval (ms)')
+        controls.addWidget(refresh_label)
         self.refresh_spin = QSpinBox()
+        self.refresh_spin.setToolTip('Refresh interval (ms)')
         self.refresh_spin.setRange(10, 5000)
         self.refresh_spin.setSingleStep(10)
         self.refresh_spin.setValue(self._dt_ms)
+        self.refresh_spin.setMaximumWidth(70)
         self.refresh_spin.valueChanged.connect(self._on_refresh_changed)
         controls.addWidget(self.refresh_spin)
 
-        controls.addWidget(QLabel('Window:'))
+        window_label = QLabel('pts:')
+        window_label.setToolTip('Window length (number of points)')
+        controls.addWidget(window_label)
         self.window_spin = QSpinBox()
+        self.window_spin.setToolTip('Window length (number of points)')
         self.window_spin.setRange(10, 100000)
         self.window_spin.setSingleStep(10)
         self.window_spin.setValue(self.histogram_range)
+        self.window_spin.setMaximumWidth(80)
         self.window_spin.valueChanged.connect(self._on_window_changed)
         controls.addWidget(self.window_spin)
 
@@ -129,11 +144,9 @@ class LivePlotNapariWidget(QWidget):
         self.log_chk.toggled.connect(self._apply_log_mode)
         controls.addWidget(self.log_chk)
 
-        self.status_label = QLabel('')
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        controls.addWidget(self.status_label, stretch=1)
-
-        return controls
+        container = QWidget()
+        container.setLayout(controls)
+        return container
 
     # --------------------------------------------------------------
     # Control callbacks
@@ -188,10 +201,8 @@ class LivePlotNapariWidget(QWidget):
             print(f"Error updating plot: {e}")
 
     def _update_overflow_alarm(self):
-        """Show/hide the overflow banner and status text."""
+        """Show/hide the overflow banner centered over the plot."""
         if self.overflow_detected:
-            self.status_label.setText('OVERFLOW')
-            self.status_label.setStyleSheet(f'color: {self.alarm_color}; font-weight: bold;')
             # Center the banner in the current view
             view_range = self.plot_item.viewRange()
             cx = (view_range[0][0] + view_range[0][1]) / 2
@@ -200,7 +211,6 @@ class LivePlotNapariWidget(QWidget):
             self.overflow_text.setPos(cx, cy)
             self.overflow_text.setVisible(True)
         else:
-            self.status_label.setText('')
             self.overflow_text.setVisible(False)
 
     def clear(self):
@@ -210,7 +220,6 @@ class LivePlotNapariWidget(QWidget):
         self.curve.setData([], [])
         self.overflow_detected = False
         self.overflow_text.setVisible(False)
-        self.status_label.setText('')
 
     def closeEvent(self, event):
         self.timer.stop()
