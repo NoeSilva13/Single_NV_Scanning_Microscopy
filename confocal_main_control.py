@@ -275,7 +275,7 @@ def on_mouse_click(layer, event):
 
 layer.mouse_drag_callbacks.append(on_mouse_click)
 
-# --------------------- MPL WIDGET (SIGNAL LIVE PLOT) ---------------------
+# --------------------- LIVE SIGNAL PLOT WIDGET (pyqtgraph) ---------------------
 # Function to get count rate and check for overflow
 def get_count_with_overflow():
     data = counter.getData()
@@ -286,8 +286,8 @@ def get_count_with_overflow():
     return count_rate, overflow
 
 # Add a live plot widget to display count rate with overflow detection
-mpl_widget = live_plot(measure_function=get_count_with_overflow, histogram_range=100, dt=0.2)
-viewer.window.add_dock_widget(mpl_widget, area='right', name='Signal Plot')
+signal_plot_widget = live_plot(measure_function=get_count_with_overflow, histogram_range=100, dt=0.2)
+viewer.window.add_dock_widget(signal_plot_widget, area='right', name='Signal Plot')
 
 def update_contrast_limits(layer, image):
     """Helper function to update contrast limits for an image layer."""
