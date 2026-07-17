@@ -212,9 +212,8 @@ layer = viewer.add_image(image, name="live scan", colormap="viridis", contrast_l
 # Add a shapes layer to display the zoom area
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
-# Configure scale bar
+# Configure scale bar (units come from layers in napari >= 0.8)
 viewer.scale_bar.visible = True
-viewer.scale_bar.unit = "µm"
 viewer.scale_bar.position = "bottom_left"
 
 # Calculate scale (in microns/pixel) using defaults initially
@@ -223,6 +222,8 @@ y_range = [-1.0, 1.0]  # Default range
 scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
 scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
 layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
+layer.units = ('µm', 'µm')
+shapes.units = ('µm', 'µm')
 
 # --------------------- TIMETAGGER SETUP ---------------------
 try:
