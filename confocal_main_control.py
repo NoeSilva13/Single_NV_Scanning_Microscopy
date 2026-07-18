@@ -285,8 +285,17 @@ def get_count_with_overflow():
     overflow = counter_data.overflow  # Access as attribute, not as a method
     return count_rate, overflow
 
+def set_live_binwidth(binwidth_ps):
+    """Rebuild the live-signal counter with a new integration window (ps)."""
+    global binwidth, counter
+    binwidth = int(binwidth_ps)
+    counter = TimeTagger.Counter(tagger, [1], binwidth, n_values)
+
 # Add a live plot widget to display count rate with overflow detection
-signal_plot_widget = live_plot(measure_function=get_count_with_overflow, histogram_range=100, dt=0.2)
+signal_plot_widget = live_plot(
+    measure_function=get_count_with_overflow, histogram_range=100, dt=0.2,
+    binwidth_ps=binwidth, binwidth_callback=set_live_binwidth
+)
 viewer.window.add_dock_widget(signal_plot_widget, area='right', name='Signal Plot')
 
 def update_contrast_limits(layer, image):
