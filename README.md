@@ -20,10 +20,10 @@ Each application can be run independently and only requires the hardware/drivers
 - Live **XY raster scanning** with per-pixel, hardware-timed photon counting (NI-DAQ sample clock + Swabian TimeTagger `CountBetweenMarkers`).
 - **napari**-based viewer (zoom, pan, live contrast auto-scaling, scale bar in µm).
 - **Click-to-move** galvo positioning and rectangle **ROI zoom** (up to 9 nested zoom levels, with history/undo via "Reset Zoom").
-- Integrated **auto-focus** routine (coarse + fine piezo Z-sweep) and **single-axis line scans** along X or Y, both hardware-timed with per-point photon counting via the DAQ clock + TimeTagger `CountBetweenMarkers` (shared `scanning_core.py`).
+- Integrated **Scan Z** (linear piezo Z sweep) and **single-axis line scans** along X or Y, both hardware-timed with per-point photon counting via the DAQ clock + TimeTagger `CountBetweenMarkers` (shared `scanning_core.py`). Z min/max/resolution/dwell are set in the Scan Parameters panel.
 - Multi-backend **live camera preview** (POA / ZWO / USB webcam) and single-shot capture, docked in the viewer.
 - Real-time photon-count **strip-chart plot** with overflow indication.
-- Manual **Z-axis piezo control** widget (DAQ analog output `ao2` → piezo EXT IN) alongside the auto-focus routine.
+- Manual **Z-axis piezo control** widget (DAQ analog output `ao2` → piezo EXT IN) alongside the Scan Z tab.
 - Automatic data saving after every scan: `.csv` (metadata header), `.npz` (image + full metadata), `.tiff` (ImageJ/Fiji-compatible with scale calibration) and a `.png` heatmap.
 - **Load Scan** widget to reopen previously saved `.npz` scans at the correct physical scale.
 
@@ -62,7 +62,7 @@ Mandatory for confocal scans (`confocal_main_control.py`)
 - NI **USB-6453** DAQ (static + hardware-timed AO for galvos, sample clock export)
 - **Single-photon detector** (e.g. Excelitas SPCM-AQRH-10-FC)
 - **Swabian TimeTagger** (real, network, or virtual/replay fallback)
-- Optional: Thorlabs **piezo Z-stage** (initialized in closed loop by Thorlabs software; position commanded via DAQ `ao2` → EXT IN) for auto-focus; POA/ZWO/USB camera for live preview
+- Optional: Thorlabs **piezo Z-stage** (initialized in closed loop by Thorlabs software; position commanded via DAQ `ao2` → EXT IN) for Scan Z; POA/ZWO/USB camera for live preview
 
 Additional for ODMR / advanced timing (`odmr_gui_qt.py`)
 - **Swabian Pulse Streamer 8/2** (default IP `192.168.0.203`)
@@ -112,10 +112,10 @@ Actions inside the napari window:
 - "🔄 Reset Zoom" ⇒ return to the original field of view.
 - "🎯 Set to Zero" ⇒ return galvos to (0, 0) V.
 - "🛑 Stop Scan" ⇒ abort a running scan safely.
-- "Scan Parameters" dock ⇒ adjust voltage range / resolution / dwell time on-the-fly.
+- "Scan Parameters" dock ⇒ adjust XY voltage range / resolution / dwell and Z min/max/resolution/dwell on-the-fly.
 - "Camera Control" dock ⇒ switch between POA/ZWO/USB cameras, live view and single-shot capture.
-- "Single Axis Scan" dock ⇒ 1D line scans along X or Y at the current position.
-- Piezo control dock + "Auto Focus" ⇒ manual or automatic Z positioning.
+- "Single Axis Scan" dock ⇒ 1D line scans along X, Y, or Z (tabs) at the current position.
+- Piezo control dock ⇒ manual Z positioning.
 
 ### 2. ODMR (continuous wave, Rabi, or T1)
 ```bash
@@ -143,8 +143,8 @@ The confocal system's calibration parameters and constants are centrally defined
 - `MICRONS_PER_VOLT = 24` - Galvo scanner calibration (µm/V); empirically re-measured per objective (comments in the file list values for other objectives, e.g. 130 for a 40x air objective, 51 for an oil objective).
 - `MAX_ZOOM_LEVEL = 9` - Maximum allowed nested zoom levels in the scanning interface.
 
-### Auto-Focus Parameters
-The coarse step, fine step, and fine range are edited live in the Auto-Focus dock (Coarse / Fine / Range fields, in µm). Their initial values live in `widgets/auto_focus.py` (`DEFAULT_COARSE_STEP = 5.0`, `DEFAULT_FINE_STEP = 0.5`, `DEFAULT_FINE_RANGE = 10.0`), not in `utils.py`.
+### Z Scan Parameters
+Z Min (µm), Z Max (µm), Z Resolution (number of points), and Z Dwell Time (s) are edited in the Scan Parameters dock. Defaults are 0–450 µm, 50 points, and 0.025 s (25 ms for piezo settling). The Scan Z tab reads these via `scan_params_manager` and runs a single linear hardware-timed sweep.
 
 ### Z Piezo Analog Control (DAQ `ao2` → EXT IN)
 - `Z_UM_PER_VOLT = 45.0` - Closed-loop calibration (µm/V); 0–10 V maps to 0–450 µm
@@ -209,8 +209,8 @@ Single_NV_Scannig_Microscopy/
 ├─ widgets/                      # Re-usable magicgui/Qt (qtpy) widgets for the confocal napari GUI
 │   ├─ scan_controls.py          #   New Scan / Stop / Reset Zoom / Scan Parameters panel
 │   ├─ camera_controls.py        #   Multi-backend (POA/ZWO/USB) live view + single shot
-│   ├─ auto_focus.py             #   Auto-focus sweep + button + thread-safe signal bridge
-│   ├─ single_axis_scan.py       #   1D X/Y line-scan widget (pyqtgraph, X/Y tabs)
+│   ├─ auto_focus.py             #   Scan Z tab: linear Z sweep + pyqtgraph plot
+│   ├─ single_axis_scan.py       #   1D X/Y/Z line-scan widget (pyqtgraph tabs)
 │   ├─ file_operations.py        #   Load a saved .npz scan back into napari
 │   └─ piezo_controls.py         #   Manual Z position widget (via DAQZController)
 │

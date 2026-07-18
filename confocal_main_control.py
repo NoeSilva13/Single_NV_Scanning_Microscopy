@@ -79,7 +79,8 @@ class ScanParametersManager:
             return {
                 "scan_range": {"x": [-1.0, 1.0], "y": [-1.0, 1.0]},
                 "resolution": {"x": 50, "y": 50},
-                "dwell_time": 0.002
+                "dwell_time": 0.002,
+                "z_scan": {"range": [0.0, 450.0], "resolution": 50, "dwell_time": 0.025}
             }
     
     def update_scan_parameters(self, x_range=None, y_range=None, x_res=None, y_res=None, dwell_time=None):
@@ -542,7 +543,7 @@ def get_data_path():
 new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes, bridge, scan_in_progress)
 close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
-update_scan_parameters_widget = create_update_scan_parameters(scan_params_manager, scan_points_manager)
+update_scan_parameters_widget = create_update_scan_parameters(scan_params_manager)
 update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, scan_params_manager, bridge)
 
 # Update scan points manager with initial parameters from the widget
@@ -564,9 +565,9 @@ reset_zoom_widget = create_reset_zoom(
 # Create camera control widgets
 camera_control_widget = create_camera_control_widget(viewer)
 
-# Create auto-focus widget (dwell control + button + progress + pyqtgraph plot)
+# Create Scan Z widget (button + pyqtgraph plot; Z params from Scan Parameters)
 auto_focus_widget = AutoFocusWidget(
-    tagger, z_controller,
+    tagger, z_controller, scan_params_manager,
     scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref
 )
 
@@ -593,7 +594,7 @@ load_scan_widget = create_load_scan(
 # Create piezo control widget
 piezo_control_widget = PiezoControlWidget(z_controller)
 
-# Let auto-focus refresh the Z control widget after a successful focus
+# Let Scan Z refresh the Z control widget after a completed sweep
 auto_focus_widget.z_control_widget = piezo_control_widget
 
 

@@ -16,7 +16,7 @@ import numpy as np
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 from utils import MICRONS_PER_VOLT
-from qtpy.QtWidgets import QWidget, QGridLayout, QLabel, QDoubleSpinBox, QSpinBox, QPushButton
+from qtpy.QtWidgets import QWidget, QGridLayout, QLabel, QDoubleSpinBox, QSpinBox
 from qtpy.QtCore import Qt
 
 
@@ -25,14 +25,17 @@ def new_scan(scan_pattern_func, scan_points_manager, shapes, bridge=None, scan_i
     
     @magicgui(call_button="🔬 New Scan")
     def _new_scan():
-        """Initiates a new scan using the current scan parameters from scan_points_manager.
-        Runs the scan in a separate thread to prevent UI freezing.
+        """Initiates a new scan using the current Scan Parameters spinbox values.
+        Syncs scan points from the widget, then runs the scan in a background thread.
         """
         if scan_in_progress and scan_in_progress[0]:
             show_info("⚠️ A scan is already in progress")
             return
 
         def run_new_scan():
+            # Rebuild XY points from the live Scan Parameters spinboxes so the
+            # user does not need an explicit "Apply" step.
+            scan_points_manager._update_points_from_params()
             x_points, y_points = scan_points_manager.get_points()
             scan_pattern_func(x_points, y_points)
             if bridge:
@@ -144,14 +147,18 @@ def reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points
     return _reset_zoom
 
 
-def update_scan_parameters(scan_params_manager, scan_points_manager):
-    """Factory function to create update_scan_parameters widget with dependencies"""
+def update_scan_parameters(scan_params_manager):
+    """Factory function to create the Scan Parameters widget.
+
+    Parameters are read live from the spinboxes via
+    ``scan_params_manager.get_params()``; New Scan rebuilds XY points from
+    those values at start time (no explicit Apply step).
+    """
     
     class ScanParametersWidget(QWidget):
         def __init__(self):
             super().__init__()
             self.scan_params_manager = scan_params_manager
-            self.scan_points_manager = scan_points_manager
             self.setup_ui()
             
         def setup_ui(self):
@@ -249,11 +256,51 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             self.dwell_time_spinbox.setValue(default_dwell_time)
             self.dwell_time_spinbox.setSuffix(" s")
             layout.addWidget(self.dwell_time_spinbox, 7, 1, 1, 2)  # Span 2 columns
-            
-            # Apply button
-            self.apply_button = QPushButton("Apply Changes")
-            layout.addWidget(self.apply_button, 8, 0, 1, 3)  # Span all columns
-            
+
+            # ----- Z scan parameters (piezo objective, via DAQ ao2) -----
+            default_z_min = 0.0
+            default_z_max = 450.0
+            default_z_res = 50
+            default_z_dwell = 0.025  # 25 ms for the slow piezo settling
+
+            # Z Min
+            layout.addWidget(QLabel("Z Min:"), 8, 0)
+            self.z_min_spinbox = QDoubleSpinBox()
+            self.z_min_spinbox.setRange(0.0, 450.0)
+            self.z_min_spinbox.setSingleStep(1.0)
+            self.z_min_spinbox.setDecimals(3)
+            self.z_min_spinbox.setValue(default_z_min)
+            self.z_min_spinbox.setSuffix(" µm")
+            layout.addWidget(self.z_min_spinbox, 8, 1, 1, 2)  # Span 2 columns
+
+            # Z Max
+            layout.addWidget(QLabel("Z Max:"), 9, 0)
+            self.z_max_spinbox = QDoubleSpinBox()
+            self.z_max_spinbox.setRange(0.0, 450.0)
+            self.z_max_spinbox.setSingleStep(1.0)
+            self.z_max_spinbox.setDecimals(3)
+            self.z_max_spinbox.setValue(default_z_max)
+            self.z_max_spinbox.setSuffix(" µm")
+            layout.addWidget(self.z_max_spinbox, 9, 1, 1, 2)  # Span 2 columns
+
+            # Z Resolution (number of points)
+            layout.addWidget(QLabel("Z Resolution:"), 10, 0)
+            self.z_res_spinbox = QSpinBox()
+            self.z_res_spinbox.setRange(2, 1000)
+            self.z_res_spinbox.setValue(default_z_res)
+            self.z_res_spinbox.setSuffix(" pts")
+            layout.addWidget(self.z_res_spinbox, 10, 1, 1, 2)  # Span 2 columns
+
+            # Z Dwell Time
+            layout.addWidget(QLabel("Z Dwell Time:"), 11, 0)
+            self.z_dwell_spinbox = QDoubleSpinBox()
+            self.z_dwell_spinbox.setRange(0.0001, 10.0)
+            self.z_dwell_spinbox.setSingleStep(0.001)
+            self.z_dwell_spinbox.setDecimals(4)
+            self.z_dwell_spinbox.setValue(default_z_dwell)
+            self.z_dwell_spinbox.setSuffix(" s")
+            layout.addWidget(self.z_dwell_spinbox, 11, 1, 1, 2)  # Span 2 columns
+
             self.setLayout(layout)
             
             # Connect signals
@@ -261,7 +308,6 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             self.x_max_spinbox.valueChanged.connect(self.update_x_max_distance)
             self.y_min_spinbox.valueChanged.connect(self.update_y_min_distance)
             self.y_max_spinbox.valueChanged.connect(self.update_y_max_distance)
-            self.apply_button.clicked.connect(self.apply_changes)
         
         def get_parameters(self):
             """Get all parameters from the GUI (similar to odmr_gui_qt.py)"""
@@ -275,7 +321,12 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
                         'x': self.x_res_spinbox.value(),
                         'y': self.y_res_spinbox.value()
                     },
-                    'dwell_time': self.dwell_time_spinbox.value()
+                    'dwell_time': self.dwell_time_spinbox.value(),
+                    'z_scan': {
+                        'range': [self.z_min_spinbox.value(), self.z_max_spinbox.value()],
+                        'resolution': self.z_res_spinbox.value(),
+                        'dwell_time': self.z_dwell_spinbox.value()
+                    }
                 }
             except Exception as e:
                 show_info(f"Error getting parameters: {e}")
@@ -292,21 +343,7 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
             
         def update_y_max_distance(self, value):
             self.y_max_label.setText(f"{value * MICRONS_PER_VOLT:.2f}")
-            
-        def apply_changes(self):
-            # Update scan parameters manager (this will call back to get_parameters)
-            params = self.get_parameters()
-            if params:
-                # Update scan points manager
-                self.scan_points_manager.update_points(
-                    x_range=params['scan_range']['x'],
-                    y_range=params['scan_range']['y'],
-                    x_res=params['resolution']['x'],
-                    y_res=params['resolution']['y']
-                )
-                
-                show_info('⚠️ Scan parameters updated successfully!')
-            
+
         def update_values(self, x_range, y_range, x_res, y_res, dwell_time=None):
             """Update all widget values"""
             self.x_min_spinbox.setValue(x_range[0])

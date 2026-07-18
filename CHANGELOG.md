@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file following [K
 
 ## [Unreleased] - 2026-07-17
 ### Changed
+- Removed the **"Apply Changes"** button from Scan Parameters; **New Scan** now rebuilds XY points from the live spinboxes at start time (dwell / Z / single-axis already read `get_params()` live).
+- Moved Z scan parameters (Z Min / Z Max / Z Resolution / Z Dwell Time) into the Scan Parameters panel; the Scan Z tab now runs a single linear hardware-timed Z sweep from those values (via `run_z_sweep`) and no longer auto-moves the piezo to the peak. Removed the dwell/coarse/fine/range spinboxes from `AutoFocusWidget`.
 - Rewrote the live signal plot (`plot_widgets/live_plot_napari_widget.py`) on `pyqtgraph` with a ring buffer and added lightweight controls (pause/resume, clear, refresh rate, window length, auto-Y, log-Y); the widget width is constrained to the controls row.
 - Added a **"bin (ms)"** control to the live signal plot so the user can change the Time Tagger counter integration window at runtime (via a `binwidth_callback` that rebuilds the `Counter`); this binwidth now affects only the live plot.
 - Migrated the auto-focus and single-axis scans to hardware-timed DAQ sweeps counted by `CountBetweenMarkers` (DAQ clock defines the bins), matching the 2D raster scan. Both previously used the free-running `Counter`/`binwidth`, which was incorrect since both move the DAQ and the DAQ clock is routed to the Time Tagger.
@@ -20,7 +22,8 @@ All notable changes to this project will be documented in this file following [K
 - Simplified `widgets/piezo_controls.py` for commanded-position display (no USB connection / no analog readback).
 
 ### Removed
-- Removed `PIEZO_COARSE_STEP`, `PIEZO_FINE_STEP`, and `PIEZO_FINE_RANGE` from `utils.py`; the auto-focus sweep parameters are now edited from the widget, with initial values defined as `DEFAULT_COARSE_STEP` / `DEFAULT_FINE_STEP` / `DEFAULT_FINE_RANGE` in `widgets/auto_focus.py`.
+- Removed the coarse/fine auto-focus algorithm (`run_focus_sweep`) and the module-level `DEFAULT_COARSE_STEP` / `DEFAULT_FINE_STEP` / `DEFAULT_FINE_RANGE` from `widgets/auto_focus.py`; Z scanning is now a single linear sweep driven by Scan Parameters (`z_scan`).
+- Removed `PIEZO_COARSE_STEP`, `PIEZO_FINE_STEP`, and `PIEZO_FINE_RANGE` from `utils.py` (superseded by editable Z scan parameters in the Scan Parameters panel).
 - Removed the PyQt5 dependency: `requirements.txt` now pins `PySide6>=6.6.0` and the `napari[pyside6]` extra (set `QT_API=pyside6`).
 - Cleaned up unused Qt imports in `odmr_gui_qt.py` (`QFrame`, `QSpacerItem`, `QSizePolicy`, `QFont`, `QPalette`, `QColor`) and `spectrometer_app.py` (`QPixmap`, `QImage`, `QFont`).
 - Deleted `piezo_controller.py` (Thorlabs Kinesis `.NET`/USB path); no longer imported by the confocal app.

@@ -9,7 +9,7 @@ widgets/
 ├── __init__.py              # Package initialization and exports
 ├── scan_controls.py         # Scan control widgets (new scan, reset zoom, etc.)
 ├── camera_controls.py       # Camera control widgets and threads
-├── auto_focus.py           # Unified auto-focus widget (pyqtgraph plot + button + dwell) & sweep logic
+├── auto_focus.py           # Scan Z tab (pyqtgraph plot + button) & linear Z-sweep logic
 ├── single_axis_scan.py     # Single axis scan widget
 ├── file_operations.py      # File loading/saving widgets
 ├── piezo_controls.py      # Manual Z position widget (DAQ ao2 → piezo EXT IN)
@@ -118,9 +118,9 @@ class ZoomLevelManager:
   - Creates a "🔄 Reset Zoom" button widget
   - Returns to the original (level-0) scan range and resets zoom level to 0
 
-- **`update_scan_parameters(scan_params_manager, scan_points_manager)`**
-  - Returns a `ScanParametersWidget` (`QWidget`) with X/Y range, resolution, and dwell-time spinboxes (plus live µm distance labels)
-  - Registers itself as the `scan_params_manager`'s widget instance
+- **`update_scan_parameters(scan_params_manager)`**
+  - Returns a `ScanParametersWidget` (`QWidget`) with X/Y range, resolution, and dwell-time spinboxes (plus live µm distance labels), and Z scan fields (Z Min / Z Max / Z Resolution / Z Dwell) exposed via `get_parameters()['z_scan']`
+  - Registers itself as the `scan_params_manager`'s widget instance; values are applied live (New Scan syncs XY points from the spinboxes at start; no Apply button)
 
 - **`update_scan_parameters_widget(widget_instance, scan_params_manager, bridge=None)`**
   - Returns a callback that refreshes the parameter widget's displayed values from the manager; marshals to the main thread via `bridge` if provided
@@ -148,24 +148,26 @@ class ZoomLevelManager:
 - **`create_camera_control_widget(viewer)`**
   - Factory that wires `camera_live`, `capture_shot`, and `CameraControlWidget` together into one ready-to-dock widget (this is what `confocal_main_control.py` actually imports)
 
-### Auto Focus (`auto_focus.py`)
+### Scan Z / Auto Focus (`auto_focus.py`)
 
-- **`run_focus_sweep(tagger, z_controller, dwell_time, plot_callback=None, ...)`**
-  - Coarse + fine Z sweep that maximizes SPD count rate
-  - Each phase is a hardware-timed piezo ramp on `ao2`; photons are counted per point by `CountBetweenMarkers` (via `scanning_core.run_hardware_timed_sweep`)
-  - `plot_callback(stage, positions, rates)` is invoked during each phase with the accumulated data for real-time plotting
-  - Returns `(coarse_positions, coarse_counts, fine_positions, fine_counts, optimal_pos)`
+- **`run_z_sweep(tagger, z_controller, positions, dwell_time, plot_callback=None, ...)`**
+  - Single linear Z sweep over the given positions (µm)
+  - Hardware-timed piezo ramp on `ao2`; photons are counted per point by `CountBetweenMarkers` (via `scanning_core.run_hardware_timed_sweep`)
+  - `plot_callback(stage, positions, rates)` is invoked during the sweep with the accumulated data for real-time plotting
+  - Returns `(positions, count_rates)`; does **not** move the piezo to the peak
 
-- **`AutoFocusWidget(tagger, z_controller, scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref, default_dwell_ms=25.0)`**
-  - Self-contained `QWidget` that bundles, in one dock: a **"Dwell (ms)"** field (default 25 ms, independent of the scan `dwell_time` because the piezo settles much slower than the galvos), editable **sweep parameters** ("Coarse", "Fine", "Range" in µm, defaulting to the module-level `DEFAULT_COARSE_STEP` / `DEFAULT_FINE_STEP` / `DEFAULT_FINE_RANGE` in `auto_focus.py`), the **"🔍 Auto Focus"** button, and a **pyqtgraph** plot of the coarse/fine sweeps with a red peak marker
-  - Plots each point in real time as it is acquired (no progress bar); runs `run_focus_sweep` in a background thread (mutually exclusive with the raster/single-axis scans via the shared `scan_lock`/`scan_in_progress`) using internal Qt signals for thread-safe UI updates
-  - Set `.z_control_widget` to have the piezo control widget refreshed after a successful focus
+- **`AutoFocusWidget(tagger, z_controller, scan_params_manager, scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref)`**
+  - Compact `QWidget` with a **"🔍 Scan Z"** button and a **pyqtgraph** result plot (single green curve + red peak marker)
+  - Reads Z Min / Z Max / Z Resolution / Z Dwell from `scan_params_manager` (Scan Parameters panel), builds `np.linspace(z_min, z_max, z_res)`, and runs `run_z_sweep` in a background thread
+  - Mutually exclusive with the raster/single-axis scans via the shared `scan_lock`/`scan_in_progress`; uses internal Qt signals for thread-safe UI updates
+  - Leaves the piezo at the end of the ramp (Z max); notifies the detected peak without moving to it
+  - Set `.z_control_widget` to have the piezo control widget refreshed after a completed sweep
 
 ### Single Axis Scan (`single_axis_scan.py`)
 
 - **`SingleAxisScanWidget(scan_params_manager, layer, output_task, tagger, galvo_controller, scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref)`**
   - Complete widget for 1D X/Y line scans at the current galvo position
-  - Runs a hardware-timed AO ramp on the scanned galvo axis (holding the other fixed) with per-point photon counting via `CountBetweenMarkers` (`scanning_core.run_hardware_timed_sweep`); mutually exclusive with the raster/auto-focus scans
+  - Runs a hardware-timed AO ramp on the scanned galvo axis (holding the other fixed) with per-point photon counting via `CountBetweenMarkers` (`scanning_core.run_hardware_timed_sweep`); mutually exclusive with the raster/Scan Z scans
   - Uses a `QTabWidget` with separate **X Axis** and **Y Axis** tabs; each tab holds its own scan button and a `pyqtgraph` result plot (with a red peak marker), and `update_current_position(x, y)` tracks the galvo's last commanded position
   - `add_z_tab(widget, title='Z Axis')` embeds an external panel (the `AutoFocusWidget`, whose button is labelled **"Scan Z"**) as a third tab so X/Y/Z line scans share one dock
 

@@ -22,7 +22,7 @@ from .camera_controls import (
 
 from .auto_focus import (
     AutoFocusWidget,
-    run_focus_sweep
+    run_z_sweep
 )
 
 from .single_axis_scan import SingleAxisScanWidget
@@ -45,9 +45,9 @@ __all__ = [
     'CameraControlWidget',
     'CameraUpdateThread',
     
-    # Auto focus
+    # Auto focus / Scan Z
     'AutoFocusWidget',
-    'run_focus_sweep',
+    'run_z_sweep',
     
     # Single axis scan
     'SingleAxisScanWidget',
