@@ -126,13 +126,16 @@ def load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update
                     layer_name = f"Loaded Scan {timestamp}"
                     
                     # Add as new layer with correct scale
+                    # Set units at creation time (matching the other layers) so
+                    # napari doesn't warn about inconsistent units while adding.
                     new_layer = viewer.add_image(
                         image,
                         name=layer_name,
                         colormap="viridis",
                         blending="additive",
                         visible=True,
-                        scale=(scale_y, scale_x)
+                        scale=(scale_y, scale_x),
+                        units=('µm', 'µm')
                     )
                     
                     # Set contrast limits
