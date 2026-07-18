@@ -698,8 +698,11 @@ def _on_close():
         # Set scanner to zero position before closing
         output_task.write([0, 0])
         show_info("🎯 Scanner set to zero position")
-        
-        # Clean up Z (piezo) controller
+
+        # Park the piezo at Z = 0 before releasing the controller
+        if z_controller and z_controller.available:
+            z_controller.set_position(0.0)
+            show_info("🎯 Z set to zero position")
         if z_controller:
             z_controller.close()
             show_info("✓ Z controller released")
