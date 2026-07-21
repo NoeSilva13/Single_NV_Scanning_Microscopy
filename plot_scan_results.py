@@ -58,7 +58,8 @@ CBLABEL = "SPD counts"
 def plot_scan_results(scan_data: dict, save_path: str | Path, *,
                       title: str = "Confocal scan",
                       show_title: bool = False,
-                      show_scalebar: bool = True) -> Path:
+                      show_scalebar: bool = True,
+                      axis_labels: tuple[str, str] = ("x", "y")) -> Path:
     """
     Save a 2D confocal scan as a publication-quality PNG.
 
@@ -73,6 +74,9 @@ def plot_scan_results(scan_data: dict, save_path: str | Path, *,
         title:          figure title (shown only when show_title is True)
         show_title:     set to False for publication panels
         show_scalebar:  draw a white scale bar on the image
+        axis_labels:    (horizontal, vertical) axis names, e.g. ``("x", "z")``
+                        for an XZ scan. Horizontal = fast axis (columns),
+                        vertical = slow axis (rows).
 
     Returns:
         Path to the saved PNG.
@@ -130,8 +134,8 @@ def plot_scan_results(scan_data: dict, save_path: str | Path, *,
         ax.xaxis.set_minor_locator(ticker.AutoMinorLocator())
         ax.yaxis.set_minor_locator(ticker.AutoMinorLocator())
 
-        ax.set_xlabel(r"$x$ ($\mu$m)")
-        ax.set_ylabel(r"$y$ ($\mu$m)")
+        ax.set_xlabel(rf"${axis_labels[0]}$ ($\mu$m)")
+        ax.set_ylabel(rf"${axis_labels[1]}$ ($\mu$m)")
         if show_title:
             ax.set_title(title)
 

@@ -249,8 +249,8 @@ def run_on_main_sync(func, timeout=15.0):
         raise result['error']
     return result.get('value')
 
-# Add an image layer to display the live scan
-layer = viewer.add_image(image, name="live scan", colormap="viridis", contrast_limits=contrast_limits)
+# Add an image layer to display the live XY scan
+layer = viewer.add_image(image, name="XY scan", colormap="viridis", contrast_limits=contrast_limits)
 # Add a shapes layer to display the zoom area
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
 
@@ -448,7 +448,7 @@ def _save_scan(mode, axis_names, points_list, result, scales, dwell, z_dwell, sc
         npz_kwargs['scale_z'] = scales[0]
         npz_kwargs['scale_y'] = scales[1]
         npz_kwargs['scale_x'] = scales[2]
-        path = _next_data_path('.npz')
+        path = data_manager.next_base_path('.npz')
         np.savez(path, **npz_kwargs)
         data_path = path
         bridge.notify("💾 3D scan data saved")
@@ -481,7 +481,8 @@ def _save_scan(mode, axis_names, points_list, result, scales, dwell, z_dwell, sc
     }
 
     data_path = data_manager.save_scan_data(scan_data, save_params)
-    plot_scan_results(scan_data, data_path)
+    plot_scan_results(scan_data, data_path,
+                      axis_labels=(axis_names[0], axis_names[1]))
     np.savez(data_path.replace('.csv', '.npz'), **npz_kwargs)
     save_tiff_with_imagej_metadata(
         image_data=result,
@@ -492,17 +493,6 @@ def _save_scan(mode, axis_names, points_list, result, scales, dwell, z_dwell, sc
         timestamp=timestamp_str,
     )
     bridge.notify("💾 Scan data saved")
-
-
-def _next_data_path(ext):
-    """Return the next sequential path (mmddyy###ext) inside today's folder."""
-    import os
-    daily = time.strftime("%m%d%y")
-    os.makedirs(daily, exist_ok=True)
-    existing = [f for f in os.listdir(daily)
-                if f.startswith(daily) and f.endswith(ext)]
-    seq = len(existing) + 1
-    return os.path.join(daily, f"{daily}{seq:03d}{ext}")
 
 
 # --------------------- HARDWARE-TIMED SCANNING FUNCTION ---------------------
@@ -525,6 +515,10 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
     scanned = set(axis_names)
     points_list = [np.asarray(p, dtype=float) for p in points_list]
 
+    # Z position to restore after a Z-involving scan (the user's focus plane
+    # from the Z-Control spinbox). None for modes that don't move Z.
+    z_return = None
+
     try:
         n_flyback = _flyback_samples(dwell, z_dwell, scanned)
         shape, stride, width, n_lines = raster_engine.raster_geometry(points_list, n_flyback)
@@ -543,6 +537,12 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
         current_position_um['x'], current_position_um['y'] = x_um, y_um
 
         if 'z' in scanned and z_controller.available:
+            # Remember the user's focus plane (Z-Control spinbox) so we can
+            # return there after the sweep leaves Z at z_max.
+            try:
+                z_return = float(piezo_control_widget.pos_spinbox.value())
+            except Exception:
+                z_return = z_controller.position
             z_start = float(points_list[axis_names.index('z')][0])
             z_controller.set_position(z_start)
             current_position_um['z'] = z_start
@@ -610,6 +610,20 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
         except Exception as e:
             bridge.notify(f"⚠️ Failed to restart galvo control: {e}")
         bridge.notify("🎯 Scanner returned to zero position")
+
+        # For Z-involving scans, return the piezo to the user's focus plane
+        # (Z-Control spinbox) instead of leaving it at the sweep's z_max. The
+        # scan task that reserved ao2 is already closed here, so the ephemeral
+        # set_position write is safe.
+        if z_return is not None and z_controller.available:
+            try:
+                z_controller.set_position(z_return)
+                current_position_um['z'] = z_return
+                piezo_control_widget._update_position_signal.emit(z_return)
+                bridge.notify(f"🎯 Z returned to {z_return:.2f} µm")
+            except Exception as e:
+                bridge.notify(f"⚠️ Failed to restore Z position: {e}")
+
         with scan_lock:
             scan_in_progress[0] = False
 
@@ -721,7 +735,7 @@ load_scan_widget = create_load_scan(
 )
 
 # Create piezo control widget
-piezo_control_widget = PiezoControlWidget(z_controller)
+piezo_control_widget = PiezoControlWidget(z_controller, scan_in_progress)
 
 # Let Scan Z refresh the Z control widget after a completed sweep
 auto_focus_widget.z_control_widget = piezo_control_widget

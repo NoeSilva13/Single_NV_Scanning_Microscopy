@@ -28,9 +28,12 @@ class PiezoControlWidget(QWidget):
     _update_position_signal = pyqtSignal(float)
     _notify_signal = pyqtSignal(str)
 
-    def __init__(self, z_controller, parent=None):
+    def __init__(self, z_controller, scan_in_progress=None, parent=None):
         super().__init__(parent)
         self.z_controller = z_controller
+        # Mutable single-element flag shared with the scan engine; when a scan
+        # owns the DAQ (ao2 reserved), manual Z moves must be refused.
+        self.scan_in_progress = scan_in_progress
         self._pending_position = 0.0
         self.setup_ui()
 
@@ -64,7 +67,9 @@ class PiezoControlWidget(QWidget):
         # Debounce spinbox edits so we only move after the user stops typing.
         self._move_timer = QTimer()
         self._move_timer.setSingleShot(True)
-        self._move_timer.setInterval(500)
+        # DAQ writes are far faster than the old USB path, so a short debounce
+        # is enough to coalesce rapid spinbox edits without flooding ao2.
+        self._move_timer.setInterval(150)
         self._move_timer.timeout.connect(self._on_move_timer_fired)
         self.pos_spinbox.valueChanged.connect(self._on_spinbox_changed)
 
@@ -85,6 +90,13 @@ class PiezoControlWidget(QWidget):
 
     def _move_piezo(self, position_um: float):
         """Command the piezo to ``position_um`` in a background thread."""
+        # Refuse manual moves while a scan owns the DAQ (ao2 is reserved by the
+        # hardware-timed task; an ephemeral write would collide).
+        if self.scan_in_progress is not None and self.scan_in_progress[0]:
+            self._notify_signal.emit("⚠️ Scan in progress; Z move ignored")
+            self._update_position_signal.emit(self.z_controller.position)
+            return
+
         def move():
             if not self.z_controller.available:
                 self._notify_signal.emit("❌ Z control via DAQ not available")

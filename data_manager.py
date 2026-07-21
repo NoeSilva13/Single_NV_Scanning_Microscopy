@@ -8,7 +8,34 @@ class DataManager:
         Initialize the DataManager.
         """
         pass
-    
+
+    def _next_index(self, daily_folder):
+        """Next sequence number based on distinct scan basenames in the folder.
+
+        Counts unique ``mmddyy###`` basenames across both ``.csv`` and ``.npz``
+        outputs so that 2D scans (which write .csv + .npz) and 3D scans (which
+        write only .npz) share a single, collision-free counter.
+        """
+        bases = set()
+        for f in os.listdir(daily_folder):
+            if f.startswith(daily_folder) and (f.endswith('.csv') or f.endswith('.npz')):
+                bases.add(os.path.splitext(f)[0])
+        return len(bases) + 1
+
+    def next_base_path(self, ext=''):
+        """Create today's folder and return the next sequential path.
+
+        Args:
+            ext: Optional extension (e.g. ``'.npz'``). If empty, returns the
+                base path without extension.
+        """
+        daily_folder = time.strftime("%m%d%y")
+        if not os.path.exists(daily_folder):
+            os.makedirs(daily_folder)
+        seq_str = f"{self._next_index(daily_folder):03d}"
+        base = os.path.join(daily_folder, f"{daily_folder}{seq_str}")
+        return base + ext if ext else base
+
     def save_scan_data(self, scan_data, scan_params):
         """
         Save scan data to a CSV file in a daily folder.
@@ -20,23 +47,9 @@ class DataManager:
         Returns:
             str: The path to the saved file
         """
-        # Create daily folder for data
-        daily_folder = time.strftime("%m%d%y")
-        if not os.path.exists(daily_folder):
-            os.makedirs(daily_folder)
-        
-        # Get list of existing .csv files in the daily folder
-        existing_files = [f for f in os.listdir(daily_folder) 
-                        if f.startswith(daily_folder) and f.endswith('.csv')]
-        
-        # Determine the next sequence number (001, 002, etc.)
-        seq_num = len(existing_files) + 1
-        
-        # Format the sequence number with leading zeros
-        seq_str = f"{seq_num:03d}"
-        
-        # Create filename
-        filename = os.path.join(daily_folder, f"{daily_folder}{seq_str}.csv")
+        # Create filename using the shared counter (counts both .csv and .npz)
+        # so 2D and 3D scans never reuse the same sequence number.
+        filename = self.next_base_path('.csv')
 
         # Get the image and points from scan_data
         image = scan_data['image']
