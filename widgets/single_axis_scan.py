@@ -10,7 +10,7 @@ import numpy as np
 import pyqtgraph as pg
 from nidaqmx.constants import TaskMode
 from qtpy.QtWidgets import QWidget, QPushButton, QVBoxLayout, QTabWidget
-from qtpy.QtCore import Signal as pyqtSignal
+from qtpy.QtCore import Qt, Signal as pyqtSignal
 from napari.utils.notifications import show_info
 from scanning_core import run_hardware_timed_sweep, counts_to_rate
 from utils import MICRONS_PER_VOLT
@@ -45,6 +45,11 @@ class SingleAxisScanWidget(QWidget):
         self.scan_task_ref = scan_task_ref
         self.cbm_ref = cbm_ref
 
+        # Optional callback invoked after a click-to-move so the rest of the app
+        # (global position state + axis control widget) can stay in sync.
+        # Signature: move_callback(x_um, y_um).
+        self.move_callback = None
+
         # Track current scanner position internally, in micrometers.
         self.current_x_um = 0.0
         self.current_y_um = 0.0
@@ -52,7 +57,10 @@ class SingleAxisScanWidget(QWidget):
         # Per-axis plot handles
         self.curves = {}
         self.peak_markers = {}
+        self.sel_lines = {}
         self.scan_btns = {}
+        # Last measured positions (µm) per axis, used to snap clicks to points.
+        self.last_scan_points = {}
 
         layout = QVBoxLayout()
         layout.setContentsMargins(4, 4, 4, 4)
@@ -108,8 +116,20 @@ class SingleAxisScanWidget(QWidget):
             [], [], pen=None, symbol='o', symbolSize=12,
             symbolBrush=None, symbolPen=pg.mkPen('red', width=2)
         )
+        # Vertical line marking the last clicked (selected) position.
+        sel_line = pg.InfiniteLine(
+            angle=90, movable=False,
+            pen=pg.mkPen('#ffaa00', width=1, style=Qt.PenStyle.DashLine)
+        )
+        sel_line.setVisible(False)
+        plot_item.addItem(sel_line)
         self.curves[axis] = curve
         self.peak_markers[axis] = peak_marker
+        self.sel_lines[axis] = sel_line
+        # Click-to-move: map the clicked X (µm) to a galvo position on this axis.
+        plot_widget.scene().sigMouseClicked.connect(
+            lambda ev, a=axis: self._on_plot_clicked(a, ev)
+        )
         plot_widget.setMinimumHeight(160)
         v.addWidget(plot_widget)
         return tab
@@ -232,6 +252,8 @@ class SingleAxisScanWidget(QWidget):
     def _on_plot_ready(self, axis, x_data, y_data):
         """Update the axis plot on the main thread."""
         self.curves[axis].setData(x_data, y_data)
+        # Remember the measured positions so clicks can snap to them.
+        self.last_scan_points[axis] = list(x_data)
         peak_x, peak_y = self._peak(x_data, y_data)
         if peak_x is None:
             self.peak_markers[axis].setData([], [])
@@ -240,6 +262,47 @@ class SingleAxisScanWidget(QWidget):
 
     def _on_finished(self, axis):
         self.scan_btns[axis].setEnabled(True)
+
+    # ------------------------------------------------------------------
+    # Click-to-move
+    # ------------------------------------------------------------------
+    def _on_plot_clicked(self, axis, event):
+        """Move the galvo to the clicked position on ``axis`` (micrometers)."""
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        if self.scan_in_progress[0]:
+            show_info('⚠️ Scan in progress; click-to-move ignored')
+            return
+
+        vb = self.curves[axis].getViewBox()
+        scene_pos = event.scenePos()
+        if vb is None or not vb.sceneBoundingRect().contains(scene_pos):
+            return
+        pos_um = float(vb.mapSceneToView(scene_pos).x())
+
+        # Snap to the nearest measured point if a scan has been run.
+        pts = self.last_scan_points.get(axis)
+        if pts:
+            arr = np.asarray(pts, dtype=float)
+            pos_um = float(arr[int(np.argmin(np.abs(arr - pos_um)))])
+
+        if axis == 'x':
+            x_um, y_um = pos_um, self.current_y_um
+        else:
+            x_um, y_um = self.current_x_um, pos_um
+
+        try:
+            self.output_task.write([float(_um_to_volt(x_um)),
+                                    float(_um_to_volt(y_um))])
+        except Exception as e:
+            show_info(f'❌ Error moving scanner: {str(e)}')
+            return
+
+        self.update_current_position(x_um, y_um)
+        self.sel_lines[axis].setValue(pos_um)
+        self.sel_lines[axis].setVisible(True)
+        if self.move_callback is not None:
+            self.move_callback(x_um, y_um)
 
     @staticmethod
     def _peak(x, y):

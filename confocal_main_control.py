@@ -822,6 +822,15 @@ axis_control_widget = AxisControlWidget(
 # Let Scan Z refresh the axis control widget after a completed sweep
 auto_focus_widget.z_control_widget = axis_control_widget
 
+# Click-to-move on the single-axis plots keeps global state and the axis
+# control widget in sync (the widget already updates its own X/Y tracking).
+def _on_single_axis_move(x_um, y_um):
+    current_position_um['x'] = x_um
+    current_position_um['y'] = y_um
+    axis_control_widget.refresh_positions(x=x_um, y=y_um)
+
+single_axis_scan_widget.move_callback = _on_single_axis_move
+
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
 zoom_in_progress = False
