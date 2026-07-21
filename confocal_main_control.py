@@ -83,7 +83,7 @@ class ScanParametersManager:
                                "y": [-MICRONS_PER_VOLT, MICRONS_PER_VOLT]},
                 "resolution": {"x": 50, "y": 50},
                 "dwell_time": 0.002,
-                "z_scan": {"range": [0.0, 450.0], "resolution": 50, "dwell_time": 0.025},
+                "z_scan": {"range": [0.0, 450.0], "resolution": 50, "dwell_time": 0.005},
                 "scan_mode": "XY"
             }
     
@@ -323,6 +323,63 @@ def on_mouse_click(layer, event):
 
 layer.mouse_drag_callbacks.append(on_mouse_click)
 
+
+def on_scan_click(clicked_layer, event):
+    """Click-to-move for XZ / YZ / XYZ scan layers.
+
+    Maps the clicked pixel to a position on each scanned axis using the exact
+    grid stored in ``clicked_layer.metadata`` at scan time, then commands the
+    galvo (X/Y via the persistent AO task) and/or the piezo (Z via an ephemeral
+    ao2 write). Axes not part of the mode keep their current position.
+    """
+    # 3D volumes are only clickable in the 2D slice view; ray-casting in the
+    # rendered 3D view does not map cleanly to a voxel.
+    if getattr(viewer.dims, 'ndisplay', 2) == 3:
+        show_info("ℹ️ Switch to 2D slice view to click-to-move in 3D scans")
+        return
+
+    if scan_in_progress[0]:
+        show_info("⚠️ Scan in progress; click-to-move ignored")
+        return
+
+    axis_names = clicked_layer.metadata.get('scan_axes')
+    points_list = clicked_layer.metadata.get('scan_points')
+    if not axis_names or points_list is None:
+        return
+
+    coords = clicked_layer.world_to_data(event.position)
+    # Image dims are in acquisition order (slow..fast) = reversed(axis_names).
+    acq_axes = list(reversed(axis_names))
+    acq_points = list(reversed(points_list))
+
+    pos_um = {}
+    for i, (name, pts) in enumerate(zip(acq_axes, acq_points)):
+        idx = int(round(coords[i]))
+        idx = max(0, min(len(pts) - 1, idx))
+        pos_um[name] = float(pts[idx])
+
+    x_um = pos_um.get('x', current_position_um['x'])
+    y_um = pos_um.get('y', current_position_um['y'])
+
+    try:
+        output_task.write([axis_x.position_to_voltage(x_um),
+                           axis_y.position_to_voltage(y_um)])
+        current_position_um['x'] = x_um
+        current_position_um['y'] = y_um
+        if single_axis_widget_ref is not None:
+            single_axis_widget_ref.update_current_position(x_um, y_um)
+
+        msg = [f"X={x_um:.3f}", f"Y={y_um:.3f}"]
+        if 'z' in pos_um and z_controller.available:
+            z_um = pos_um['z']
+            z_controller.set_position(z_um)
+            current_position_um['z'] = z_um
+            piezo_control_widget._update_position_signal.emit(z_um)
+            msg.append(f"Z={z_um:.3f}")
+        show_info("Moved to: " + ", ".join(msg) + " µm")
+    except Exception as e:
+        show_info(f"Error moving scanner: {str(e)}")
+
 # --------------------- LIVE SIGNAL PLOT WIDGET (pyqtgraph) ---------------------
 # Function to get count rate and check for overflow
 def get_count_with_overflow():
@@ -392,8 +449,13 @@ def _flyback_samples(dwell, z_dwell, scanned):
     return n
 
 
-def _prepare_scan_layer(mode, data, scales, units):
-    """Create or update the napari layer for *mode* on the main thread."""
+def _prepare_scan_layer(mode, axis_names, points_list, data, scales, units):
+    """Create or update the napari layer for *mode* on the main thread.
+
+    For non-XY modes the scanned grid (axis order + µm points) is stored in
+    ``layer.metadata`` so the click-to-move handler maps pixels to the exact
+    positions that were scanned. The handler is attached once, at creation.
+    """
     if mode == 'XY':
         def _p():
             layer.data = data
@@ -404,6 +466,7 @@ def _prepare_scan_layer(mode, data, scales, units):
         return run_on_main_sync(_p)
 
     name = _MODE_LAYER_NAMES.get(mode, f'{mode} scan')
+    grid = [np.asarray(p, dtype=float) for p in points_list]
 
     def _p():
         if name in viewer.layers:
@@ -415,6 +478,9 @@ def _prepare_scan_layer(mode, data, scales, units):
             lyr = viewer.add_image(
                 data, name=name, colormap='viridis', scale=scales, units=units
             )
+            lyr.mouse_drag_callbacks.append(on_scan_click)
+        lyr.metadata['scan_axes'] = list(axis_names)
+        lyr.metadata['scan_points'] = grid
         return lyr
     return run_on_main_sync(_p)
 
@@ -548,7 +614,7 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
             current_position_um['z'] = z_start
             time.sleep(z_dwell)  # initial settle before the sweep begins
 
-        target_layer = _prepare_scan_layer(mode, result, scales, units)
+        target_layer = _prepare_scan_layer(mode, axis_names, points_list, result, scales, units)
 
         # Release AO channels from the persistent on-demand task so the
         # hardware-timed task can reserve them.

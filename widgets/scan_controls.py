@@ -181,7 +181,7 @@ def update_scan_parameters(scan_params_manager):
             default_z_min = 0.0
             default_z_max = 450.0
             default_z_res = 50
-            default_z_dwell = 0.025  # 25 ms for the slow piezo settling
+            default_z_dwell = 0.005  # 5 ms default piezo settling (adjust per step size)
 
             xy_um_limit = 10.0 * MICRONS_PER_VOLT  # ±10 V galvo range in µm
 
@@ -267,7 +267,7 @@ def update_scan_parameters(scan_params_manager):
             self.z_res_spinbox = QSpinBox()
             self.z_res_spinbox.setRange(2, 1000)
             self.z_res_spinbox.setValue(default_z_res)
-            self.z_res_spinbox.setSuffix(" pts")
+            self.z_res_spinbox.setSuffix(" px")
             layout.addWidget(self.z_res_spinbox, 9, 1, 1, 2)  # Span 2 columns
 
             # XY Dwell Time

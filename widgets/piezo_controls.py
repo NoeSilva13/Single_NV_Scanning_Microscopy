@@ -102,8 +102,9 @@ class PiezoControlWidget(QWidget):
                 self._notify_signal.emit("❌ Z control via DAQ not available")
                 return
             try:
-                effective = self.z_controller.set_position(position_um)
-                self._notify_signal.emit(f"✓ Moved to {effective:.2f} µm")
+                # Move silently: routine spinbox moves should not spam napari
+                # notifications. Errors are still surfaced below.
+                self.z_controller.set_position(position_um)
             except Exception as e:
                 self._notify_signal.emit(f"❌ Error: {str(e)}")
 
