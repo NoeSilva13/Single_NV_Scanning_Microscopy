@@ -36,6 +36,7 @@ from utils import (
     calculate_scale, 
     MAX_ZOOM_LEVEL, 
     BINWIDTH,
+    MICRONS_PER_VOLT,
     save_tiff_with_imagej_metadata
 )
 from qtpy.QtWidgets import QWidget
@@ -474,7 +475,8 @@ def scan_pattern(x_points, y_points):
         save_params = {
             'scan_range': dict(current_scan_params['scan_range']),
             'resolution': dict(current_scan_params['resolution']),
-            'dwell_time': current_scan_params['dwell_time']
+            'dwell_time': current_scan_params['dwell_time'],
+            'scan_time': end_time - start_time
         }
         save_scale_x = scale_um_per_px_x
         save_scale_y = scale_um_per_px_y
@@ -501,6 +503,7 @@ def scan_pattern(x_points, y_points):
                      x_resolution=save_params['resolution']['x'],
                      y_resolution=save_params['resolution']['y'],
                      dwell_time=save_params['dwell_time'],
+                     microns_per_volt=MICRONS_PER_VOLT,
                      x_points=save_x,
                      y_points=save_y,
                      timestamp=timestamp_str)

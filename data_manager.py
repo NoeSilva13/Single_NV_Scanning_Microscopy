@@ -75,6 +75,11 @@ class DataManager:
             # Write dwell time
             dwell_time = scan_params['dwell_time']
             f.write(f"# Dwell Time: {dwell_time:.6f} s\n")
+
+            # Write total scan time (acquisition duration) if available
+            scan_time = scan_params.get('scan_time', None)
+            if scan_time is not None:
+                f.write(f"# Scan Time: {scan_time:.2f} s\n")
             
             # Write scan points information
             f.write(f"# X Points: {len(x_points)} points from {x_points[0]:.6f}V to {x_points[-1]:.6f}V\n")
