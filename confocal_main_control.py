@@ -29,11 +29,12 @@ from magicgui import magicgui
 from galvo_controller import GalvoScannerController
 from data_manager import DataManager
 from daq_z_controller import DAQZController
-from scanning_core import run_hardware_timed_sweep, counts_to_rate
+from daq_axis import DAQAxis
+import raster_engine
 from plot_widgets.live_plot_napari_widget import live_plot
 from plot_scan_results import plot_scan_results
 from utils import (
-    calculate_scale, 
+    um_scale,
     MAX_ZOOM_LEVEL, 
     BINWIDTH,
     MICRONS_PER_VOLT,
@@ -76,12 +77,14 @@ class ScanParametersManager:
         if self.widget_instance and hasattr(self.widget_instance, 'get_parameters'):
             return self.widget_instance.get_parameters()
         else:
-            # Fallback default values if widget is not available
+            # Fallback default values if widget is not available (µm canonical).
             return {
-                "scan_range": {"x": [-1.0, 1.0], "y": [-1.0, 1.0]},
+                "scan_range": {"x": [-MICRONS_PER_VOLT, MICRONS_PER_VOLT],
+                               "y": [-MICRONS_PER_VOLT, MICRONS_PER_VOLT]},
                 "resolution": {"x": 50, "y": 50},
                 "dwell_time": 0.002,
-                "z_scan": {"range": [0.0, 450.0], "resolution": 50, "dwell_time": 0.025}
+                "z_scan": {"range": [0.0, 450.0], "resolution": 50, "dwell_time": 0.025},
+                "scan_mode": "XY"
             }
     
     def update_scan_parameters(self, x_range=None, y_range=None, x_res=None, y_res=None, dwell_time=None):
@@ -111,10 +114,10 @@ class ScanPointsManager:
         self._initialize_default_points()
     
     def _initialize_default_points(self):
-        """Initialize with default values"""
+        """Initialize with default values (µm canonical)."""
         # Use same defaults as in the widget
-        x_range = [-1.0, 1.0]
-        y_range = [-1.0, 1.0]
+        x_range = [-MICRONS_PER_VOLT, MICRONS_PER_VOLT]
+        y_range = [-MICRONS_PER_VOLT, MICRONS_PER_VOLT]
         x_res = 50
         y_res = 50
         
@@ -173,6 +176,21 @@ z_controller = DAQZController()
 if not z_controller.available:
     show_info("⚠️ Z control via DAQ (ao2) not available")
 
+# Axis abstraction (µm <-> V) for every DAQ analog-output axis. Galvo X/Y are
+# not validated here because GalvoScannerController already reserves ao0/ao1;
+# the piezo axis is the z_controller itself (a DAQAxis subclass).
+_GALVO_TRAVEL_UM = (-10.0 * MICRONS_PER_VOLT, 10.0 * MICRONS_PER_VOLT)
+axis_x = DAQAxis("x", galvo_controller.xin_control, MICRONS_PER_VOLT,
+                 (-10.0, 10.0), _GALVO_TRAVEL_UM, validate=False)
+axis_y = DAQAxis("y", galvo_controller.yin_control, MICRONS_PER_VOLT,
+                 (-10.0, 10.0), _GALVO_TRAVEL_UM, validate=False)
+axis_z = z_controller
+AXES = {"x": axis_x, "y": axis_y, "z": axis_z}
+
+# Last commanded position of each axis, in micrometers. Used to hold axes that
+# are not part of a given scan mode at their current location.
+current_position_um = {"x": 0.0, "y": 0.0, "z": 0.0}
+
 # Extract scan parameters for initial setup (using defaults)
 x_res = 50  # Default resolution
 y_res = 50  # Default resolution
@@ -207,6 +225,30 @@ viewer.window.resize(screen.width(), screen.height())
 bridge = GUIBridge()
 scan_lock = threading.Lock()
 
+
+def run_on_main_sync(func, timeout=15.0):
+    """Run *func* on the main GUI thread and block until it returns a value.
+
+    Used when a background scan thread must create/fetch a napari layer and
+    needs the resulting reference before continuing.
+    """
+    result = {}
+    done = threading.Event()
+
+    def _wrapper():
+        try:
+            result['value'] = func()
+        except Exception as e:
+            result['error'] = e
+        finally:
+            done.set()
+
+    bridge.run_on_main(_wrapper)
+    done.wait(timeout)
+    if 'error' in result:
+        raise result['error']
+    return result.get('value')
+
 # Add an image layer to display the live scan
 layer = viewer.add_image(image, name="live scan", colormap="viridis", contrast_limits=contrast_limits)
 # Add a shapes layer to display the zoom area
@@ -216,11 +258,11 @@ shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color=
 viewer.scale_bar.visible = True
 viewer.scale_bar.position = "bottom_left"
 
-# Calculate scale (in microns/pixel) using defaults initially
-x_range = [-1.0, 1.0]  # Default range
-y_range = [-1.0, 1.0]  # Default range
-scale_um_per_px_x = calculate_scale(x_range[0], x_range[1], x_res)
-scale_um_per_px_y = calculate_scale(y_range[0], y_range[1], y_res)
+# Calculate scale (in microns/pixel) using defaults initially (µm canonical)
+x_range = [-MICRONS_PER_VOLT, MICRONS_PER_VOLT]  # Default range in µm
+y_range = [-MICRONS_PER_VOLT, MICRONS_PER_VOLT]  # Default range in µm
+scale_um_per_px_x = um_scale(x_range[0], x_range[1], x_res)
+scale_um_per_px_y = um_scale(y_range[0], y_range[1], y_res)
 layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 layer.units = ('µm', 'µm')
 shapes.units = ('µm', 'µm')
@@ -253,24 +295,28 @@ def on_mouse_click(layer, event):
     coords = layer.world_to_data(event.position)
     x_idx, y_idx = int(round(coords[1])), int(round(coords[0]))
     
-    # Get current ranges from scan parameters manager
+    # Get current ranges from scan parameters manager (µm canonical)
     params = scan_params_manager.get_params()
     x_range = params['scan_range']['x']
     y_range = params['scan_range']['y']
     x_res = params['resolution']['x']
     y_res = params['resolution']['y']
     
-    # Convert from pixel coordinates to voltage values
-    x_voltage = np.interp(x_idx, [0, x_res-1], [x_range[0], x_range[1]])
-    y_voltage = np.interp(y_idx, [0, y_res-1], [y_range[0], y_range[1]])
-    
+    # Convert from pixel coordinates to positions in micrometers
+    x_um = float(np.interp(x_idx, [0, x_res-1], [x_range[0], x_range[1]]))
+    y_um = float(np.interp(y_idx, [0, y_res-1], [y_range[0], y_range[1]]))
+
     try:
-        output_task.write([x_voltage, y_voltage])
-        show_info(f"Moved scanner to: X={x_voltage:.3f}V, Y={y_voltage:.3f}V")
+        # Convert µm -> volts at the DAQ boundary via the axis calibration
+        output_task.write([axis_x.position_to_voltage(x_um),
+                           axis_y.position_to_voltage(y_um)])
+        current_position_um['x'] = x_um
+        current_position_um['y'] = y_um
+        show_info(f"Moved scanner to: X={x_um:.3f} µm, Y={y_um:.3f} µm")
         
-        # Update the single axis scan widget's position tracking
+        # Update the single axis scan widget's position tracking (µm)
         if single_axis_widget_ref is not None:
-            single_axis_widget_ref.update_current_position(x_voltage, y_voltage)
+            single_axis_widget_ref.update_current_position(x_um, y_um)
         
     except Exception as e:
         show_info(f"Error moving scanner: {str(e)}")
@@ -317,223 +363,303 @@ def update_contrast_limits(layer, image):
     except Exception as e:
         show_info(f'❌ Error setting contrast limits: {str(e)}')
 
-# --------------------- WAVEFORM GENERATION ---------------------
-GALVO_FLYBACK_TIME = 0.002  # seconds of retrace budget between rows
+# --------------------- SCAN GEOMETRY / MODES ---------------------
+GALVO_FLYBACK_TIME = 0.002  # seconds of retrace budget between fast lines
 
-def generate_scan_waveform(x_points, y_points, n_flyback=0):
-    """Pre-compute complete X/Y voltage waveforms for a hardware-timed raster scan.
+# Fast..slow axis order for each scan mode. Z (piezo) is always the slowest
+# stepping axis, so it steps at most once per fast line and gets a flyback
+# window sized by the configurable Z dwell (not a hardcoded value).
+MODE_AXES = {
+    'XY': ['x', 'y'],
+    'XZ': ['x', 'z'],
+    'YZ': ['y', 'z'],
+    'XYZ': ['x', 'y', 'z'],
+}
 
-    Inserts a smooth linear ramp of *n_flyback* samples between consecutive
-    rows so the galvo can decelerate, retrace, and settle before the next
-    line of data acquisition begins.  Flyback samples are clocked at the
-    same rate as imaging samples; their photon counts must be discarded by
-    the caller.
+_MODE_LAYER_NAMES = {'XZ': 'XZ scan', 'YZ': 'YZ scan', 'XYZ': 'XYZ volume'}
 
-    Args:
-        x_points: 1D array of X galvo voltages (one per column).
-        y_points: 1D array of Y galvo voltages (one per row).
-        n_flyback: Number of extra retrace samples inserted between rows.
-                   Set to 0 to disable (original behaviour).
 
-    Returns:
-        x_waveform: 1D voltage array for AO0.
-        y_waveform: 1D voltage array for AO1.
+def _flyback_samples(dwell, z_dwell, scanned):
+    """Retrace/settle samples between fast lines.
+
+    Galvo retrace budget (``GALVO_FLYBACK_TIME``) always applies. When the piezo
+    Z is a stepping axis, the window is widened so the retrace duration covers
+    the user-configured Z settling time (``z_dwell``).
     """
-    width = len(x_points)
-    height = len(y_points)
+    n = max(1, int(np.ceil(GALVO_FLYBACK_TIME / dwell)))
+    if 'z' in scanned:
+        n = max(n, int(np.ceil(z_dwell / dwell)))
+    return n
 
-    if n_flyback <= 0:
-        return np.tile(x_points, height), np.repeat(y_points, width)
 
-    segments_x = []
-    segments_y = []
+def _prepare_scan_layer(mode, data, scales, units):
+    """Create or update the napari layer for *mode* on the main thread."""
+    if mode == 'XY':
+        def _p():
+            layer.data = data
+            layer.contrast_limits = contrast_limits
+            layer.scale = scales
+            layer.units = units
+            return layer
+        return run_on_main_sync(_p)
 
-    for i in range(height):
-        segments_x.append(x_points)
-        segments_y.append(np.full(width, y_points[i]))
+    name = _MODE_LAYER_NAMES.get(mode, f'{mode} scan')
 
-        if i < height - 1:
-            segments_x.append(np.linspace(x_points[-1], x_points[0], n_flyback))
-            segments_y.append(np.linspace(y_points[i], y_points[i + 1], n_flyback))
+    def _p():
+        if name in viewer.layers:
+            lyr = viewer.layers[name]
+            lyr.data = data
+            lyr.scale = scales
+            lyr.units = units
+        else:
+            lyr = viewer.add_image(
+                data, name=name, colormap='viridis', scale=scales, units=units
+            )
+        return lyr
+    return run_on_main_sync(_p)
 
-    return np.concatenate(segments_x), np.concatenate(segments_y)
+
+def _save_scan(mode, axis_names, points_list, result, scales, dwell, z_dwell, scan_time):
+    """Persist a completed scan (npz for all modes; CSV/TIFF/plot for 2D)."""
+    global data_path
+    timestamp_str = time.strftime("%Y%m%d-%H%M%S")
+
+    # Per-axis metadata (µm canonical).
+    npz_kwargs = dict(
+        image=result,
+        scan_mode=mode,
+        axis_names=np.array(axis_names),
+        dwell_time=float(dwell),
+        z_dwell_time=float(z_dwell),
+        microns_per_volt=MICRONS_PER_VOLT,
+        z_um_per_volt=z_controller.um_per_volt,
+        units='um',
+        format_version=2,
+        timestamp=timestamp_str,
+    )
+    for name, pts in zip(axis_names, points_list):
+        npz_kwargs[f'{name}_points'] = pts
+        npz_kwargs[f'{name}_range'] = [float(pts[0]), float(pts[-1])]
+        npz_kwargs[f'{name}_resolution'] = len(pts)
+        npz_kwargs[f'{name}_scale'] = um_scale(pts[0], pts[-1], len(pts))
+
+    if result.ndim == 3:
+        # (Z, Y, X): store scales in napari order for the loader.
+        npz_kwargs['scale_z'] = scales[0]
+        npz_kwargs['scale_y'] = scales[1]
+        npz_kwargs['scale_x'] = scales[2]
+        path = _next_data_path('.npz')
+        np.savez(path, **npz_kwargs)
+        data_path = path
+        bridge.notify("💾 3D scan data saved")
+        return
+
+    # 2D modes: keep the legacy CSV/TIFF/plot pipeline. Fast axis -> columns
+    # (x_points), slow axis -> rows (y_points).
+    fast_pts = points_list[0]
+    slow_pts = points_list[1]
+    scale_fast = scales[1]
+    scale_slow = scales[0]
+    npz_kwargs['scale_x'] = scale_fast
+    npz_kwargs['scale_y'] = scale_slow
+
+    scan_data = {
+        'image': result,
+        'x_points': fast_pts,
+        'y_points': slow_pts,
+        'scale_x': scale_fast,
+        'scale_y': scale_slow,
+    }
+    save_params = {
+        'scan_range': {
+            'x': [float(fast_pts[0]), float(fast_pts[-1])],
+            'y': [float(slow_pts[0]), float(slow_pts[-1])],
+        },
+        'resolution': {'x': len(fast_pts), 'y': len(slow_pts)},
+        'dwell_time': float(dwell),
+        'scan_time': scan_time,
+    }
+
+    data_path = data_manager.save_scan_data(scan_data, save_params)
+    plot_scan_results(scan_data, data_path)
+    np.savez(data_path.replace('.csv', '.npz'), **npz_kwargs)
+    save_tiff_with_imagej_metadata(
+        image_data=result,
+        filepath=data_path.replace('.csv', '.tiff'),
+        x_points=fast_pts,
+        y_points=slow_pts,
+        scan_config=save_params,
+        timestamp=timestamp_str,
+    )
+    bridge.notify("💾 Scan data saved")
+
+
+def _next_data_path(ext):
+    """Return the next sequential path (mmddyy###ext) inside today's folder."""
+    import os
+    daily = time.strftime("%m%d%y")
+    os.makedirs(daily, exist_ok=True)
+    existing = [f for f in os.listdir(daily)
+                if f.startswith(daily) and f.endswith(ext)]
+    seq = len(existing) + 1
+    return os.path.join(daily, f"{daily}{seq:03d}{ext}")
+
 
 # --------------------- HARDWARE-TIMED SCANNING FUNCTION ---------------------
-def scan_pattern(x_points, y_points):
-    """Perform a hardware-timed raster scan using buffered AO and CountBetweenMarkers.
+def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, save=True):
+    """Run a hardware-timed raster over the given axes (fast..slow), in µm.
 
-    The full scan waveform is pre-computed, loaded into the DAQ, and clocked
-    out by the hardware sample clock.  The same clock is exported to a PFI
-    terminal and wired to the Time Tagger, where CountBetweenMarkers counts
-    APD photons between successive clock edges for each pixel.
+    Builds the multi-channel waveform through ``raster_engine``, drives it with
+    ``scanning_core.run_hardware_timed_sweep`` (AO clock exported to the Time
+    Tagger for CountBetweenMarkers), and reconstructs a 2D image or 3D volume.
     """
-    global image, layer, data_path
+    global image
 
     with scan_lock:
         if scan_in_progress[0]:
             bridge.notify("⚠️ A scan is already in progress")
-            return None, None
+            return None
         scan_in_progress[0] = True
         stop_scan_requested[0] = False
 
-    current_scan_params = scan_params_manager.get_params()
-    dwell_time = current_scan_params['dwell_time']
-
-    height, width = len(y_points), len(x_points)
+    scanned = set(axis_names)
+    points_list = [np.asarray(p, dtype=float) for p in points_list]
 
     try:
-        output_task.write([x_points[0], y_points[0]])
-        n_flyback = max(1, int(np.ceil(GALVO_FLYBACK_TIME / dwell_time)))
-        x_waveform, y_waveform = generate_scan_waveform(x_points, y_points, n_flyback=n_flyback)
-        stride = width + n_flyback
-        pixel_rate = 1.0 / dwell_time
+        n_flyback = _flyback_samples(dwell, z_dwell, scanned)
+        shape, stride, width, n_lines = raster_engine.raster_geometry(points_list, n_flyback)
+        result = np.zeros(shape, dtype=np.float32)
 
-        image = np.zeros((height, width), dtype=np.float32)
-        scale_um_per_px_x = calculate_scale(x_points[0], x_points[-1], width)
-        scale_um_per_px_y = calculate_scale(y_points[0], y_points[-1], height)
+        # Scales in acquisition order (slow..fast).
+        scales = tuple(um_scale(p[0], p[-1], len(p)) for p in reversed(points_list))
+        units = tuple('µm' for _ in shape)
 
-        def _setup_layer():
-            layer.data = image
-            layer.contrast_limits = contrast_limits
-            layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
-        bridge.run_on_main(_setup_layer)
+        # Pre-position: scanned galvo axes go to their start, fixed galvo axes
+        # hold their current position; scanned Z pre-moves and settles.
+        x_um = points_list[axis_names.index('x')][0] if 'x' in scanned else current_position_um['x']
+        y_um = points_list[axis_names.index('y')][0] if 'y' in scanned else current_position_um['y']
+        output_task.write([axis_x.position_to_voltage(x_um),
+                           axis_y.position_to_voltage(y_um)])
+        current_position_um['x'], current_position_um['y'] = x_um, y_um
 
-        # Release AO channels from the persistent on-demand task
+        if 'z' in scanned and z_controller.available:
+            z_start = float(points_list[axis_names.index('z')][0])
+            z_controller.set_position(z_start)
+            current_position_um['z'] = z_start
+            time.sleep(z_dwell)  # initial settle before the sweep begins
+
+        target_layer = _prepare_scan_layer(mode, result, scales, units)
+
+        # Release AO channels from the persistent on-demand task so the
+        # hardware-timed task can reserve them.
         output_task.stop()
         output_task.control(TaskMode.TASK_UNRESERVE)
 
         start_time = time.time()
 
-        def _refresh_and_update():
-            layer.refresh()
-            update_contrast_limits(layer, image)
+        def _on_progress(counts, bins):
+            arr = raster_engine.reconstruct(counts, bins, shape, stride, width)
+            def _upd():
+                target_layer.data = arr
+                update_contrast_limits(target_layer, arr)
+                target_layer.refresh()
+            bridge.run_on_main(_upd)
 
-        # Update the live display incrementally as full rows complete.
-        progress_state = {'last_completed_row': -1}
-
-        def _on_progress(partial_data, partial_bins):
-            rows_updated = False
-            for row_idx in range(progress_state['last_completed_row'] + 1, height):
-                row_start = row_idx * stride
-                row_end = row_start + width
-                row_bins = partial_bins[row_start:row_end]
-                if len(row_bins) == width and np.all(row_bins > 0):
-                    image[row_idx, :] = counts_to_rate(
-                        partial_data[row_start:row_end], row_bins
-                    )
-                    progress_state['last_completed_row'] = row_idx
-                    rows_updated = True
-                else:
-                    break
-            if rows_updated:
-                bridge.run_on_main(_refresh_and_update)
-
-        # Hardware-timed raster: clock out the waveform on ao0/ao1 while the
-        # Time Tagger counts photons between clock edges (one value per sample).
-        all_counts, bin_widths = run_hardware_timed_sweep(
-            tagger,
-            [galvo_controller.xin_control, galvo_controller.yin_control],
-            np.array([x_waveform, y_waveform]),
-            pixel_rate,
-            stop_check=lambda: stop_scan_requested[0],
+        counts, bins, _sh, _st, _w = raster_engine.run_raster(
+            tagger, axes_list, points_list, dwell, n_flyback,
             on_progress=_on_progress,
-            task_ref=scan_task_ref,
-            cbm_ref=cbm_ref,
-            lock=scan_lock,
+            stop_check=lambda: stop_scan_requested[0],
+            task_ref=scan_task_ref, cbm_ref=cbm_ref, lock=scan_lock,
         )
 
         if stop_scan_requested[0]:
             bridge.notify("🛑 Scan stopped by user")
-            return None, None
+            return None
 
-        # Extract final image from completed measurement
-        print(f"All counts: {all_counts}")
-        print(f"Bin widths: {bin_widths}")
-
-        for row_idx in range(height):
-            row_start = row_idx * stride
-            row_end = row_start + width
-            image[row_idx, :] = counts_to_rate(
-                all_counts[row_start:row_end], bin_widths[row_start:row_end]
-            )
-
-        def _final_layer_update():
-            layer.data = image
-            update_contrast_limits(layer, image)
-        bridge.run_on_main(_final_layer_update)
-
+        result = raster_engine.reconstruct(counts, bins, shape, stride, width)
         end_time = time.time()
-        print(f"Scan time: {end_time - start_time:.2f} seconds, {width}x{height} pixels, "
-              f"{n_flyback} flyback samples/row (hardware-timed)")
 
-        current_scan_params['scan_range']['x'] = [float(x_points[0]), float(x_points[-1])]
-        current_scan_params['scan_range']['y'] = [float(y_points[0]), float(y_points[-1])]
+        def _final():
+            target_layer.data = result
+            update_contrast_limits(target_layer, result)
+        bridge.run_on_main(_final)
 
-        save_image = image.copy()
-        save_x = x_points.copy()
-        save_y = y_points.copy()
-        save_params = {
-            'scan_range': dict(current_scan_params['scan_range']),
-            'resolution': dict(current_scan_params['resolution']),
-            'dwell_time': current_scan_params['dwell_time'],
-            'scan_time': end_time - start_time
-        }
-        save_scale_x = scale_um_per_px_x
-        save_scale_y = scale_um_per_px_y
+        if mode == 'XY':
+            image = result
 
-        def _save_all():
-            scan_data = {
-                'image': save_image,
-                'x_points': save_x,
-                'y_points': save_y,
-                'scale_x': save_scale_x,
-                'scale_y': save_scale_y
-            }
-            global data_path
-            data_path = data_manager.save_scan_data(scan_data, save_params)
-            plot_scan_results(scan_data, data_path)
+        print(f"Scan[{mode}] time: {end_time - start_time:.2f}s shape={shape} "
+              f"flyback={n_flyback} (hardware-timed)")
 
-            timestamp_str = time.strftime("%Y%m%d-%H%M%S")
-            np.savez(data_path.replace('.csv', '.npz'),
-                     image=save_image,
-                     scale_x=save_scale_x,
-                     scale_y=save_scale_y,
-                     x_range=save_params['scan_range']['x'],
-                     y_range=save_params['scan_range']['y'],
-                     x_resolution=save_params['resolution']['x'],
-                     y_resolution=save_params['resolution']['y'],
-                     dwell_time=save_params['dwell_time'],
-                     microns_per_volt=MICRONS_PER_VOLT,
-                     x_points=save_x,
-                     y_points=save_y,
-                     timestamp=timestamp_str)
-
-            save_tiff_with_imagej_metadata(
-                image_data=save_image,
-                filepath=data_path.replace('.csv', '.tiff'),
-                x_points=save_x,
-                y_points=save_y,
-                scan_config=save_params,
-                timestamp=timestamp_str
-            )
-            bridge.notify("💾 Scan data saved")
-
-        threading.Thread(target=_save_all, daemon=True).start()
+        if save:
+            save_result = result.copy()
+            save_points = [p.copy() for p in points_list]
+            scan_time = end_time - start_time
+            threading.Thread(
+                target=_save_scan,
+                args=(mode, list(axis_names), save_points, save_result,
+                      scales, dwell, z_dwell, scan_time),
+                daemon=True,
+            ).start()
 
     finally:
-        # The AO task and CBM lifecycle are owned by run_hardware_timed_sweep;
-        # here we only restore the persistent on-demand galvo task.
+        # Restore the persistent on-demand galvo task and park at zero.
         try:
             output_task.start()
             output_task.write([0, 0])
+            current_position_um['x'], current_position_um['y'] = 0.0, 0.0
         except Exception as e:
             bridge.notify(f"⚠️ Failed to restart galvo control: {e}")
-
         bridge.notify("🎯 Scanner returned to zero position")
         with scan_lock:
             scan_in_progress[0] = False
 
+    return points_list
+
+
+def scan_pattern(x_points, y_points):
+    """XY raster entry point (used by zoom / reset zoom), in micrometers."""
+    params = scan_params_manager.get_params()
+    dwell = params['dwell_time']
+    z_dwell = params['z_scan']['dwell_time']
+    _run_raster_scan('XY', ['x', 'y'], [axis_x, axis_y],
+                     [np.asarray(x_points, float), np.asarray(y_points, float)],
+                     dwell, z_dwell)
     return x_points, y_points
+
+
+def _build_axis_points(params):
+    xr = params['scan_range']['x']
+    yr = params['scan_range']['y']
+    zr = params['z_scan']['range']
+    return {
+        'x': np.linspace(xr[0], xr[1], params['resolution']['x']),
+        'y': np.linspace(yr[0], yr[1], params['resolution']['y']),
+        'z': np.linspace(zr[0], zr[1], params['z_scan']['resolution']),
+    }
+
+
+def run_selected_scan():
+    """Mode-aware New Scan dispatch based on the Scan Parameters selector."""
+    params = scan_params_manager.get_params()
+    mode = params.get('scan_mode', 'XY')
+    all_pts = _build_axis_points(params)
+    dwell = params['dwell_time']
+    z_dwell = params['z_scan']['dwell_time']
+    axis_names = MODE_AXES.get(mode, ['x', 'y'])
+
+    if mode == 'XY':
+        # Keep XY going through the manager so zoom history stays consistent.
+        scan_points_manager.update_points(
+            x_range=[all_pts['x'][0], all_pts['x'][-1]],
+            y_range=[all_pts['y'][0], all_pts['y'][-1]],
+            x_res=len(all_pts['x']), y_res=len(all_pts['y']),
+        )
+        scan_pattern(all_pts['x'], all_pts['y'])
+        return
+
+    axes_list = [AXES[n] for n in axis_names]
+    points_list = [all_pts[n] for n in axis_names]
+    _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell)
 
 # --------------------- DATA PATH FUNCTION ---------------------
 def get_data_path():
@@ -542,8 +668,8 @@ def get_data_path():
 
 # --------------------- CREATE WIDGETS USING FACTORIES ---------------------
 
-# Create scan control widgets
-new_scan_widget = create_new_scan(scan_pattern, scan_points_manager, shapes, bridge, scan_in_progress)
+# Create scan control widgets (New Scan is mode-aware via run_selected_scan)
+new_scan_widget = create_new_scan(run_selected_scan, shapes, bridge, scan_in_progress)
 close_scanner_widget = create_close_scanner(output_task)
 save_image_widget = create_save_image(viewer, get_data_path)
 update_scan_parameters_widget = create_update_scan_parameters(scan_params_manager)

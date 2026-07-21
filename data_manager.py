@@ -63,8 +63,8 @@ class DataManager:
             # Write scan ranges
             x_range = scan_params['scan_range']['x']
             y_range = scan_params['scan_range']['y']
-            f.write(f"# X Range: {x_range[0]:.6f} to {x_range[1]:.6f} V\n")
-            f.write(f"# Y Range: {y_range[0]:.6f} to {y_range[1]:.6f} V\n")
+            f.write(f"# X Range: {x_range[0]:.6f} to {x_range[1]:.6f} um\n")
+            f.write(f"# Y Range: {y_range[0]:.6f} to {y_range[1]:.6f} um\n")
                 
             # Write resolutions
             x_res = scan_params['resolution']['x']
@@ -82,8 +82,8 @@ class DataManager:
                 f.write(f"# Scan Time: {scan_time:.2f} s\n")
             
             # Write scan points information
-            f.write(f"# X Points: {len(x_points)} points from {x_points[0]:.6f}V to {x_points[-1]:.6f}V\n")
-            f.write(f"# Y Points: {len(y_points)} points from {y_points[0]:.6f}V to {y_points[-1]:.6f}V\n")
+            f.write(f"# X Points: {len(x_points)} points from {x_points[0]:.6f}um to {x_points[-1]:.6f}um\n")
+            f.write(f"# Y Points: {len(y_points)} points from {y_points[0]:.6f}um to {y_points[-1]:.6f}um\n")
             
             f.write("#\n")  # Empty line to separate header from data
             

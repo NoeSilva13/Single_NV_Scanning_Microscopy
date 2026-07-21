@@ -15,8 +15,6 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.colors import Normalize
 from pathlib import Path
 
-from utils import calculate_scale
-
 # ── Style (mirrors nv_style.py) — applied only inside plot_scan_results ───────
 # Use rc_context so importing this module does not mutate global rcParams
 # (which would affect live-plot widgets in confocal_main_control).
@@ -81,14 +79,14 @@ def plot_scan_results(scan_data: dict, save_path: str | Path, *,
     """
     save_path = Path(save_path)
 
-    x_grid = np.asarray(scan_data["x_points"])   # 1D, volts
-    y_grid = np.asarray(scan_data["y_points"])   # 1D, volts
+    x_grid = np.asarray(scan_data["x_points"])   # 1D, micrometers
+    y_grid = np.asarray(scan_data["y_points"])   # 1D, micrometers
     image  = np.asarray(scan_data["image"])       # 2D (ny, nx), counts
 
-    # ── Galvo voltage → physical coordinates (µm) ─────────────────────────────
-    # calculate_scale(v_start, v_end, 1) returns the total FOV in µm.
-    scan_width_um  = float(calculate_scale(x_grid[0], x_grid[-1], 1))
-    scan_height_um = float(calculate_scale(y_grid[0], y_grid[-1], 1))
+    # ── Physical field of view (µm) ───────────────────────────────────────────
+    # Points are already in micrometers (canonical unit).
+    scan_width_um  = float(abs(x_grid[-1] - x_grid[0]))
+    scan_height_um = float(abs(y_grid[-1] - y_grid[0]))
     x_range = (0.0, scan_width_um)
     y_range = (0.0, scan_height_um)
 

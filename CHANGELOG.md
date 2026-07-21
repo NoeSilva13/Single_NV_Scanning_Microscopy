@@ -2,8 +2,17 @@
 
 All notable changes to this project will be documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) guidelines.
 
-## [Unreleased] - 2026-07-17
+## [Unreleased] - 2026-07-21
+### Added
+- **Multi-dimensional scanning (XY / XZ / YZ / XYZ)** via a **Scan Mode** selector in the Scan Parameters panel that drives the **New Scan** button. XZ/YZ produce a 2D image in a dedicated napari layer; XYZ produces a 3D volume layer with per-axis `scale`/`units`. Axes not part of the selected mode are held at their current position (galvo held via the persistent AO task, piezo pre-moved and settled).
+- Generic N-axis raster engine `raster_engine.py` (`build_raster_waveforms`, `raster_geometry`, `reconstruct`, `run_raster`): composes the fast..slow µm waveform (with inter-line flyback that also covers slow-axis settling), converts each axis to volts via its `DAQAxis`, drives `scanning_core.run_hardware_timed_sweep`, and reconstructs a 2D image or 3D volume. The XY raster now delegates to this engine.
+- Axis abstraction `daq_axis.py` (`DAQAxis`): single home for the µm↔V calibration, AO channel, and travel/voltage limits. `DAQZController` is now a thin `DAQAxis` subclass; `axis_x`/`axis_y` (galvo) and `axis_z` (piezo) are instantiated in the app.
+
 ### Changed
+- **µm is now the canonical unit for all axes.** Scan Parameters store/return X/Y in micrometers (no hidden volt round-trip); the µm→V conversion happens only at the DAQ boundary (waveform build / analog writes). `on_mouse_click`, single-axis scans, zoom, `ScanPointsManager`, and scale calculation all work in µm. Scale is now `um_scale(a_um, b_um, n_px)` instead of the volt-based `calculate_scale`.
+- Configurable piezo settling: when Z is a stepping (slow) axis, the flyback window between lines is widened to cover the user-set **Z Dwell Time** instead of a hardcoded 25 ms, so short Z steps can run faster.
+- N-D saving: `.npz` now records `scan_mode`, per-axis µm ranges/points/resolution/scale, `microns_per_volt`, `z_um_per_volt`, `units='um'`, and `format_version`; 2D modes still write CSV/TIFF/PNG. The loader detects 2D vs 3D (adds a 3D volume layer for 3D files) and remains backward compatible with old volt-based files (scale is always µm/px, so they visualize unchanged; Apply converts old volt ranges to µm using the saved/current calibration).
+- The piezo Z is set to zero on program close (unchanged) and the galvo returns to zero after every scan.
 - Removed the **"Apply Changes"** button from Scan Parameters; **New Scan** now rebuilds XY points from the live spinboxes at start time (dwell / Z / single-axis already read `get_params()` live).
 - Moved Z scan parameters (Z Min / Z Max / Z Resolution / Z Dwell Time) into the Scan Parameters panel; the Scan Z tab now runs a single linear hardware-timed Z sweep from those values (via `run_z_sweep`) and no longer auto-moves the piezo to the peak. Removed the dwell/coarse/fine/range spinboxes from `AutoFocusWidget`.
 - Rewrote the live signal plot (`plot_widgets/live_plot_napari_widget.py`) on `pyqtgraph` with a ring buffer and added lightweight controls (pause/resume, clear, refresh rate, window length, auto-Y, log-Y); the widget width is constrained to the controls row.

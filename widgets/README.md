@@ -59,13 +59,12 @@ Most widgets are implemented as factory functions that take dependencies as para
 
 ```python
 # Dependencies
-scan_pattern_func = my_scan_function
-scan_points_manager = ScanPointsManager(scan_params_manager)
+run_scan_func = run_selected_scan  # mode-aware dispatch (XY/XZ/YZ/XYZ)
 shapes_layer = viewer.layers['shapes']
 bridge = GUIBridge()  # from thread_safe_bridge, for thread-safe UI updates
 
 # Create widget
-new_scan_widget = new_scan(scan_pattern_func, scan_points_manager, shapes_layer, bridge, scan_in_progress=[False])
+new_scan_widget = new_scan(run_scan_func, shapes_layer, bridge, scan_in_progress=[False])
 
 # Add to viewer
 viewer.window.add_dock_widget(new_scan_widget, area="bottom")
@@ -85,7 +84,7 @@ class ScanParametersManager:
     def update_scan_parameters(self, x_range=None, y_range=None, x_res=None, y_res=None, dwell_time=None)
 
 class ScanPointsManager:
-    """Manages the X/Y voltage linspace grids used for scanning"""
+    """Manages the X/Y micrometer linspace grids used for scanning"""
     def __init__(self, scan_params_manager)
     def update_points(self, x_range=None, y_range=None, x_res=None, y_res=None)
     def get_points(self)
@@ -102,9 +101,9 @@ class ZoomLevelManager:
 
 ### Scan Controls (`scan_controls.py`)
 
-- **`new_scan(scan_pattern_func, scan_points_manager, shapes, bridge=None, scan_in_progress=None)`**
+- **`new_scan(run_scan_func, shapes, bridge=None, scan_in_progress=None)`**
   - Creates a "🔬 New Scan" button widget
-  - Runs the scan in a background thread; clears the zoom-region shape when done
+  - Calls `run_scan_func()` (mode-aware dispatch, e.g. `run_selected_scan` for XY/XZ/YZ/XYZ) in a background thread; clears the zoom-region shape when done
 
 - **`close_scanner(output_task)`**
   - Creates a "🎯 Set to Zero" button widget
@@ -119,7 +118,8 @@ class ZoomLevelManager:
   - Returns to the original (level-0) scan range and resets zoom level to 0
 
 - **`update_scan_parameters(scan_params_manager)`**
-  - Returns a `ScanParametersWidget` (`QWidget`) with X/Y range, resolution, and dwell-time spinboxes (plus live µm distance labels), and Z scan fields (Z Min / Z Max / Z Resolution / Z Dwell) exposed via `get_parameters()['z_scan']`
+  - Returns a `ScanParametersWidget` (`QWidget`) with a **Scan Mode** selector (XY/XZ/YZ/XYZ), X/Y/Z range and resolution spinboxes (all in µm), and XY/Z dwell-time fields; Z fields are exposed via `get_parameters()['z_scan']` and the mode via `get_parameters()['scan_mode']`
+  - All positions are returned in micrometers (canonical unit); the µm↔V conversion is deferred to the DAQ boundary
   - Registers itself as the `scan_params_manager`'s widget instance; values are applied live (New Scan syncs XY points from the spinboxes at start; no Apply button)
 
 - **`update_scan_parameters_widget(widget_instance, scan_params_manager, bridge=None)`**

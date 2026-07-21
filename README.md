@@ -17,6 +17,7 @@ Each application can be run independently and only requires the hardware/drivers
 ## ✨ Key capabilities
 
 ### Confocal Scan GUI (`confocal_main_control.py`)
+- **Multi-dimensional scanning (XY / XZ / YZ / XYZ)** selected via a **Scan Mode** dropdown that drives **New Scan**: 2D modes render an image, XYZ renders a 3D volume in napari, all through one generic N-axis raster engine (`raster_engine.py`). Every axis is calibrated in micrometers (canonical unit) through a shared `DAQAxis` abstraction (`daq_axis.py`); the µm→V conversion happens only at the DAQ boundary.
 - Live **XY raster scanning** with per-pixel, hardware-timed photon counting (NI-DAQ sample clock + Swabian TimeTagger `CountBetweenMarkers`).
 - **napari**-based viewer (zoom, pan, live contrast auto-scaling, scale bar in µm).
 - **Click-to-move** galvo positioning and rectangle **ROI zoom** (up to 9 nested zoom levels, with history/undo via "Reset Zoom").
@@ -200,8 +201,10 @@ Single_NV_Scannig_Microscopy/
 ├─ data_manager.py               # DataManager: saves confocal scan CSVs with metadata
 ├─ odmr_data_manager.py          # ODMRDataManager: saves ODMR/Rabi/T1 CSVs per experiment type
 ├─ galvo_controller.py           # GalvoScannerController: NI-DAQ channel setup & voltage I/O
-├─ daq_z_controller.py           # DAQZController: NI-DAQ ao2 → piezo EXT IN for Z position
+├─ daq_axis.py                   # DAQAxis: per-axis µm↔V calibration, channel, travel/voltage limits
+├─ daq_z_controller.py           # DAQZController: DAQAxis subclass for the piezo (NI-DAQ ao2 → EXT IN)
 ├─ scanning_core.py              # Shared hardware-timed AO + CountBetweenMarkers sweep primitive
+├─ raster_engine.py              # Generic N-axis raster (µm): waveform build, run, 2D/3D reconstruct
 ├─ plot_scan_results.py          # Thread-safe PNG heatmap export after each confocal scan
 ├─ thread_safe_bridge.py         # GUIBridge: marshal background-thread updates onto the Qt/napari main thread
 ├─ utils.py                      # Calibration constants + ImageJ-compatible TIFF export

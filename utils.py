@@ -30,20 +30,34 @@ Z_VOLTAGE_RANGE = (0.0, 10.0)  # Allowed EXT IN voltage range for closed-loop co
 
 def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):
     """
-    Calculate microns per pixel based on empirical calibration.
-    
+    Calculate microns per pixel from a voltage span (legacy volt-based helper).
+
+    Kept for backward compatibility with tools/data that reason in volts.
+    New code works in micrometers and should use :func:`um_scale` instead.
+
     Args:
         V1 (float): Start voltage
         V2 (float): End voltage
         image_width_px (int): Image width in pixels
         microns_per_volt (float): Calibration factor (microns per volt)
-        
+
     Returns:
         float: Scale in microns per pixel
     """
     voltage_span = abs(V2 - V1)
     scan_width_microns = voltage_span * microns_per_volt
-    return scan_width_microns / image_width_px 
+    return scan_width_microns / image_width_px
+
+
+def um_scale(a_um, b_um, n_pixels):
+    """Micrometers-per-pixel for an axis spanning ``a_um``..``b_um`` in ``n_pixels``.
+
+    This is the canonical scale helper: inputs are already in micrometers, so no
+    calibration factor is applied.
+    """
+    if n_pixels <= 0:
+        return 0.0
+    return abs(float(b_um) - float(a_um)) / n_pixels 
 
 
 def save_tiff_with_imagej_metadata(image_data, filepath, x_points, y_points, scan_config, timestamp=None):
@@ -53,16 +67,16 @@ def save_tiff_with_imagej_metadata(image_data, filepath, x_points, y_points, sca
     Args:
         image_data (np.ndarray): 2D image array
         filepath (str): Path to save the TIFF file
-        x_points (np.ndarray): X scan positions in volts
-        y_points (np.ndarray): Y scan positions in volts
+        x_points (np.ndarray): X scan positions in micrometers
+        y_points (np.ndarray): Y scan positions in micrometers
         scan_config (dict): Configuration dictionary with scan parameters
         timestamp (str): Optional timestamp string
     """
     height, width = image_data.shape
     
-    # Calculate microns per pixel
-    microns_per_pixel_x = calculate_scale(x_points[0], x_points[-1], width)
-    microns_per_pixel_y = calculate_scale(y_points[0], y_points[-1], height)
+    # Positions are already in micrometers (canonical unit).
+    microns_per_pixel_x = um_scale(x_points[0], x_points[-1], width)
+    microns_per_pixel_y = um_scale(y_points[0], y_points[-1], height)
     
     # Convert to pixels per micron for ImageJ (resolution tags expect pixels per unit)
     pixels_per_micron_x = 1.0 / microns_per_pixel_x if microns_per_pixel_x > 0 else 1.0
@@ -97,8 +111,8 @@ max={float(np.nanmax(image_data))}
 
 Confocal NV Microscopy Data
 Acquisition Software: NV Scanning Microscopy
-X Range: {x_points[0]:.3f} to {x_points[-1]:.3f} V
-Y Range: {y_points[0]:.3f} to {y_points[-1]:.3f} V
+X Range: {x_points[0]:.3f} to {x_points[-1]:.3f} um
+Y Range: {y_points[0]:.3f} to {y_points[-1]:.3f} um
 X Resolution: {width} pixels
 Y Resolution: {height} pixels
 X Scale: {microns_per_pixel_x:.6f} um/pixel

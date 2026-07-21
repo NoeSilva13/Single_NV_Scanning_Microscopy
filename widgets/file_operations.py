@@ -11,6 +11,18 @@ import numpy as np
 from qtpy.QtWidgets import QFileDialog, QMessageBox
 from magicgui import magicgui
 from napari.utils.notifications import show_info
+from utils import MICRONS_PER_VOLT
+
+
+def _is_um_format(data):
+    """Return True if the saved file already stores positions in micrometers."""
+    files = getattr(data, 'files', [])
+    if 'units' in files:
+        try:
+            return str(data['units']) == 'um'
+        except Exception:
+            return False
+    return 'format_version' in files
 
 
 def load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update_widget_func=None):
@@ -20,11 +32,16 @@ def load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update
         """Display scan parameters in a message box"""
         try:
             params = []
+            unit = 'µm' if _is_um_format(data) else 'V'
             # Basic scan parameters
             if 'x_range' in data:
-                params.append(f"X Range: {data['x_range'][0]:.3f}V to {data['x_range'][1]:.3f}V")
+                params.append(f"X Range: {data['x_range'][0]:.3f}{unit} to {data['x_range'][1]:.3f}{unit}")
             if 'y_range' in data:
-                params.append(f"Y Range: {data['y_range'][0]:.3f}V to {data['y_range'][1]:.3f}V")
+                params.append(f"Y Range: {data['y_range'][0]:.3f}{unit} to {data['y_range'][1]:.3f}{unit}")
+            if 'z_range' in data:
+                params.append(f"Z Range: {data['z_range'][0]:.3f}µm to {data['z_range'][1]:.3f}µm")
+            if 'scan_mode' in data:
+                params.append(f"Scan Mode: {data['scan_mode']}")
             if 'x_resolution' in data:
                 params.append(f"X Resolution: {data['x_resolution']} px")
             if 'y_resolution' in data:
@@ -69,29 +86,40 @@ def load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update
                 }
             """)
             
-            # Add option to apply parameters
-            if scan_params_manager and scan_points_manager and update_widget_func:
+            # Apply is only meaningful for 2D XY-style files with ranges/resolutions.
+            can_apply = (
+                scan_params_manager and scan_points_manager and update_widget_func
+                and 'x_range' in data and 'y_range' in data
+                and 'x_resolution' in data and 'y_resolution' in data
+            )
+            if can_apply:
                 msg.setStandardButtons(QMessageBox.StandardButton.Apply | QMessageBox.StandardButton.Ok)
                 result = msg.exec()
                 
-                # If Apply was clicked, update the scan parameters
+                # If Apply was clicked, update the scan parameters (µm canonical).
                 if result == QMessageBox.StandardButton.Apply:
-                    # Prepare parameters to update
+                    x_range = np.asarray(data['x_range'], dtype=float)
+                    y_range = np.asarray(data['y_range'], dtype=float)
+                    # Old files stored ranges in volts; convert to µm using the
+                    # saved calibration if present, otherwise the current one.
+                    if not _is_um_format(data):
+                        mpv = float(data['microns_per_volt']) if 'microns_per_volt' in data else MICRONS_PER_VOLT
+                        x_range = x_range * mpv
+                        y_range = y_range * mpv
+
                     update_params = {
-                        'x_range': data['x_range'].tolist(),
-                        'y_range': data['y_range'].tolist(),
+                        'x_range': x_range.tolist(),
+                        'y_range': y_range.tolist(),
                         'x_res': int(data['x_resolution']),
                         'y_res': int(data['y_resolution'])
                     }
-                    
-                    # Add dwell_time if available in the data
                     if 'dwell_time' in data:
                         update_params['dwell_time'] = float(data['dwell_time'])
                     
                     scan_params_manager.update_scan_parameters(**update_params)
                     scan_points_manager.update_points(
-                        x_range=data['x_range'].tolist(),
-                        y_range=data['y_range'].tolist(),
+                        x_range=x_range.tolist(),
+                        y_range=y_range.tolist(),
                         x_res=int(data['x_resolution']),
                         y_res=int(data['y_resolution'])
                     )
@@ -116,27 +144,41 @@ def load_scan(viewer, scan_params_manager=None, scan_points_manager=None, update
             if filenames:
                 try:
                     # Load the .npz file
-                    data = np.load(filenames[0])
+                    data = np.load(filenames[0], allow_pickle=True)
                     image = data['image']
-                    scale_x = data['scale_x']
-                    scale_y = data['scale_y']
-                    
+
                     # Generate unique name for the layer
                     timestamp = time.strftime("%H-%M-%S")
                     layer_name = f"Loaded Scan {timestamp}"
-                    
-                    # Add as new layer with correct scale
-                    # Set units at creation time (matching the other layers) so
-                    # napari doesn't warn about inconsistent units while adding.
-                    new_layer = viewer.add_image(
-                        image,
-                        name=layer_name,
-                        colormap="viridis",
-                        blending="additive",
-                        visible=True,
-                        scale=(scale_y, scale_x),
-                        units=('µm', 'µm')
-                    )
+
+                    # Scale/units are always stored in µm/px, so both old (volts)
+                    # and new (µm) files visualize identically. 3D volumes carry a
+                    # third (Z) scale.
+                    if image.ndim == 3:
+                        scale_z = float(data['scale_z']) if 'scale_z' in data else 1.0
+                        scale_y = float(data['scale_y'])
+                        scale_x = float(data['scale_x'])
+                        new_layer = viewer.add_image(
+                            image,
+                            name=layer_name,
+                            colormap="viridis",
+                            blending="additive",
+                            visible=True,
+                            scale=(scale_z, scale_y, scale_x),
+                            units=('µm', 'µm', 'µm')
+                        )
+                    else:
+                        scale_x = float(data['scale_x'])
+                        scale_y = float(data['scale_y'])
+                        new_layer = viewer.add_image(
+                            image,
+                            name=layer_name,
+                            colormap="viridis",
+                            blending="additive",
+                            visible=True,
+                            scale=(scale_y, scale_x),
+                            units=('µm', 'µm')
+                        )
                     
                     # Set contrast limits
                     if not np.all(np.isnan(image)):

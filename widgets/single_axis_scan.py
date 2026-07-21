@@ -13,6 +13,12 @@ from qtpy.QtWidgets import QWidget, QPushButton, QVBoxLayout, QTabWidget
 from qtpy.QtCore import Signal as pyqtSignal
 from napari.utils.notifications import show_info
 from scanning_core import run_hardware_timed_sweep, counts_to_rate
+from utils import MICRONS_PER_VOLT
+
+
+def _um_to_volt(um):
+    """Convert galvo positions in micrometers to a clamped ±10 V command."""
+    return np.clip(np.asarray(um, dtype=float) / MICRONS_PER_VOLT, -10.0, 10.0)
 
 
 class SingleAxisScanWidget(QWidget):
@@ -39,9 +45,9 @@ class SingleAxisScanWidget(QWidget):
         self.scan_task_ref = scan_task_ref
         self.cbm_ref = cbm_ref
 
-        # Track current scanner position internally (default to center)
-        self.current_x_voltage = 0.0
-        self.current_y_voltage = 0.0
+        # Track current scanner position internally, in micrometers.
+        self.current_x_um = 0.0
+        self.current_y_um = 0.0
 
         # Per-axis plot handles
         self.curves = {}
@@ -54,8 +60,8 @@ class SingleAxisScanWidget(QWidget):
         self.setLayout(layout)
 
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._build_axis_tab('x', 'X Position (V)', bg_color), 'X Axis')
-        self.tabs.addTab(self._build_axis_tab('y', 'Y Position (V)', bg_color), 'Y Axis')
+        self.tabs.addTab(self._build_axis_tab('x', 'X Position (µm)', bg_color), 'X Axis')
+        self.tabs.addTab(self._build_axis_tab('y', 'Y Position (µm)', bg_color), 'Y Axis')
         layout.addWidget(self.tabs)
 
         self._initialize_plot()
@@ -121,23 +127,27 @@ class SingleAxisScanWidget(QWidget):
     # ------------------------------------------------------------------
     # Position tracking
     # ------------------------------------------------------------------
-    def update_current_position(self, x_voltage, y_voltage):
-        """Update the current scanner position"""
-        self.current_x_voltage = x_voltage
-        self.current_y_voltage = y_voltage
+    def update_current_position(self, x_um, y_um):
+        """Update the current scanner position (micrometers)."""
+        self.current_x_um = x_um
+        self.current_y_um = y_um
 
     def get_current_position(self):
-        """Get the current scanner position from internal tracking"""
-        return self.current_x_voltage, self.current_y_voltage
+        """Get the current scanner position (micrometers) from internal tracking."""
+        return self.current_x_um, self.current_y_um
 
     # ------------------------------------------------------------------
     # Scan control
     # ------------------------------------------------------------------
     def start_scan(self, axis):
-        """Start a hardware-timed single axis scan using CountBetweenMarkers."""
-        x_pos, y_pos = self.get_current_position()
+        """Start a hardware-timed single axis scan using CountBetweenMarkers.
 
-        # Get current parameter values
+        Positions are handled in micrometers and converted to galvo volts only
+        when building the DAQ waveform.
+        """
+        x_pos_um, y_pos_um = self.get_current_position()
+
+        # Get current parameter values (µm canonical)
         params = self.scan_params_manager.get_params()
         x_range = params['scan_range']['x']
         y_range = params['scan_range']['y']
@@ -145,15 +155,19 @@ class SingleAxisScanWidget(QWidget):
         y_res = params['resolution']['y']
         dwell_time = params['dwell_time']
 
-        # Build the scanned-axis points and the constant fixed-axis waveform.
+        # Build the scanned-axis points (µm) and the constant fixed-axis value.
         if axis == 'x':
             scan_points = np.linspace(x_range[0], x_range[1], x_res)
-            x_waveform = scan_points
-            y_waveform = np.full(len(scan_points), y_pos)
+            x_waveform_um = scan_points
+            y_waveform_um = np.full(len(scan_points), y_pos_um)
         else:  # y-axis
             scan_points = np.linspace(y_range[0], y_range[1], y_res)
-            x_waveform = np.full(len(scan_points), x_pos)
-            y_waveform = scan_points
+            x_waveform_um = np.full(len(scan_points), x_pos_um)
+            y_waveform_um = scan_points
+
+        # Convert to galvo volts at the DAQ boundary.
+        x_waveform = _um_to_volt(x_waveform_um)
+        y_waveform = _um_to_volt(y_waveform_um)
 
         # Show the relevant tab and disable its button for feedback.
         self.tabs.setCurrentIndex(0 if axis == 'x' else 1)
@@ -201,7 +215,8 @@ class SingleAxisScanWidget(QWidget):
                 # Restore the persistent on-demand galvo task and original position.
                 try:
                     self.output_task.start()
-                    self.output_task.write([x_pos, y_pos])
+                    self.output_task.write([float(_um_to_volt(x_pos_um)),
+                                            float(_um_to_volt(y_pos_um))])
                 except Exception as e:
                     show_info(f'⚠️ Failed to restart galvo control: {e}')
                 with self.scan_lock:

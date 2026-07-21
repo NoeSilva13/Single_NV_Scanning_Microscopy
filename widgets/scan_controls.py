@@ -16,34 +16,39 @@ import numpy as np
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 from utils import MICRONS_PER_VOLT
-from qtpy.QtWidgets import QWidget, QGridLayout, QLabel, QDoubleSpinBox, QSpinBox
+from qtpy.QtWidgets import (
+    QWidget, QGridLayout, QLabel, QDoubleSpinBox, QSpinBox, QComboBox
+)
+
+# Supported scan modes exposed by the New Scan selector.
+SCAN_MODES = ["XY", "XZ", "YZ", "XYZ"]
 
 
-def new_scan(scan_pattern_func, scan_points_manager, shapes, bridge=None, scan_in_progress=None):
-    """Factory function to create new_scan widget with dependencies"""
-    
+def new_scan(run_scan_func, shapes, bridge=None, scan_in_progress=None):
+    """Factory function to create the New Scan widget.
+
+    Args:
+        run_scan_func: Mode-aware callable (no args) that performs the scan
+            synchronously. It is dispatched on a background thread here.
+        shapes: Napari shapes layer cleared after the scan starts.
+    """
+
     @magicgui(call_button="🔬 New Scan")
     def _new_scan():
-        """Initiates a new scan using the current Scan Parameters spinbox values.
-        Syncs scan points from the widget, then runs the scan in a background thread.
-        """
+        """Initiate a new scan using the current Scan Parameters (mode-aware)."""
         if scan_in_progress and scan_in_progress[0]:
             show_info("⚠️ A scan is already in progress")
             return
 
         def run_new_scan():
-            # Rebuild XY points from the live Scan Parameters spinboxes so the
-            # user does not need an explicit "Apply" step.
-            scan_points_manager._update_points_from_params()
-            x_points, y_points = scan_points_manager.get_points()
-            scan_pattern_func(x_points, y_points)
+            run_scan_func()
             if bridge:
                 bridge.run_on_main(lambda: setattr(shapes, 'data', []))
             else:
                 shapes.data = []
         threading.Thread(target=run_new_scan, daemon=True).start()
         show_info("🔬 New scan started")
-    
+
     return _new_scan
 
 
@@ -164,13 +169,12 @@ def update_scan_parameters(scan_params_manager):
             # Create the main layout
             layout = QGridLayout()
 
-            # Set default values directly in the widget. X/Y are stored
-            # internally as galvo volts but displayed/edited in µm using the
-            # objective-dependent calibration (MICRONS_PER_VOLT).
-            default_x_min = -1.0
-            default_x_max = 1.0
-            default_y_min = -1.0
-            default_y_max = 1.0
+            # All axes are edited and stored in micrometers (the canonical unit).
+            # The µm <-> volt conversion happens only at the DAQ boundary.
+            default_x_min = -1.0 * MICRONS_PER_VOLT
+            default_x_max = 1.0 * MICRONS_PER_VOLT
+            default_y_min = -1.0 * MICRONS_PER_VOLT
+            default_y_max = 1.0 * MICRONS_PER_VOLT
             default_x_res = 50
             default_y_res = 50
             default_dwell_time = 0.001  # Default dwell time in seconds
@@ -181,119 +185,123 @@ def update_scan_parameters(scan_params_manager):
 
             xy_um_limit = 10.0 * MICRONS_PER_VOLT  # ±10 V galvo range in µm
 
+            # Scan mode selector (controls what the New Scan button acquires)
+            layout.addWidget(QLabel("Scan Mode:"), 0, 0)
+            self.scan_mode_combo = QComboBox()
+            self.scan_mode_combo.addItems(SCAN_MODES)
+            self.scan_mode_combo.setCurrentText("XY")
+            layout.addWidget(self.scan_mode_combo, 0, 1, 1, 2)
+
             # X Min
-            layout.addWidget(QLabel("X Min (µm):"), 0, 0)
+            layout.addWidget(QLabel("X Min (µm):"), 1, 0)
             self.x_min_spinbox = QDoubleSpinBox()
             self.x_min_spinbox.setRange(-xy_um_limit, xy_um_limit)
             self.x_min_spinbox.setSingleStep(1.0)
             self.x_min_spinbox.setDecimals(3)
-            self.x_min_spinbox.setValue(default_x_min * MICRONS_PER_VOLT)
-            layout.addWidget(self.x_min_spinbox, 0, 1, 1, 2)  # Span 2 columns
-            
+            self.x_min_spinbox.setValue(default_x_min)
+            layout.addWidget(self.x_min_spinbox, 1, 1, 1, 2)  # Span 2 columns
+
             # X Max
-            layout.addWidget(QLabel("X Max (µm):"), 1, 0)
+            layout.addWidget(QLabel("X Max (µm):"), 2, 0)
             self.x_max_spinbox = QDoubleSpinBox()
             self.x_max_spinbox.setRange(-xy_um_limit, xy_um_limit)
             self.x_max_spinbox.setSingleStep(1.0)
             self.x_max_spinbox.setDecimals(3)
-            self.x_max_spinbox.setValue(default_x_max * MICRONS_PER_VOLT)
-            layout.addWidget(self.x_max_spinbox, 1, 1, 1, 2)  # Span 2 columns
-            
+            self.x_max_spinbox.setValue(default_x_max)
+            layout.addWidget(self.x_max_spinbox, 2, 1, 1, 2)  # Span 2 columns
+
             # Y Min
-            layout.addWidget(QLabel("Y Min (µm):"), 2, 0)
+            layout.addWidget(QLabel("Y Min (µm):"), 3, 0)
             self.y_min_spinbox = QDoubleSpinBox()
             self.y_min_spinbox.setRange(-xy_um_limit, xy_um_limit)
             self.y_min_spinbox.setSingleStep(1.0)
             self.y_min_spinbox.setDecimals(3)
-            self.y_min_spinbox.setValue(default_y_min * MICRONS_PER_VOLT)
-            layout.addWidget(self.y_min_spinbox, 2, 1, 1, 2)  # Span 2 columns
-            
+            self.y_min_spinbox.setValue(default_y_min)
+            layout.addWidget(self.y_min_spinbox, 3, 1, 1, 2)  # Span 2 columns
+
             # Y Max
-            layout.addWidget(QLabel("Y Max (µm):"), 3, 0)
+            layout.addWidget(QLabel("Y Max (µm):"), 4, 0)
             self.y_max_spinbox = QDoubleSpinBox()
             self.y_max_spinbox.setRange(-xy_um_limit, xy_um_limit)
             self.y_max_spinbox.setSingleStep(1.0)
             self.y_max_spinbox.setDecimals(3)
-            self.y_max_spinbox.setValue(default_y_max * MICRONS_PER_VOLT)
-            layout.addWidget(self.y_max_spinbox, 3, 1, 1, 2)  # Span 2 columns
+            self.y_max_spinbox.setValue(default_y_max)
+            layout.addWidget(self.y_max_spinbox, 4, 1, 1, 2)  # Span 2 columns
 
             # Z Min
-            layout.addWidget(QLabel("Z Min (µm):"), 4, 0)
+            layout.addWidget(QLabel("Z Min (µm):"), 5, 0)
             self.z_min_spinbox = QDoubleSpinBox()
             self.z_min_spinbox.setRange(0.0, 450.0)
             self.z_min_spinbox.setSingleStep(1.0)
             self.z_min_spinbox.setDecimals(3)
             self.z_min_spinbox.setValue(default_z_min)
-            layout.addWidget(self.z_min_spinbox, 4, 1, 1, 2)  # Span 2 columns
+            layout.addWidget(self.z_min_spinbox, 5, 1, 1, 2)  # Span 2 columns
 
             # Z Max
-            layout.addWidget(QLabel("Z Max (µm):"), 5, 0)
+            layout.addWidget(QLabel("Z Max (µm):"), 6, 0)
             self.z_max_spinbox = QDoubleSpinBox()
             self.z_max_spinbox.setRange(0.0, 450.0)
             self.z_max_spinbox.setSingleStep(1.0)
             self.z_max_spinbox.setDecimals(3)
             self.z_max_spinbox.setValue(default_z_max)
-            layout.addWidget(self.z_max_spinbox, 5, 1, 1, 2)  # Span 2 columns
+            layout.addWidget(self.z_max_spinbox, 6, 1, 1, 2)  # Span 2 columns
 
             # X Resolution
-            layout.addWidget(QLabel("X Resolution:"), 6, 0)
+            layout.addWidget(QLabel("X Resolution:"), 7, 0)
             self.x_res_spinbox = QSpinBox()
             self.x_res_spinbox.setRange(2, 1000)
             self.x_res_spinbox.setValue(default_x_res)
             self.x_res_spinbox.setSuffix(" px")
-            layout.addWidget(self.x_res_spinbox, 6, 1, 1, 2)  # Span 2 columns
-            
+            layout.addWidget(self.x_res_spinbox, 7, 1, 1, 2)  # Span 2 columns
+
             # Y Resolution
-            layout.addWidget(QLabel("Y Resolution:"), 7, 0)
+            layout.addWidget(QLabel("Y Resolution:"), 8, 0)
             self.y_res_spinbox = QSpinBox()
             self.y_res_spinbox.setRange(2, 1000)
             self.y_res_spinbox.setValue(default_y_res)
             self.y_res_spinbox.setSuffix(" px")
-            layout.addWidget(self.y_res_spinbox, 7, 1, 1, 2)  # Span 2 columns
+            layout.addWidget(self.y_res_spinbox, 8, 1, 1, 2)  # Span 2 columns
 
             # Z Resolution (number of points)
-            layout.addWidget(QLabel("Z Resolution:"), 8, 0)
+            layout.addWidget(QLabel("Z Resolution:"), 9, 0)
             self.z_res_spinbox = QSpinBox()
             self.z_res_spinbox.setRange(2, 1000)
             self.z_res_spinbox.setValue(default_z_res)
             self.z_res_spinbox.setSuffix(" pts")
-            layout.addWidget(self.z_res_spinbox, 8, 1, 1, 2)  # Span 2 columns
+            layout.addWidget(self.z_res_spinbox, 9, 1, 1, 2)  # Span 2 columns
 
             # XY Dwell Time
-            layout.addWidget(QLabel("XY Dwell Time:"), 9, 0)
+            layout.addWidget(QLabel("XY Dwell Time:"), 10, 0)
             self.dwell_time_spinbox = QDoubleSpinBox()
             self.dwell_time_spinbox.setRange(0.0001, 10.0)  # 1ms to 10s
             self.dwell_time_spinbox.setSingleStep(0.0001)
             self.dwell_time_spinbox.setDecimals(4)
             self.dwell_time_spinbox.setValue(default_dwell_time)
             self.dwell_time_spinbox.setSuffix(" s")
-            layout.addWidget(self.dwell_time_spinbox, 9, 1, 1, 2)  # Span 2 columns
+            layout.addWidget(self.dwell_time_spinbox, 10, 1, 1, 2)  # Span 2 columns
 
             # Z Dwell Time
-            layout.addWidget(QLabel("Z Dwell Time:"), 10, 0)
+            layout.addWidget(QLabel("Z Dwell Time:"), 11, 0)
             self.z_dwell_spinbox = QDoubleSpinBox()
             self.z_dwell_spinbox.setRange(0.0001, 10.0)
             self.z_dwell_spinbox.setSingleStep(0.001)
             self.z_dwell_spinbox.setDecimals(4)
             self.z_dwell_spinbox.setValue(default_z_dwell)
             self.z_dwell_spinbox.setSuffix(" s")
-            layout.addWidget(self.z_dwell_spinbox, 10, 1, 1, 2)  # Span 2 columns
+            layout.addWidget(self.z_dwell_spinbox, 11, 1, 1, 2)  # Span 2 columns
 
             self.setLayout(layout)
 
         def get_parameters(self):
-            """Get all parameters from the GUI (similar to odmr_gui_qt.py).
-
-            X/Y are displayed in µm but returned as galvo volts (µm /
-            MICRONS_PER_VOLT) so the rest of the pipeline is unchanged.
+            """Get all parameters from the GUI. All positions are in micrometers
+            (the canonical unit); the µm <-> volt conversion is deferred to the
+            DAQ boundary (waveform generation / analog writes).
             """
             try:
                 return {
                     'scan_range': {
-                        'x': [self.x_min_spinbox.value() / MICRONS_PER_VOLT,
-                              self.x_max_spinbox.value() / MICRONS_PER_VOLT],
-                        'y': [self.y_min_spinbox.value() / MICRONS_PER_VOLT,
-                              self.y_max_spinbox.value() / MICRONS_PER_VOLT]
+                        'x': [self.x_min_spinbox.value(), self.x_max_spinbox.value()],
+                        'y': [self.y_min_spinbox.value(), self.y_max_spinbox.value()]
                     },
                     'resolution': {
                         'x': self.x_res_spinbox.value(),
@@ -304,18 +312,22 @@ def update_scan_parameters(scan_params_manager):
                         'range': [self.z_min_spinbox.value(), self.z_max_spinbox.value()],
                         'resolution': self.z_res_spinbox.value(),
                         'dwell_time': self.z_dwell_spinbox.value()
-                    }
+                    },
+                    'scan_mode': self.scan_mode_combo.currentText()
                 }
             except Exception as e:
                 show_info(f"Error getting parameters: {e}")
                 return None
 
+        def get_scan_mode(self):
+            return self.scan_mode_combo.currentText()
+
         def update_values(self, x_range, y_range, x_res, y_res, dwell_time=None):
-            """Update all widget values (x_range/y_range are galvo volts)."""
-            self.x_min_spinbox.setValue(x_range[0] * MICRONS_PER_VOLT)
-            self.x_max_spinbox.setValue(x_range[1] * MICRONS_PER_VOLT)
-            self.y_min_spinbox.setValue(y_range[0] * MICRONS_PER_VOLT)
-            self.y_max_spinbox.setValue(y_range[1] * MICRONS_PER_VOLT)
+            """Update all widget values (x_range/y_range are in micrometers)."""
+            self.x_min_spinbox.setValue(x_range[0])
+            self.x_max_spinbox.setValue(x_range[1])
+            self.y_min_spinbox.setValue(y_range[0])
+            self.y_max_spinbox.setValue(y_range[1])
             self.x_res_spinbox.setValue(x_res)
             self.y_res_spinbox.setValue(y_res)
 
