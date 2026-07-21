@@ -53,8 +53,12 @@ def new_scan(run_scan_func, shapes, bridge=None, scan_in_progress=None):
     return _new_scan
 
 
-def close_scanner(output_task):
-    """Factory function to create close_scanner widget with dependencies"""
+def close_scanner(output_task, on_zero=None):
+    """Factory function to create close_scanner widget with dependencies.
+
+    ``on_zero`` is an optional callback invoked after the galvo reaches zero so
+    the caller can sync position state (e.g. refresh the axis control widget).
+    """
     
     @magicgui(call_button="🎯 Set to Zero")
     def _close_scanner():
@@ -63,6 +67,8 @@ def close_scanner(output_task):
         """
         def run_close():
             output_task.write([0, 0])
+            if on_zero is not None:
+                on_zero()
         
         threading.Thread(target=run_close, daemon=True).start()
         show_info("🎯 Scanner set to zero")

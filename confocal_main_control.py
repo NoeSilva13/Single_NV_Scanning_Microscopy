@@ -752,7 +752,16 @@ def get_data_path():
 
 # Create scan control widgets (New Scan is mode-aware via run_selected_scan)
 new_scan_widget = create_new_scan(run_selected_scan, shapes, bridge, scan_in_progress)
-close_scanner_widget = create_close_scanner(output_task)
+
+def _on_set_zero():
+    """Sync app state after the 'Set to Zero' button parks the galvo at (0, 0)."""
+    current_position_um['x'] = 0.0
+    current_position_um['y'] = 0.0
+    if single_axis_widget_ref is not None:
+        single_axis_widget_ref.update_current_position(0.0, 0.0)
+    axis_control_widget.refresh_positions(x=0.0, y=0.0)
+
+close_scanner_widget = create_close_scanner(output_task, on_zero=_on_set_zero)
 save_image_widget = create_save_image(viewer, get_data_path)
 update_scan_parameters_widget = create_update_scan_parameters(scan_params_manager)
 update_widget_func = create_update_scan_parameters_widget(update_scan_parameters_widget, scan_params_manager, bridge)
