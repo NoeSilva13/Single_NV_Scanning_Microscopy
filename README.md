@@ -215,7 +215,7 @@ Single_NV_Scannig_Microscopy/
 │   ├─ auto_focus.py             #   Scan Z tab: linear Z sweep + pyqtgraph plot
 │   ├─ single_axis_scan.py       #   1D X/Y/Z line-scan widget (pyqtgraph tabs)
 │   ├─ file_operations.py        #   Load a saved .npz scan back into napari
-│   └─ piezo_controls.py         #   Manual Z position widget (via DAQZController)
+│   └─ axis_controls.py          #   Manual X/Y/Z position widget (galvo + DAQZController)
 │
 ├─ plot_widgets/                 # Matplotlib plot widgets shared across apps
 │   ├─ single_axis_plot.py       #   Dark-themed 1D plot (single-axis line scans)

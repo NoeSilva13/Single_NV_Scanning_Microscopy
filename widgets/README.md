@@ -12,7 +12,7 @@ widgets/
 ├── auto_focus.py           # Scan Z tab (pyqtgraph plot + button) & linear Z-sweep logic
 ├── single_axis_scan.py     # Single axis scan widget
 ├── file_operations.py      # File loading/saving widgets
-├── piezo_controls.py      # Manual Z position widget (DAQ ao2 → piezo EXT IN)
+├── axis_controls.py       # Manual X/Y/Z position widget (galvo ao0/ao1 + piezo ao2)
 └── README.md               # This file
 ```
 
@@ -43,7 +43,7 @@ from widgets.auto_focus import AutoFocusWidget
 
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan
-from widgets.piezo_controls import PiezoControlWidget
+from widgets.axis_controls import AxisControlWidget
 ```
 
 ### Widget Factory Functions
@@ -161,7 +161,7 @@ class ZoomLevelManager:
   - Reads Z Min / Z Max / Z Resolution / Z Dwell from `scan_params_manager` (Scan Parameters panel), builds `np.linspace(z_min, z_max, z_res)`, and runs `run_z_sweep` in a background thread
   - Mutually exclusive with the raster/single-axis scans via the shared `scan_lock`/`scan_in_progress`; uses internal Qt signals for thread-safe UI updates
   - Leaves the piezo at the end of the ramp (Z max); notifies the detected peak without moving to it
-  - Set `.z_control_widget` to have the piezo control widget refreshed after a completed sweep
+  - Set `.z_control_widget` to have the axis control widget's Z position refreshed after a completed sweep
 
 ### Single Axis Scan (`single_axis_scan.py`)
 
@@ -177,16 +177,14 @@ class ZoomLevelManager:
   - Creates a "Load Scan" button widget
   - Opens a file dialog for `.npz` files, adds the loaded scan as a new napari layer at the correct physical scale, and optionally re-applies its saved parameters to the scan-parameters widget
 
-### Piezo Controls (`piezo_controls.py`)
+### Axis Controls (`axis_controls.py`)
 
-- **`PiezoControlWidget(z_controller)`**
-  - Manual Z-axis control via `DAQZController` (DAQ `ao2` → piezo EXT IN)
-  - Features:
-    - Debounced position spinbox (0–450 µm)
-    - Displays last commanded position (no analog readback)
-    - Spinbox disabled if the DAQ channel is unavailable at startup
-  - Size: 220x60 pixels
-  - Moves run in a short background thread so the GUI stays responsive
+- **`AxisControlWidget(axis_x, axis_y, z_controller, output_task, scan_in_progress, move_callback=None)`**
+  - Manual control for all three axes: galvo X/Y (written together through the persistent `output_task`) and piezo Z (via `DAQZController`, DAQ `ao2` → piezo EXT IN)
+  - Each axis has a synced slider (coarse drag) + spinbox (fine, 3 decimals / 0.001 µm); X/Y ranges come from the axes' `travel_um`, Z spans 0–450 µm
+  - Debounced (150 ms) moves run in a short background thread; refused while a scan owns the DAQ (`scan_in_progress`)
+  - Tracks the last commanded position (no analog readback); `refresh_positions(x, y, z)` updates the display without moving hardware (used on click-to-move and at end of a scan), and `move_callback(x, y, z)` lets the app mirror the new position into its own state
+  - `z_value()` returns the current Z spinbox value; `_update_ui_with_current_position()` refreshes Z after a Scan Z sweep
 
 ## Design Pattern: Factory Functions Over Globals
 

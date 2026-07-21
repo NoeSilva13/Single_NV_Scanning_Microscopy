@@ -41,7 +41,7 @@ from utils import (
     MICRONS_PER_VOLT,
     save_tiff_with_imagej_metadata
 )
-from qtpy.QtWidgets import QWidget
+from qtpy.QtWidgets import QWidget, QGridLayout
 from thread_safe_bridge import GUIBridge
 
 # Import extracted widgets
@@ -60,7 +60,7 @@ from widgets.camera_controls import (
 from widgets.auto_focus import AutoFocusWidget
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan as create_load_scan
-from widgets.piezo_controls import PiezoControlWidget
+from widgets.axis_controls import AxisControlWidget
 
 # --------------------- SCAN PARAMETERS MANAGER CLASS ---------------------
 class ScanParametersManager:
@@ -313,11 +313,12 @@ def on_mouse_click(layer, event):
                            axis_y.position_to_voltage(y_um)])
         current_position_um['x'] = x_um
         current_position_um['y'] = y_um
-        show_info(f"Moved scanner to: X={x_um:.3f} µm, Y={y_um:.3f} µm")
         
         # Update the single axis scan widget's position tracking (µm)
         if single_axis_widget_ref is not None:
             single_axis_widget_ref.update_current_position(x_um, y_um)
+        # Mirror the new position in the manual axis-control widget.
+        axis_control_widget.refresh_positions(x=x_um, y=y_um)
         
     except Exception as e:
         show_info(f"Error moving scanner: {str(e)}")
@@ -370,14 +371,13 @@ def on_scan_click(clicked_layer, event):
         if single_axis_widget_ref is not None:
             single_axis_widget_ref.update_current_position(x_um, y_um)
 
-        msg = [f"X={x_um:.3f}", f"Y={y_um:.3f}"]
+        z_um = None
         if 'z' in pos_um and z_controller.available:
             z_um = pos_um['z']
             z_controller.set_position(z_um)
             current_position_um['z'] = z_um
-            piezo_control_widget._update_position_signal.emit(z_um)
-            msg.append(f"Z={z_um:.3f}")
-        show_info("Moved to: " + ", ".join(msg) + " µm")
+        # Mirror the new position(s) in the manual axis-control widget.
+        axis_control_widget.refresh_positions(x=x_um, y=y_um, z=z_um)
     except Exception as e:
         show_info(f"Error moving scanner: {str(e)}")
 
@@ -607,7 +607,7 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
             # Remember the user's focus plane (Z-Control spinbox) so we can
             # return there after the sweep leaves Z at z_max.
             try:
-                z_return = float(piezo_control_widget.pos_spinbox.value())
+                z_return = float(axis_control_widget.z_value())
             except Exception:
                 z_return = z_controller.position
             z_start = float(points_list[axis_names.index('z')][0])
@@ -674,6 +674,7 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
             output_task.start()
             output_task.write([0, 0])
             current_position_um['x'], current_position_um['y'] = 0.0, 0.0
+            axis_control_widget.refresh_positions(x=0.0, y=0.0)
         except Exception as e:
             bridge.notify(f"⚠️ Failed to restart galvo control: {e}")
         bridge.notify("🎯 Scanner returned to zero position")
@@ -686,7 +687,7 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
             try:
                 z_controller.set_position(z_return)
                 current_position_um['z'] = z_return
-                piezo_control_widget._update_position_signal.emit(z_return)
+                axis_control_widget.refresh_positions(z=z_return)
                 bridge.notify(f"🎯 Z returned to {z_return:.2f} µm")
             except Exception as e:
                 bridge.notify(f"⚠️ Failed to restore Z position: {e}")
@@ -801,11 +802,25 @@ load_scan_widget = create_load_scan(
     update_widget_func=update_widget_func
 )
 
-# Create piezo control widget
-piezo_control_widget = PiezoControlWidget(z_controller, scan_in_progress)
+# Create manual multi-axis control widget (galvo X/Y + piezo Z)
+def _on_manual_move(x_um, y_um, z_um):
+    """Sync app position state after a manual move from the axis widget."""
+    if x_um is not None:
+        current_position_um['x'] = x_um
+    if y_um is not None:
+        current_position_um['y'] = y_um
+    if z_um is not None:
+        current_position_um['z'] = z_um
+    if single_axis_widget_ref is not None:
+        single_axis_widget_ref.update_current_position(
+            current_position_um['x'], current_position_um['y'])
 
-# Let Scan Z refresh the Z control widget after a completed sweep
-auto_focus_widget.z_control_widget = piezo_control_widget
+axis_control_widget = AxisControlWidget(
+    axis_x, axis_y, z_controller, output_task,
+    scan_in_progress, move_callback=_on_manual_move)
+
+# Let Scan Z refresh the axis control widget after a completed sweep
+auto_focus_widget.z_control_widget = axis_control_widget
 
 
 # --------------------- ZOOM BY REGION HANDLER ---------------------
@@ -888,14 +903,25 @@ reset_zoom_widget.native.setFixedSize(150, 50)
 close_scanner_widget.native.setFixedSize(150, 50)
 load_scan_widget.native.setFixedSize(150, 50)
 
+# Group the action buttons into a compact 3-column x 2-row grid so they take
+# less horizontal space, leaving more room for the axis control widget.
+bottom_buttons = QWidget()
+_buttons_grid = QGridLayout()
+_buttons_grid.setContentsMargins(0, 0, 0, 0)
+bottom_buttons.setLayout(_buttons_grid)
+_button_widgets = [
+    new_scan_widget, stop_scan_widget, save_image_widget,
+    reset_zoom_widget, close_scanner_widget, load_scan_widget,
+]
+for _i, _w in enumerate(_button_widgets):
+    _buttons_grid.addWidget(_w.native, _i // 3, _i % 3)
+# Keep the button block compact (3 columns of 150 px) so it does not hog the
+# bottom row; the axis control widget expands to claim the remaining width.
+bottom_buttons.setMaximumWidth(3 * 150 + 20)
+
 # Add widgets to viewer
-viewer.window.add_dock_widget(new_scan_widget, area="bottom")
-viewer.window.add_dock_widget(stop_scan_widget, area="bottom")
-viewer.window.add_dock_widget(save_image_widget, area="bottom")
-viewer.window.add_dock_widget(reset_zoom_widget, area="bottom")
-viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
-viewer.window.add_dock_widget(load_scan_widget, area="bottom")
-viewer.window.add_dock_widget(piezo_control_widget, area="bottom")
+viewer.window.add_dock_widget(bottom_buttons, area="bottom")
+viewer.window.add_dock_widget(axis_control_widget, area="bottom")
 single_axis_dock = viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
 update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="right", name="Scan Parameters")
 # Scan Parameters sits below Single Axis Scan on the right.
