@@ -22,6 +22,7 @@ from napari.utils.notifications import show_info
 from napari._qt.dialogs.qt_notification import NapariQtNotification
 NapariQtNotification.DISMISS_AFTER = 1000
 from qtpy.QtGui import QGuiApplication
+from qtpy.QtCore import Qt
 import TimeTagger
 from magicgui import magicgui
 
@@ -895,10 +896,13 @@ viewer.window.add_dock_widget(reset_zoom_widget, area="bottom")
 viewer.window.add_dock_widget(close_scanner_widget, area="bottom")
 viewer.window.add_dock_widget(load_scan_widget, area="bottom")
 viewer.window.add_dock_widget(piezo_control_widget, area="bottom")
-update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="left", name="Scan Parameters")
-camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="right")
-viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
-viewer.window._qt_window.tabifyDockWidget(update_scan_parameters_dock, camera_control_dock)
+single_axis_dock = viewer.window.add_dock_widget(single_axis_scan_widget, name="Single Axis Scan", area="right")
+update_scan_parameters_dock = viewer.window.add_dock_widget(update_scan_parameters_widget, area="right", name="Scan Parameters")
+# Scan Parameters sits below Single Axis Scan on the right.
+viewer.window._qt_window.splitDockWidget(single_axis_dock, update_scan_parameters_dock, Qt.Orientation.Vertical)
+# Camera Control is small, so keep it on the left (not tabbed) to avoid
+# crowding the layers panel.
+camera_control_dock = viewer.window.add_dock_widget(camera_control_widget, name="Camera Control", area="left")
 
 # --------------------- CLEANUP ON CLOSE ---------------------
 def _on_close():
