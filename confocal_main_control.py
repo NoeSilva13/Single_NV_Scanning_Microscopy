@@ -272,16 +272,16 @@ shapes.units = ('µm', 'µm')
 try:
     tagger = TimeTagger.createTimeTagger()
     tagger.reset()
-    show_info("✅ Connected to real TimeTagger device")
+    print("✅ Connected to real TimeTagger device")
     tagger.startServer(access_mode = TimeTagger.AccessMode.Control,port=41101) 
     # Start the Server. TimeTagger.AccessMode sets the access rights for clients. Port defines the network port to be used
     # The server keeps running until the command tagger.stopServer() is called or until the program is terminated
-    show_info("✅ TimeTagger server started")
+    print("✅ TimeTagger server started")
 except Exception as e:
     show_info("⚠️ Real TimeTagger not detected, using virtual device")
     tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
     tagger.run()
-    show_info("✅ Virtual TimeTagger started")
+    print("✅ Virtual TimeTagger started")
 
 # Free-running counter used ONLY by the live signal plot. All DAQ-driven
 # acquisitions (2D raster, auto-focus, single-axis) instead count with
@@ -954,17 +954,17 @@ def _on_close():
     try:
         # Set scanner to zero position before closing
         output_task.write([0, 0])
-        show_info("🎯 Scanner set to zero position")
+        print("🎯 Scanner set to zero position")
 
         # Park the piezo at Z = 0 before releasing the controller
         if z_controller and z_controller.available:
             z_controller.set_position(0.0)
-            show_info("🎯 Z set to zero position")
+            print("🎯 Z set to zero position")
         if z_controller:
             z_controller.close()
-            show_info("✓ Z controller released")
+            print("✓ Z controller released")
     except Exception as e:
-        show_info(f"❌ Error during app closure: {str(e)}")
+        print(f"❌ Error during app closure: {str(e)}")
 
 # Register cleanup using Qt's destroyed signal
 viewer.window._qt_window.destroyed.connect(_on_close)

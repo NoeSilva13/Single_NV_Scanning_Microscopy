@@ -101,6 +101,11 @@ class SingleAxisScanWidget(QWidget):
         plot_widget = pg.PlotWidget()
         plot_widget.setBackground(bg_color)
         plot_item = plot_widget.getPlotItem()
+        # Disable mouse pan/zoom (left-drag would move the whole plot) so the
+        # left click is used only for click-to-move.
+        plot_item.setMouseEnabled(x=False, y=False)
+        plot_item.setMenuEnabled(True)
+        plot_item.hideButtons()
         plot_item.showGrid(x=True, y=True, alpha=0.3)
         plot_item.setLabel('bottom', x_label, color='white')
         plot_item.setLabel('left', 'Counts', color='white')

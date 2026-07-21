@@ -50,7 +50,6 @@ class DAQAxis:
             with nidaqmx.Task() as test_task:
                 test_task.ao_channels.add_ao_voltage_chan(self.ao_channel)
             self.available = True
-            print(f"Successfully initialized axis '{self.name}' on {self.ao_channel}")
         except DaqNotFoundError:
             print(f"NI-DAQmx not found. Axis '{self.name}' is unavailable.")
         except DaqError as e:
