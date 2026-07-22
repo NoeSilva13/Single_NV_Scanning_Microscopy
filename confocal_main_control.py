@@ -545,7 +545,14 @@ def _save_scan(mode, axis_names, points_list, result, scales, dwell, z_dwell, sc
         'resolution': {'x': len(fast_pts), 'y': len(slow_pts)},
         'dwell_time': float(dwell),
         'scan_time': scan_time,
+        'scan_mode': mode,
+        'axis_names': (axis_names[0], axis_names[1]),
+        'microns_per_volt': MICRONS_PER_VOLT,
     }
+    # A Z-involving 2D scan (XZ / YZ) has a separate piezo dwell + calibration.
+    if 'z' in axis_names:
+        save_params['z_dwell_time'] = float(z_dwell)
+        save_params['z_um_per_volt'] = z_controller.um_per_volt
 
     data_path = data_manager.save_scan_data(scan_data, save_params)
     plot_scan_results(scan_data, data_path,

@@ -169,6 +169,7 @@ class ZoomLevelManager:
   - Complete widget for 1D X/Y line scans at the current galvo position
   - Runs a hardware-timed AO ramp on the scanned galvo axis (holding the other fixed) with per-point photon counting via `CountBetweenMarkers` (`scanning_core.run_hardware_timed_sweep`); mutually exclusive with the raster/Scan Z scans
   - Uses a `QTabWidget` with separate **X Axis** and **Y Axis** tabs; each tab holds its own scan button and a `pyqtgraph` result plot (with a red peak marker), and `update_current_position(x, y)` tracks the galvo's last commanded position
+  - **Click-to-move**: left-clicking a plot moves the galvo to that position on the tab's axis (snapping to the nearest measured point), draws a selection line, and fires the optional `move_callback(x_um, y_um)` so the app can sync `current_position_um` and the axis control widget. Mouse pan/zoom and the context menu are disabled so the left click is used only for moving.
   - `add_z_tab(widget, title='Z Axis')` embeds an external panel (the `AutoFocusWidget`, whose button is labelled **"Scan Z"**) as a third tab so X/Y/Z line scans share one dock
 
 ### File Operations (`file_operations.py`)

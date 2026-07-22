@@ -67,13 +67,22 @@ def save_tiff_with_imagej_metadata(image_data, filepath, x_points, y_points, sca
     Args:
         image_data (np.ndarray): 2D image array
         filepath (str): Path to save the TIFF file
-        x_points (np.ndarray): X scan positions in micrometers
-        y_points (np.ndarray): Y scan positions in micrometers
-        scan_config (dict): Configuration dictionary with scan parameters
+        x_points (np.ndarray): Fast-axis (columns) scan positions in micrometers
+        y_points (np.ndarray): Slow-axis (rows) scan positions in micrometers
+        scan_config (dict): Configuration dictionary with scan parameters. May
+            include ``axis_names`` (fast, slow), ``scan_mode``, ``microns_per_volt``
+            and ``z_um_per_volt`` so the description reflects the real scanned axes.
         timestamp (str): Optional timestamp string
     """
     height, width = image_data.shape
-    
+
+    # Real scanned axes (fast -> columns, slow -> rows). Defaults keep older
+    # XY-only callers working.
+    axis_names = scan_config.get('axis_names', ('x', 'y'))
+    fast_name = str(axis_names[0]).upper()
+    slow_name = str(axis_names[1]).upper()
+    scan_mode = scan_config.get('scan_mode', None)
+
     # Positions are already in micrometers (canonical unit).
     microns_per_pixel_x = um_scale(x_points[0], x_points[-1], width)
     microns_per_pixel_y = um_scale(y_points[0], y_points[-1], height)
@@ -111,17 +120,24 @@ max={float(np.nanmax(image_data))}
 
 Confocal NV Microscopy Data
 Acquisition Software: NV Scanning Microscopy
-X Range: {x_points[0]:.3f} to {x_points[-1]:.3f} um
-Y Range: {y_points[0]:.3f} to {y_points[-1]:.3f} um
-X Resolution: {width} pixels
-Y Resolution: {height} pixels
-X Scale: {microns_per_pixel_x:.6f} um/pixel
-Y Scale: {microns_per_pixel_y:.6f} um/pixel
-Calibration: {MICRONS_PER_VOLT} um/V
+Scan Mode: {scan_mode if scan_mode is not None else fast_name + slow_name}
+{fast_name} Range: {x_points[0]:.3f} to {x_points[-1]:.3f} um
+{slow_name} Range: {y_points[0]:.3f} to {y_points[-1]:.3f} um
+{fast_name} Resolution: {width} pixels
+{slow_name} Resolution: {height} pixels
+{fast_name} Scale: {microns_per_pixel_x:.6f} um/pixel
+{slow_name} Scale: {microns_per_pixel_y:.6f} um/pixel
+Calibration (galvo): {scan_config.get('microns_per_volt', MICRONS_PER_VOLT)} um/V"""
+
+    z_um_per_volt = scan_config.get('z_um_per_volt', None)
+    if z_um_per_volt is not None:
+        image_description += f"\nCalibration (piezo Z): {z_um_per_volt} um/V"
+
+    image_description += f"""
 Dwell Time: {scan_config.get('dwell_time', 0.1)} s
 Detector: Single Photon Detector (SPD)
 Scanner: Thorlabs LSKGG4 Galvo-Galvo"""
-    
+
     if timestamp:
         image_description += f"\nTimestamp: {timestamp}"
     

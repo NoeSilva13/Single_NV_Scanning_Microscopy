@@ -58,49 +58,73 @@ class DataManager:
         scale_x = scan_data.get('scale_x', None)
         scale_y = scan_data.get('scale_y', None)
 
-        # Create a DataFrame with the image data
-        df = pd.DataFrame(image, index=y_points, columns=x_points)
+        # Real axis names for this scan (fast axis -> columns, slow axis -> rows).
+        # Defaults keep older XY-only callers working.
+        axis_names = scan_params.get('axis_names', ('x', 'y'))
+        fast_name = str(axis_names[0]).upper()
+        slow_name = str(axis_names[1]).upper()
 
-        # Add a name to the index for the y-axis label
-        df.index.name = r'y\x'
+        # Create a DataFrame with the image data; the index name encodes the
+        # real slow\\fast axes (e.g. "Z\\X" for an XZ scan).
+        df = pd.DataFrame(image, index=y_points, columns=x_points)
+        df.index.name = f"{slow_name}\\{fast_name}"
 
         # Write config and data to file
         with open(filename, 'w', encoding='utf-8', newline='') as f:
             # Write measurement date and time as the first line
             measurement_time = time.strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"# Measurement Time: {measurement_time}\n")
-            
-            # Write scale information 
-            f.write(f"# Scale: {scale_x:.6f} x {scale_y:.6f} µm/pixel\n")
-            
-            # Write scan ranges
+
+            # Write the scan mode if provided
+            scan_mode = scan_params.get('scan_mode', None)
+            if scan_mode is not None:
+                f.write(f"# Scan Mode: {scan_mode}\n")
+
+            # Write scale information (fast x slow)
+            f.write(f"# Scale: {scale_x:.6f} x {scale_y:.6f} µm/pixel "
+                    f"({fast_name} x {slow_name})\n")
+
+            # Write scan ranges (µm), labelled with the real axes
             x_range = scan_params['scan_range']['x']
             y_range = scan_params['scan_range']['y']
-            f.write(f"# X Range: {x_range[0]:.6f} to {x_range[1]:.6f} um\n")
-            f.write(f"# Y Range: {y_range[0]:.6f} to {y_range[1]:.6f} um\n")
-                
+            f.write(f"# {fast_name} Range: {x_range[0]:.6f} to {x_range[1]:.6f} µm\n")
+            f.write(f"# {slow_name} Range: {y_range[0]:.6f} to {y_range[1]:.6f} µm\n")
+
             # Write resolutions
             x_res = scan_params['resolution']['x']
             y_res = scan_params['resolution']['y']
-            f.write(f"# X Resolution: {x_res} pixels\n")
-            f.write(f"# Y Resolution: {y_res} pixels\n")
-                
-            # Write dwell time
+            f.write(f"# {fast_name} Resolution: {x_res} pixels\n")
+            f.write(f"# {slow_name} Resolution: {y_res} pixels\n")
+
+            # Write dwell time(s). A Z-involving scan has a separate Z dwell.
             dwell_time = scan_params['dwell_time']
             f.write(f"# Dwell Time: {dwell_time:.6f} s\n")
+            z_dwell_time = scan_params.get('z_dwell_time', None)
+            if z_dwell_time is not None:
+                f.write(f"# Z Dwell Time: {z_dwell_time:.6f} s\n")
 
             # Write total scan time (acquisition duration) if available
             scan_time = scan_params.get('scan_time', None)
             if scan_time is not None:
                 f.write(f"# Scan Time: {scan_time:.2f} s\n")
-            
+
+            # Write calibration constants for reproducibility
+            microns_per_volt = scan_params.get('microns_per_volt', None)
+            if microns_per_volt is not None:
+                f.write(f"# Microns Per Volt (galvo): {microns_per_volt:.6f} µm/V\n")
+            z_um_per_volt = scan_params.get('z_um_per_volt', None)
+            if z_um_per_volt is not None:
+                f.write(f"# Microns Per Volt (piezo Z): {z_um_per_volt:.6f} µm/V\n")
+
             # Write scan points information
-            f.write(f"# X Points: {len(x_points)} points from {x_points[0]:.6f}um to {x_points[-1]:.6f}um\n")
-            f.write(f"# Y Points: {len(y_points)} points from {y_points[0]:.6f}um to {y_points[-1]:.6f}um\n")
-            
+            f.write(f"# {fast_name} Points: {len(x_points)} points from "
+                    f"{x_points[0]:.6f}µm to {x_points[-1]:.6f}µm\n")
+            f.write(f"# {slow_name} Points: {len(y_points)} points from "
+                    f"{y_points[0]:.6f}µm to {y_points[-1]:.6f}µm\n")
+
             f.write("#\n")  # Empty line to separate header from data
-            
+
             # Write the data matrix
             df.to_csv(f, float_format='%.7f')
-        
+
         return filename

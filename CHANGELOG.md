@@ -7,6 +7,8 @@ All notable changes to this project will be documented in this file following [K
 - **Multi-dimensional scanning (XY / XZ / YZ / XYZ)** via a **Scan Mode** selector in the Scan Parameters panel that drives the **New Scan** button. XZ/YZ produce a 2D image in a dedicated napari layer; XYZ produces a 3D volume layer with per-axis `scale`/`units`. Axes not part of the selected mode are held at their current position (galvo held via the persistent AO task, piezo pre-moved and settled).
 - Generic N-axis raster engine `raster_engine.py` (`build_raster_waveforms`, `raster_geometry`, `reconstruct`, `run_raster`): composes the fast..slow µm waveform (with inter-line flyback that also covers slow-axis settling), converts each axis to volts via its `DAQAxis`, drives `scanning_core.run_hardware_timed_sweep`, and reconstructs a 2D image or 3D volume. The XY raster now delegates to this engine.
 - Axis abstraction `daq_axis.py` (`DAQAxis`): single home for the µm↔V calibration, AO channel, and travel/voltage limits. `DAQZController` is now a thin `DAQAxis` subclass; `axis_x`/`axis_y` (galvo) and `axis_z` (piezo) are instantiated in the app.
+- Manual multi-axis control widget `widgets/axis_controls.py` (`AxisControlWidget`): a slider + spinbox per axis (X/Y/Z) that commands the galvo (both AO channels written together) and piezo, and mirrors the scanner's current position. `refresh_positions(x, y, z)` updates the display without moving hardware (used on click-to-move and at the end of a scan) and `move_callback` keeps `current_position_um`/single-axis tracking in sync. It replaces the Z-only piezo widget.
+- Click-to-move on the single-axis line-scan plots: left-clicking an X/Y `pyqtgraph` plot moves the galvo to that position (snapping to the nearest measured point) and syncs the axis control widget.
 
 ### Changed
 - **µm is now the canonical unit for all axes.** Scan Parameters store/return X/Y in micrometers (no hidden volt round-trip); the µm→V conversion happens only at the DAQ boundary (waveform build / analog writes). `on_mouse_click`, single-axis scans, zoom, `ScanPointsManager`, and scale calculation all work in µm. Scale is now `um_scale(a_um, b_um, n_px)` instead of the volt-based `calculate_scale`.
@@ -28,7 +30,12 @@ All notable changes to this project will be documented in this file following [K
 - Applied Qt6 compatibility fixes: `QDesktopWidget().screenGeometry()` replaced with `QGuiApplication.primaryScreen().availableGeometry()`; `.exec_()` → `.exec()`; enums fully qualified (`Qt.AlignmentFlag`, `Qt.Orientation`, `QMessageBox.StandardButton`/`Icon`, `QFileDialog.FileMode`).
 - Replaced Thorlabs Kinesis USB Z control with DAQ analog output (`Dev1/ao2` → piezo EXT IN) via new `daq_z_controller.py` (`DAQZController`).
 - Moved the auto-focus Z-sweep algorithm into `widgets/auto_focus.py` (`run_focus_sweep`); the Z controller is now a minimal voltage/position mapper.
-- Simplified `widgets/piezo_controls.py` for commanded-position display (no USB connection / no analog readback).
+- Grouped the bottom action buttons (New Scan / Stop / Save / Reset Zoom / Set to Zero / Load Scan) into a compact 3x2 grid and let the axis control widget expand to fill the remaining width.
+- "Set to Zero" now also syncs `current_position_um` and refreshes the axis control widget after parking the galvo at (0, 0).
+- Disabled mouse pan/zoom and the context menu on the single-axis plots so a left click is used only for click-to-move.
+- Startup/shutdown status notices (TimeTagger connected / server started, scanner/Z zeroed, controller released) now print to the terminal instead of raising napari alerts, and the DAQ axis validation no longer prints a second "initialized" line (only the galvo's single DAQ-connection message remains).
+- The saved `.csv` header now labels rows/columns with the real scanned axes (e.g. `Z\X` for an XZ scan) instead of always "X"/"Y", and records the scan mode, galvo/piezo `µm/V` calibration, and the separate Z dwell time for Z-involving scans; units in the header are unified to `µm`.
+- The saved `.tiff` ImageJ description now uses the real scanned-axis names (fast/slow) and scan mode instead of hardcoded "X"/"Y", and reports both the galvo and (when Z is scanned) piezo `µm/V` calibration. Pixel scale/resolution were already correct; only the descriptive labels were fixed.
 
 ### Removed
 - Removed the coarse/fine auto-focus algorithm (`run_focus_sweep`) and the module-level `DEFAULT_COARSE_STEP` / `DEFAULT_FINE_STEP` / `DEFAULT_FINE_RANGE` from `widgets/auto_focus.py`; Z scanning is now a single linear sweep driven by Scan Parameters (`z_scan`).
@@ -36,6 +43,7 @@ All notable changes to this project will be documented in this file following [K
 - Removed the PyQt5 dependency: `requirements.txt` now pins `PySide6>=6.6.0` and the `napari[pyside6]` extra (set `QT_API=pyside6`).
 - Cleaned up unused Qt imports in `odmr_gui_qt.py` (`QFrame`, `QSpacerItem`, `QSizePolicy`, `QFont`, `QPalette`, `QColor`) and `spectrometer_app.py` (`QPixmap`, `QImage`, `QFont`).
 - Deleted `piezo_controller.py` (Thorlabs Kinesis `.NET`/USB path); no longer imported by the confocal app.
+- Deleted `widgets/piezo_controls.py` (`PiezoControlWidget`); the manual Z control is superseded by the multi-axis `widgets/axis_controls.py` (`AxisControlWidget`).
 - Dropped `pythonnet` and the Thorlabs Kinesis SDK install step from `requirements.txt` / README (piezo is initialized externally; this app only writes EXT IN voltage).
 
 ### Documentation
@@ -47,6 +55,7 @@ All notable changes to this project will be documented in this file following [K
 - Corrected `PulseBlaster/README.md` and `PulseBlaster/README_ODMR_GUI.md`: fixed stale run instructions and example code referencing non-existent methods (`create_simple_laser_pulse`, `create_odmr_sequence`, `experiments.odmr()`), updated default IPs, documented the Rabi/T1 tabs, and clarified that Ramsey/spin-echo are not implemented.
 - Corrected `widgets/README.md`: replaced references to the retired `napari_scanning_SPD.py` / `ConfigManager` with the current `confocal_main_control.py` entry point and real `ScanParametersManager` / `ScanPointsManager` / `ZoomLevelManager` classes; fixed widget factory signatures and documented `stop_scan`, `update_scan_parameters_widget`, and `create_camera_control_widget`.
 - Corrected `README_Spectrometer.md` resolution and image-format claims to match `spectrometer_app.py`.
+- Updated `README.md` and `widgets/README.md` for the manual `AxisControlWidget` (replacing the piezo control dock), single-axis plot click-to-move, the default Z dwell time (5 ms), and the actual `mmddyy###` data-folder naming.
 
 ### Removed
 - Deleted unreferenced duplicate `TimeTagger/time_tags_test.1.ttbin` (the non-suffixed `time_tags_test.ttbin` is the one actually used as the virtual TimeTagger fallback).
