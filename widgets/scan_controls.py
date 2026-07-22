@@ -96,8 +96,15 @@ def save_image(viewer, data_path_func):
 
 def reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points_manager,
                shapes, update_scan_parameters_func, update_scan_parameters_widget_func,
-               zoom_level_manager, bridge=None, scan_in_progress=None):
-    """Factory function to create reset_zoom widget with dependencies"""
+               zoom_level_manager, bridge=None, scan_in_progress=None,
+               run_scan_points_func=None):
+    """Factory function to create reset_zoom widget with dependencies.
+
+    ``run_scan_points_func(mode, axis_names, points_list)`` lets Reset Zoom
+    restore the original view for non-XY modes (XZ / YZ). History entries are
+    mode-aware tuples ``(mode, axis_names, [fast_pts, slow_pts])``; a legacy
+    ``(x_pts, y_pts)`` tuple is still accepted and treated as XY.
+    """
     
     @magicgui(call_button="🔄 Reset Zoom")
     def _reset_zoom():
@@ -111,40 +118,66 @@ def reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points
         if scan_in_progress and scan_in_progress[0]:
             show_info("⚠️ A scan is already in progress")
             return
-        
-        if scan_history:
-            orig_x_points, orig_y_points = scan_history[0]
+
+        # Original (pre-zoom) grid is the bottom of the history stack.
+        entry = scan_history[0] if scan_history else None
+        if entry is not None and len(entry) == 3 and isinstance(entry[0], str):
+            orig_mode, orig_axes = entry[0], list(entry[1])
+            orig_fast = np.asarray(entry[2][0], dtype=float)
+            orig_slow = np.asarray(entry[2][1], dtype=float)
+        elif entry is not None:
+            orig_mode, orig_axes = 'XY', ['x', 'y']
+            orig_fast = np.asarray(entry[0], dtype=float)
+            orig_slow = np.asarray(entry[1], dtype=float)
         else:
             params = scan_params_manager.get_params()
             x_range = params['scan_range']['x']
             y_range = params['scan_range']['y']
             x_res = params['resolution']['x']
             y_res = params['resolution']['y']
-            orig_x_points = np.linspace(x_range[0], x_range[1], x_res)
-            orig_y_points = np.linspace(y_range[0], y_range[1], y_res)
+            orig_mode, orig_axes = 'XY', ['x', 'y']
+            orig_fast = np.linspace(x_range[0], x_range[1], x_res)
+            orig_slow = np.linspace(y_range[0], y_range[1], y_res)
         
         scan_history.clear()
         zoom_level_manager.set_zoom_level(0)
 
         def run_reset():
-            x_r = [orig_x_points[0], orig_x_points[-1]]
-            y_r = [orig_y_points[0], orig_y_points[-1]]
-            n_x = len(orig_x_points)
-            n_y = len(orig_y_points)
+            if orig_mode == 'XY':
+                x_r = [orig_fast[0], orig_fast[-1]]
+                y_r = [orig_slow[0], orig_slow[-1]]
+                n_x = len(orig_fast)
+                n_y = len(orig_slow)
 
-            if bridge:
-                bridge.run_on_main(lambda: update_scan_parameters_func(
-                    x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
-                ))
-            else:
-                update_scan_parameters_func(
+                if bridge:
+                    bridge.run_on_main(lambda: update_scan_parameters_func(
+                        x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
+                    ))
+                else:
+                    update_scan_parameters_func(
+                        x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
+                    )
+
+                scan_points_manager.update_points(
                     x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
                 )
-
-            scan_points_manager.update_points(
-                x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
-            )
-            scan_pattern_func(orig_x_points, orig_y_points)
+                scan_pattern_func(orig_fast, orig_slow)
+            elif run_scan_points_func is not None:
+                # Sync the Scan Parameters widget for the restored axes (incl. Z).
+                def _axis_kwargs(name, pts):
+                    rng = [float(pts[0]), float(pts[-1])]
+                    if name == 'x':
+                        return {'x_range': rng, 'x_res': len(pts)}
+                    if name == 'y':
+                        return {'y_range': rng, 'y_res': len(pts)}
+                    return {'z_range': rng, 'z_res': len(pts)}
+                kwargs = {**_axis_kwargs(orig_axes[0], orig_fast),
+                          **_axis_kwargs(orig_axes[1], orig_slow)}
+                if bridge:
+                    bridge.run_on_main(lambda: update_scan_parameters_func(**kwargs))
+                else:
+                    update_scan_parameters_func(**kwargs)
+                run_scan_points_func(orig_mode, orig_axes, [orig_fast, orig_slow])
 
             if bridge:
                 bridge.run_on_main(lambda: setattr(shapes, 'data', []))
@@ -301,8 +334,9 @@ def update_scan_parameters(scan_params_manager):
         def get_scan_mode(self):
             return self.scan_mode_combo.currentText()
 
-        def update_values(self, x_range, y_range, x_res, y_res, dwell_time=None):
-            """Update all widget values (x_range/y_range are in micrometers)."""
+        def update_values(self, x_range, y_range, x_res, y_res, dwell_time=None,
+                          z_range=None, z_res=None):
+            """Update all widget values (ranges are in micrometers)."""
             self.x_min_spinbox.setValue(x_range[0])
             self.x_max_spinbox.setValue(x_range[1])
             self.y_min_spinbox.setValue(y_range[0])
@@ -313,6 +347,13 @@ def update_scan_parameters(scan_params_manager):
             # Update dwell time if provided (incoming value is in seconds).
             if dwell_time is not None:
                 self.dwell_time_spinbox.setValue(dwell_time * 1000.0)
+
+            # Update Z range/resolution if provided (e.g. from an XZ/YZ zoom).
+            if z_range is not None:
+                self.z_min_spinbox.setValue(z_range[0])
+                self.z_max_spinbox.setValue(z_range[1])
+            if z_res is not None:
+                self.z_res_spinbox.setValue(z_res)
     
     widget_instance = ScanParametersWidget()
     # Set the widget instance in the scan_params_manager so it can get parameters from it

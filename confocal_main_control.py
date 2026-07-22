@@ -88,7 +88,8 @@ class ScanParametersManager:
                 "scan_mode": "XY"
             }
     
-    def update_scan_parameters(self, x_range=None, y_range=None, x_res=None, y_res=None, dwell_time=None):
+    def update_scan_parameters(self, x_range=None, y_range=None, x_res=None, y_res=None,
+                               dwell_time=None, z_range=None, z_res=None):
         """Update scan parameters in the GUI widget"""
         if self.widget_instance and hasattr(self.widget_instance, 'update_values'):
             # Get current values first
@@ -100,8 +101,11 @@ class ScanParametersManager:
             new_x_res = x_res if x_res is not None else current_params['resolution']['x']
             new_y_res = y_res if y_res is not None else current_params['resolution']['y']
             new_dwell_time = dwell_time if dwell_time is not None else current_params['dwell_time']
+            new_z_range = z_range if z_range is not None else current_params['z_scan']['range']
+            new_z_res = z_res if z_res is not None else current_params['z_scan']['resolution']
             
-            self.widget_instance.update_values(new_x_range, new_y_range, new_x_res, new_y_res, new_dwell_time)
+            self.widget_instance.update_values(new_x_range, new_y_range, new_x_res, new_y_res,
+                                               new_dwell_time, z_range=new_z_range, z_res=new_z_res)
 
 # --------------------- SCAN POINTS MANAGER CLASS ---------------------
 class ScanPointsManager:
@@ -202,6 +206,12 @@ original_x_points, original_y_points = scan_points_manager.get_points()
 # Global state variables
 contrast_limits = (0, 10000)
 scan_history = []
+# Track the most recently scanned layer/mode so region-zoom re-scans the layer
+# the user is actually looking at (during ROI drawing the shapes layer is the
+# active selection, so we cannot rely on viewer.layers.selection.active).
+last_scan_mode = 'XY'
+last_scan_axes = ['x', 'y']
+last_scan_layer = None
 image = np.zeros((y_res, x_res), dtype=np.float32)
 data_path = None
 single_axis_widget_ref = None  # Reference to be set later
@@ -254,6 +264,11 @@ def run_on_main_sync(func, timeout=15.0):
 layer = viewer.add_image(image, name="XY scan", colormap="viridis", contrast_limits=contrast_limits)
 # Add a shapes layer to display the zoom area
 shapes = viewer.add_shapes(name="zoom area", shape_type="rectangle", edge_color='red', face_color='transparent', edge_width=0)
+
+# Keep the zoom-area layer on top of every other layer at all times. Any new
+# scan layer (XZ/YZ/XYZ) is inserted above `shapes` and would otherwise hide
+# the ROI rectangle, so re-raise `shapes` whenever a layer is inserted.
+viewer.layers.events.inserted.connect(lambda event: _bring_shapes_to_front())
 
 # Configure scale bar (units come from layers in napari >= 0.8)
 viewer.scale_bar.visible = True
@@ -450,6 +465,21 @@ def _flyback_samples(dwell, z_dwell, scanned):
     return n
 
 
+def _bring_shapes_to_front():
+    """Keep the zoom-area shapes layer on top so its ROI rectangle stays visible.
+
+    New image layers (XZ/YZ/XYZ) are added above ``shapes`` and would otherwise
+    hide the (transparent-face, red-edge) rectangle. Must run on the main thread.
+    """
+    try:
+        src = viewer.layers.index(shapes)
+        # napari's move() inserts *before* dest in pre-move index space, so the
+        # top position is len(layers) (not len-1). It no-ops if already on top.
+        viewer.layers.move(src, len(viewer.layers))
+    except ValueError:
+        pass
+
+
 def _prepare_scan_layer(mode, axis_names, points_list, data, scales, units):
     """Create or update the napari layer for *mode* on the main thread.
 
@@ -463,6 +493,7 @@ def _prepare_scan_layer(mode, axis_names, points_list, data, scales, units):
             layer.contrast_limits = contrast_limits
             layer.scale = scales
             layer.units = units
+            _bring_shapes_to_front()
             return layer
         return run_on_main_sync(_p)
 
@@ -482,6 +513,7 @@ def _prepare_scan_layer(mode, axis_names, points_list, data, scales, units):
             lyr.mouse_drag_callbacks.append(on_scan_click)
         lyr.metadata['scan_axes'] = list(axis_names)
         lyr.metadata['scan_points'] = grid
+        _bring_shapes_to_front()
         return lyr
     return run_on_main_sync(_p)
 
@@ -577,7 +609,7 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
     ``scanning_core.run_hardware_timed_sweep`` (AO clock exported to the Time
     Tagger for CountBetweenMarkers), and reconstructs a 2D image or 3D volume.
     """
-    global image
+    global image, last_scan_mode, last_scan_axes, last_scan_layer
 
     with scan_lock:
         if scan_in_progress[0]:
@@ -623,6 +655,10 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
             time.sleep(z_dwell)  # initial settle before the sweep begins
 
         target_layer = _prepare_scan_layer(mode, axis_names, points_list, result, scales, units)
+        # Remember what was just scanned so region-zoom targets this layer/mode.
+        last_scan_mode = mode
+        last_scan_axes = list(axis_names)
+        last_scan_layer = target_layer
 
         # Release AO channels from the persistent on-demand task so the
         # hardware-timed task can reserve them.
@@ -676,15 +712,21 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
             ).start()
 
     finally:
-        # Restore the persistent on-demand galvo task and park at zero.
+        # Restore the persistent on-demand galvo task. Only the galvo axes that
+        # were actually scanned return to zero; a galvo axis left free (e.g. Y in
+        # an XZ scan, X in a YZ scan) holds its last position instead of resetting.
+        scanned = set(axis_names)
         try:
+            park_x = 0.0 if 'x' in scanned else current_position_um['x']
+            park_y = 0.0 if 'y' in scanned else current_position_um['y']
             output_task.start()
-            output_task.write([0, 0])
-            current_position_um['x'], current_position_um['y'] = 0.0, 0.0
-            axis_control_widget.refresh_positions(x=0.0, y=0.0)
+            output_task.write([axis_x.position_to_voltage(park_x),
+                               axis_y.position_to_voltage(park_y)])
+            current_position_um['x'], current_position_um['y'] = park_x, park_y
+            axis_control_widget.refresh_positions(x=park_x, y=park_y)
         except Exception as e:
             bridge.notify(f"⚠️ Failed to restart galvo control: {e}")
-        bridge.notify("🎯 Scanner returned to zero position")
+        bridge.notify("🎯 Scanner returned to home position")
 
         # For Z-involving scans, return the piezo to the user's focus plane
         # (Z-Control spinbox) instead of leaving it at the sweep's z_max. The
@@ -716,6 +758,31 @@ def scan_pattern(x_points, y_points):
     return x_points, y_points
 
 
+def _axis_param_kwargs(name, pts):
+    """Map an axis name + its µm points to Scan Parameters update kwargs."""
+    rng = [float(pts[0]), float(pts[-1])]
+    n = len(pts)
+    if name == 'x':
+        return {'x_range': rng, 'x_res': n}
+    if name == 'y':
+        return {'y_range': rng, 'y_res': n}
+    return {'z_range': rng, 'z_res': n}
+
+
+def _run_scan_for_points(mode, axis_names, points_list):
+    """Run a raster scan for *mode* over explicit µm points (fast..slow).
+
+    Shared by region-zoom and Reset Zoom so any 2D mode (XY / XZ / YZ) can be
+    re-scanned over a sub-region into its own layer.
+    """
+    params = scan_params_manager.get_params()
+    dwell = params['dwell_time']
+    z_dwell = params['z_scan']['dwell_time']
+    axes_list = [AXES[n] for n in axis_names]
+    _run_raster_scan(mode, list(axis_names), axes_list,
+                     [np.asarray(p, float) for p in points_list], dwell, z_dwell)
+
+
 def _build_axis_points(params):
     xr = params['scan_range']['x']
     yr = params['scan_range']['y']
@@ -735,6 +802,11 @@ def run_selected_scan():
     dwell = params['dwell_time']
     z_dwell = params['z_scan']['dwell_time']
     axis_names = MODE_AXES.get(mode, ['x', 'y'])
+
+    # A fresh base scan resets the zoom state so Reset Zoom is relative to this
+    # scan (of whatever mode), not a stale earlier base.
+    scan_history.clear()
+    zoom_manager.set_zoom_level(0)
 
     if mode == 'XY':
         # Keep XY going through the manager so zoom history stays consistent.
@@ -786,7 +858,8 @@ reset_zoom_widget = create_reset_zoom(
     update_widget_func,
     zoom_manager,
     bridge,
-    scan_in_progress
+    scan_in_progress,
+    run_scan_points_func=_run_scan_for_points
 )
 
 # Create camera control widgets
@@ -870,49 +943,74 @@ def on_shape_added(event):
     if len(shapes.data) == 0:
         return
 
-    # Calculate new scan region from selected rectangle
+    # Region zoom needs a 2D slice view.
+    if getattr(viewer.dims, 'ndisplay', 2) == 3:
+        show_info("ℹ️ Switch to 2D view to use region zoom")
+        return
+
+    # Zoom the layer the user is actually looking at: the most recently scanned
+    # one. (While drawing the ROI, the shapes layer is the active selection, so
+    # viewer.layers.selection.active cannot be trusted here.)
+    mode = last_scan_mode
+    axis_names = list(last_scan_axes)
+    target = last_scan_layer if last_scan_layer is not None else layer
+
+    if len(axis_names) != 2 or getattr(target, 'data', None) is None or target.data.ndim != 2:
+        show_info("ℹ️ Region zoom is only available for 2D scans (XY / XZ / YZ)")
+        return
+
+    # Current grid for the fast (columns) and slow (rows) axes.
+    if mode == 'XY':
+        cur_fast, cur_slow = scan_points_manager.get_points()
+    else:
+        pts = target.metadata.get('scan_points')
+        if pts is None:
+            return
+        cur_fast, cur_slow = pts[0], pts[1]
+    cur_fast = np.asarray(cur_fast, dtype=float)
+    cur_slow = np.asarray(cur_slow, dtype=float)
+
+    # Calculate new scan region from selected rectangle. Image dims are
+    # (slow=rows, fast=columns).
     rect1 = shapes.data[-1]
-    rect = np.array([layer.world_to_data(point) for point in rect1])
-    min_y, min_x = np.floor(np.min(rect, axis=0)).astype(int)
-    max_y, max_x = np.ceil(np.max(rect, axis=0)).astype(int)
-    
+    rect = np.array([target.world_to_data(point) for point in rect1])
+    min_row, min_col = np.floor(np.min(rect, axis=0)).astype(int)
+    max_row, max_col = np.ceil(np.max(rect, axis=0)).astype(int)
+
     # Ensure zoom region stays within image bounds
-    height, width = layer.data.shape
-    min_x = max(0, min_x)
-    max_x = min(width - 1, max_x)  # Ensure we don't exceed array bounds
-    min_y = max(0, min_y)
-    max_y = min(height - 1, max_y)  # Ensure we don't exceed array bounds
+    height, width = target.data.shape
+    min_col = max(0, min_col)
+    max_col = min(width - 1, max_col)
+    min_row = max(0, min_row)
+    max_row = min(height - 1, max_row)
 
-    # Save current state for zoom history
-    current_x_points, current_y_points = scan_points_manager.get_points()
-    scan_history.append((current_x_points, current_y_points))
-
-    # Calculate new scan points maintaining original resolution
-    current_params = scan_params_manager.get_params()
-    current_x_res = current_params['resolution']['x']
-    current_y_res = current_params['resolution']['y']
-    # Create new scan points covering the full selected region
-    # min_x/max_x are pixel indices, we convert them to voltage values
-    x_zoom = np.linspace(current_x_points[min_x], current_x_points[max_x], current_x_res)
-    y_zoom = np.linspace(current_y_points[min_y], current_y_points[max_y], current_y_res)
+    # New scan points covering the selected region, keeping per-axis resolution.
+    fast_zoom = np.linspace(cur_fast[min_col], cur_fast[max_col], len(cur_fast))
+    slow_zoom = np.linspace(cur_slow[min_row], cur_slow[max_row], len(cur_slow))
 
     def run_zoom():
         global zoom_in_progress
         zoom_in_progress = True
 
-        x_range_new = [x_zoom[0], x_zoom[-1]]
-        y_range_new = [y_zoom[0], y_zoom[-1]]
-        bridge.run_on_main(lambda: scan_params_manager.update_scan_parameters(
-            x_range=x_range_new, y_range=y_range_new,
-            x_res=current_x_res, y_res=current_y_res
-        ))
-        scan_points_manager.update_points(
-            x_range=x_range_new, y_range=y_range_new,
-            x_res=current_x_res, y_res=current_y_res
-        )
+        # Push the pre-zoom grid (mode-aware) onto the history stack.
+        scan_history.append((mode, list(axis_names),
+                             [np.array(cur_fast), np.array(cur_slow)]))
+
+        # Sync the Scan Parameters widget for the two scanned axes (incl. Z).
+        kwargs = {**_axis_param_kwargs(axis_names[0], fast_zoom),
+                  **_axis_param_kwargs(axis_names[1], slow_zoom)}
+        bridge.run_on_main(lambda: scan_params_manager.update_scan_parameters(**kwargs))
+
+        # The XY line/reset path reads galvo points from scan_points_manager.
+        if mode == 'XY':
+            scan_points_manager.update_points(
+                x_range=[fast_zoom[0], fast_zoom[-1]],
+                y_range=[slow_zoom[0], slow_zoom[-1]],
+                x_res=len(fast_zoom), y_res=len(slow_zoom)
+            )
 
         bridge.run_on_main(lambda: setattr(shapes, 'data', []))
-        scan_pattern(x_zoom, y_zoom)
+        _run_scan_for_points(mode, axis_names, [fast_zoom, slow_zoom])
         zoom_manager.set_zoom_level(zoom_manager.get_zoom_level() + 1)
         update_widget_func()
         zoom_in_progress = False

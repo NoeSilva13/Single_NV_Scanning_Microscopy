@@ -113,9 +113,10 @@ class ZoomLevelManager:
   - Creates a "📷 Save Image" button widget
   - Screenshots the current napari canvas, named after the last saved scan's data path
 
-- **`reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points_manager, shapes, update_scan_parameters_func, update_scan_parameters_widget_func, zoom_level_manager, bridge=None, scan_in_progress=None)`**
+- **`reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points_manager, shapes, update_scan_parameters_func, update_scan_parameters_widget_func, zoom_level_manager, bridge=None, scan_in_progress=None, run_scan_points_func=None)`**
   - Creates a "🔄 Reset Zoom" button widget
   - Returns to the original (level-0) scan range and resets zoom level to 0
+  - Mode-aware: history entries are `(mode, axis_names, [fast_pts, slow_pts])` (a legacy `(x_pts, y_pts)` tuple is still accepted as XY). For non-XY modes it restores the original view via `run_scan_points_func(mode, axis_names, points_list)`
 
 - **`update_scan_parameters(scan_params_manager)`**
   - Returns a `ScanParametersWidget` (`QWidget`) with a **Scan Mode** selector (XY/XZ/YZ/XYZ), X/Y/Z range and resolution spinboxes (all in µm), and XY/Z dwell-time fields; Z fields are exposed via `get_parameters()['z_scan']` and the mode via `get_parameters()['scan_mode']`
