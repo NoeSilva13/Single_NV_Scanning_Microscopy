@@ -12,7 +12,7 @@ from typing import Optional, Tuple
 from qtpy.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QGridLayout, QLabel, QSlider, QPushButton, 
                             QSpinBox, QDoubleSpinBox, QComboBox, QGroupBox, QSplitter,
-                            QCheckBox, QStatusBar, QMessageBox, QFileDialog)
+                            QCheckBox, QStatusBar, QMessageBox, QFileDialog, QSizePolicy)
 from qtpy.QtCore import QTimer, Qt, QThread, Signal as pyqtSignal, QMutex
 import pyqtgraph as pg
 import cv2
@@ -289,7 +289,7 @@ class SpectrometerMainWindow(QMainWindow):
             QLineEdit:focus {
                 border: 2px solid #00d4aa;
             }
-            QSpinBox, QDoubleSpinBox {
+            QSpinBox, QDoubleSpinBox, QComboBox {
                 background-color: #3c3c3c;
                 color: #ffffff;
                 border: 1px solid #555555;
@@ -297,7 +297,7 @@ class SpectrometerMainWindow(QMainWindow):
                 padding: 5px;
                 font-size: 10pt;
             }
-            QSpinBox:focus, QDoubleSpinBox:focus {
+            QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {
                 border: 2px solid #00d4aa;
             }
             QTextEdit {
@@ -364,24 +364,33 @@ class SpectrometerMainWindow(QMainWindow):
         
         # Left panel - Camera view and controls
         left_widget = QWidget()
+        # Cap the left panel width so it stays compact and the spectrum plot on
+        # the right gets more room; the splitter can still be dragged.
+        left_widget.setMaximumWidth(700)
         left_layout = QVBoxLayout(left_widget)
         
         # Camera view with performance optimizations
         self.camera_view = pg.ImageView()
-        self.camera_view.setMinimumSize(400, 300)
+        self.camera_view.setMinimumSize(420, 300)
+        # Let the camera view grow when the window is maximized so the control
+        # groups below keep their natural height (no empty gap, no inflated padding).
+        self.camera_view.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # Optimize ImageView for better performance
         self.camera_view.ui.histogram.setEnabled(False)  # Disable histogram during resize
         self.camera_view.ui.roiBtn.setCheckable(True)    # Make ROI button toggle-able
         
-        left_layout.addWidget(self.camera_view)
+        left_layout.addWidget(self.camera_view, 1)
         
         # Setup ROI button with simpler implementation
         self.setup_roi_button()
         
-        # ROI controls
+        # ROI controls (two pairs of label+spin per row to use the width)
         roi_group = QGroupBox("ROI Settings")
         roi_layout = QGridLayout(roi_group)
+        roi_layout.setContentsMargins(12, 12, 12, 12)
+        roi_layout.setSpacing(8)
         
         roi_layout.addWidget(QLabel("Start Y:"), 0, 0)
         self.roi_start_spinbox = QSpinBox()
@@ -389,33 +398,33 @@ class SpectrometerMainWindow(QMainWindow):
         self.roi_start_spinbox.setValue(0)
         roi_layout.addWidget(self.roi_start_spinbox, 0, 1)
         
-        roi_layout.addWidget(QLabel("Height:"), 1, 0)
+        roi_layout.addWidget(QLabel("Height:"), 0, 2)
         self.roi_height_spinbox = QSpinBox()
         self.roi_height_spinbox.setRange(1, self.img_height)
         self.roi_height_spinbox.setValue(self.img_height)
-        roi_layout.addWidget(self.roi_height_spinbox, 1, 1)
+        roi_layout.addWidget(self.roi_height_spinbox, 0, 3)
         
-        roi_layout.addWidget(QLabel("Start X:"), 2, 0)
+        roi_layout.addWidget(QLabel("Start X:"), 1, 0)
         self.roi_start_x_spinbox = QSpinBox()
         self.roi_start_x_spinbox.setRange(0, self.img_width)
         self.roi_start_x_spinbox.setValue(0)
-        roi_layout.addWidget(self.roi_start_x_spinbox, 2, 1)
+        roi_layout.addWidget(self.roi_start_x_spinbox, 1, 1)
         
-        roi_layout.addWidget(QLabel("Width:"), 3, 0)
+        roi_layout.addWidget(QLabel("Width:"), 1, 2)
         self.roi_width_spinbox = QSpinBox()
         self.roi_width_spinbox.setRange(1, self.img_width)
         self.roi_width_spinbox.setValue(self.img_width)
-        roi_layout.addWidget(self.roi_width_spinbox, 3, 1)
+        roi_layout.addWidget(self.roi_width_spinbox, 1, 3)
         
         # Add the ROI button after it's created
         if hasattr(self, 'apply_visual_roi_button'):
-            roi_layout.addWidget(self.apply_visual_roi_button, 4, 0, 1, 2)
-        
-        left_layout.addWidget(roi_group)
+            roi_layout.addWidget(self.apply_visual_roi_button, 2, 0, 1, 4)
         
         # Camera controls
         camera_group = QGroupBox("Camera Controls")
         camera_layout = QGridLayout(camera_group)
+        camera_layout.setContentsMargins(12, 12, 12, 12)
+        camera_layout.setSpacing(8)
         
         # Exposure control
         camera_layout.addWidget(QLabel("Exposure:"), 0, 0)
@@ -453,11 +462,11 @@ class SpectrometerMainWindow(QMainWindow):
         button_layout.addWidget(self.stop_button)
         camera_layout.addLayout(button_layout, 2, 0, 1, 3)
         
-        left_layout.addWidget(camera_group)
-        
         # Resolution controls (preset dropdown + custom width/height)
         resolution_group = QGroupBox("Resolution")
         resolution_layout = QGridLayout(resolution_group)
+        resolution_layout.setContentsMargins(12, 12, 12, 12)
+        resolution_layout.setSpacing(8)
         
         resolution_layout.addWidget(QLabel("Preset:"), 0, 0)
         self.resolution_combo = QComboBox()
@@ -465,7 +474,7 @@ class SpectrometerMainWindow(QMainWindow):
             self.resolution_combo.addItem(label, (w, h))
         self.resolution_combo.addItem("Custom...", None)
         self.resolution_combo.setToolTip("Select a camera resolution preset, or 'Custom...' to type one")
-        resolution_layout.addWidget(self.resolution_combo, 0, 1, 1, 2)
+        resolution_layout.addWidget(self.resolution_combo, 0, 1, 1, 3)
         
         resolution_layout.addWidget(QLabel("Width:"), 1, 0)
         self.res_width_spinbox = QSpinBox()
@@ -474,26 +483,26 @@ class SpectrometerMainWindow(QMainWindow):
         self.res_width_spinbox.setValue(6252)
         self.res_width_spinbox.setEnabled(False)
         self.res_width_spinbox.setToolTip("Custom width (multiple of 4, clamped to sensor max)")
-        resolution_layout.addWidget(self.res_width_spinbox, 1, 1, 1, 2)
+        resolution_layout.addWidget(self.res_width_spinbox, 1, 1)
         
-        resolution_layout.addWidget(QLabel("Height:"), 2, 0)
+        resolution_layout.addWidget(QLabel("Height:"), 1, 2)
         self.res_height_spinbox = QSpinBox()
         self.res_height_spinbox.setRange(2, 4176)
         self.res_height_spinbox.setSingleStep(2)
         self.res_height_spinbox.setValue(480)
         self.res_height_spinbox.setEnabled(False)
         self.res_height_spinbox.setToolTip("Custom height (multiple of 2, clamped to sensor max)")
-        resolution_layout.addWidget(self.res_height_spinbox, 2, 1, 1, 2)
+        resolution_layout.addWidget(self.res_height_spinbox, 1, 3)
         
         self.apply_resolution_button = QPushButton("Apply Resolution")
         self.apply_resolution_button.setToolTip("Change the camera resolution (resets ROI and calibration)")
-        resolution_layout.addWidget(self.apply_resolution_button, 3, 0, 1, 3)
-        
-        left_layout.addWidget(resolution_group)
+        resolution_layout.addWidget(self.apply_resolution_button, 2, 0, 1, 4)
         
         # Calibration controls (wavelength + save/load of full setup)
         cal_group = QGroupBox("Calibration")
         cal_layout = QGridLayout(cal_group)
+        cal_layout.setContentsMargins(12, 12, 12, 12)
+        cal_layout.setSpacing(8)
         
         cal_layout.addWidget(QLabel("Start λ (nm):"), 0, 0)
         self.start_wavelength_spinbox = QDoubleSpinBox()
@@ -503,29 +512,29 @@ class SpectrometerMainWindow(QMainWindow):
         self.start_wavelength_spinbox.setToolTip("Wavelength at the left edge of the ROI")
         cal_layout.addWidget(self.start_wavelength_spinbox, 0, 1)
         
-        cal_layout.addWidget(QLabel("End λ (nm):"), 1, 0)
+        cal_layout.addWidget(QLabel("End λ (nm):"), 0, 2)
         self.end_wavelength_spinbox = QDoubleSpinBox()
         self.end_wavelength_spinbox.setRange(200, 1000)
         self.end_wavelength_spinbox.setValue(800)
         self.end_wavelength_spinbox.setSuffix(" nm")
         self.end_wavelength_spinbox.setToolTip("Wavelength at the right edge of the ROI")
-        cal_layout.addWidget(self.end_wavelength_spinbox, 1, 1)
+        cal_layout.addWidget(self.end_wavelength_spinbox, 0, 3)
         
         self.apply_calibration_button = QPushButton("Apply Calibration")
-        cal_layout.addWidget(self.apply_calibration_button, 2, 0, 1, 2)
+        cal_layout.addWidget(self.apply_calibration_button, 1, 0, 1, 4)
         
         self.save_calibration_button = QPushButton("Save Calibration")
         self.save_calibration_button.setToolTip("Save ROI, camera controls, and wavelength range to a file")
         self.load_calibration_button = QPushButton("Load Calibration")
         self.load_calibration_button.setToolTip("Load ROI, camera controls, and wavelength range from a file")
-        cal_layout.addWidget(self.save_calibration_button, 3, 0)
-        cal_layout.addWidget(self.load_calibration_button, 3, 1)
-        
-        left_layout.addWidget(cal_group)
+        cal_layout.addWidget(self.save_calibration_button, 2, 0, 1, 2)
+        cal_layout.addWidget(self.load_calibration_button, 2, 2, 1, 2)
         
         # Dark correction controls
         dark_group = QGroupBox("Dark Correction")
         dark_layout = QHBoxLayout(dark_group)
+        dark_layout.setContentsMargins(12, 12, 12, 12)
+        dark_layout.setSpacing(8)
         
         self.capture_dark_button = QPushButton("Capture Dark")
         self.capture_dark_button.setToolTip("Use current camera frame as dark (subtract from spectrum)")
@@ -535,7 +544,26 @@ class SpectrometerMainWindow(QMainWindow):
         dark_layout.addWidget(self.capture_dark_button)
         dark_layout.addWidget(self.clear_dark_button)
         
-        left_layout.addWidget(dark_group)
+        # Arrange the control groups in a 2-column grid under the camera view so
+        # they use the horizontal space instead of stacking into a tall column.
+        # Row 0: geometry (ROI | Resolution); Row 1: acquisition | spectral
+        # calibration; Row 2: dark correction spanning both columns.
+        controls_grid = QGridLayout()
+        controls_grid.setContentsMargins(0, 0, 0, 0)
+        controls_grid.setHorizontalSpacing(10)
+        controls_grid.setVerticalSpacing(8)
+        controls_grid.addWidget(roi_group, 0, 0)
+        controls_grid.addWidget(resolution_group, 0, 1)
+        controls_grid.addWidget(camera_group, 1, 0, 1, 2)
+        controls_grid.addWidget(cal_group, 2, 0, 1, 2)
+        controls_grid.addWidget(dark_group, 3, 0, 1, 2)
+        controls_grid.setColumnStretch(0, 1)
+        controls_grid.setColumnStretch(1, 1)
+        # Keep control groups at their natural height; only the camera view stretches.
+        for group in (roi_group, resolution_group, camera_group, cal_group, dark_group):
+            group.setSizePolicy(
+                QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum)
+        left_layout.addLayout(controls_grid)
         
         # Right panel - Spectrum display
         right_widget = QWidget()
@@ -552,6 +580,8 @@ class SpectrometerMainWindow(QMainWindow):
         # Recording controls
         record_group = QGroupBox("Recording")
         record_layout = QHBoxLayout(record_group)
+        record_layout.setContentsMargins(12, 12, 12, 12)
+        record_layout.setSpacing(8)
         
         self.record_button = QPushButton("Start Recording")
         self.save_button = QPushButton("Save Spectrum")
@@ -566,8 +596,9 @@ class SpectrometerMainWindow(QMainWindow):
         # Add panels to splitter
         splitter.addWidget(left_widget)
         splitter.addWidget(right_widget)
-        splitter.setStretchFactor(0, 1)
-        splitter.setStretchFactor(1, 2)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([680, 720])
     
     def setup_connections(self):
         """Setup signal connections"""
