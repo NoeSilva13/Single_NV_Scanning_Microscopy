@@ -1,291 +1,369 @@
 """
-Auto-focus widgets for the Napari Scanning SPD application.
+Z-axis scan widget for the Napari Scanning SPD application.
 
-Contains:
-- Auto-focus control widget
-- Signal bridge for thread-safe GUI updates
-- Focus plot widget creation function
-- Progress bar for auto-focus process
+Contains a self-contained ``AutoFocusWidget`` (pyqtgraph) with a "Scan Z"
+button and result plot, plus the hardware-timed linear Z-sweep logic.
+Z range, resolution and dwell time come from the Scan Parameters panel
+(``scan_params_manager``), not from fields on this widget.
 """
 
 import threading
-import time
+
 import numpy as np
-from qtpy.QtCore import QObject, Signal as pyqtSignal
-from magicgui import magicgui
+import pyqtgraph as pg
+from qtpy.QtCore import Qt, Signal as pyqtSignal
+from qtpy.QtWidgets import QWidget, QVBoxLayout, QPushButton
 from napari.utils.notifications import show_info
-from plot_widgets.single_axis_plot import SingleAxisPlot
-from utils import PIEZO_COARSE_STEP, PIEZO_FINE_STEP, PIEZO_FINE_RANGE
+
+from scanning_core import run_hardware_timed_sweep, counts_to_rate
 
 
-class SignalBridge(QObject):
-    """Bridge to safely create and add widgets from background threads"""
-    # Payload: coarse_pos, coarse_counts, fine_pos, fine_counts, dock_name
-    update_focus_plot_signal = pyqtSignal(list, list, list, list, str)
-    update_progress_signal = pyqtSignal(int, str)
-    show_progress_signal = pyqtSignal()
-    hide_progress_signal = pyqtSignal()
-    update_z_control_signal = pyqtSignal()
-    notify_signal = pyqtSignal(str)
-    
-    def __init__(self, viewer):
-        super().__init__()
-        self.viewer = viewer
-        self.update_focus_plot_signal.connect(self._update_focus_plot)
-        self.update_progress_signal.connect(self._update_progress)
-        self.show_progress_signal.connect(self._show_progress)
-        self.hide_progress_signal.connect(self._hide_progress)
-        self.update_z_control_signal.connect(self._update_z_control)
-        self.notify_signal.connect(self._on_notify)
-        self.focus_plot_widget = None
-        self.focus_dock_widget = None
+def _sweep_phase(tagger, z_controller, positions, rate, stage,
+                 plot_callback, stop_check, task_ref, cbm_ref, lock):
+    """Run one hardware-timed Z sweep over ``positions`` and return count rates.
+
+    The positions (micrometers) are converted to EXT IN voltages and clocked
+    out on the piezo analog-output channel; CountBetweenMarkers counts photons
+    between clock edges (one value per position). ``plot_callback`` is called
+    during the sweep with the accumulated ``(stage, positions, rates)`` so the
+    caller can plot the data in real time.
+    """
+    voltages = np.array([[z_controller.position_to_voltage(p) for p in positions]])
+
+    def _on_progress(counts, bin_widths):
+        if plot_callback is None:
+            return
+        done = int(np.count_nonzero(np.asarray(bin_widths) > 0))
+        done = min(done, len(positions))
+        if done > 0:
+            rates = counts_to_rate(counts, bin_widths)
+            plot_callback(stage, list(positions[:done]), list(rates[:done]))
+
+    counts, bin_widths = run_hardware_timed_sweep(
+        tagger,
+        [z_controller.ao_channel],
+        voltages,
+        rate,
+        on_progress=_on_progress,
+        stop_check=stop_check,
+        task_ref=task_ref,
+        cbm_ref=cbm_ref,
+        lock=lock,
+    )
+    return counts_to_rate(counts, bin_widths)
+
+
+def run_z_sweep(tagger,
+                z_controller,
+                positions,
+                dwell_time,
+                plot_callback=None,
+                stop_check=None,
+                task_ref=None,
+                cbm_ref=None,
+                lock=None):
+    """Run a single hardware-timed linear Z sweep.
+
+    Parameters
+    ----------
+    tagger : TimeTagger.TimeTagger
+        Time Tagger instance.
+    z_controller : DAQZController
+        Controller exposing ``position_to_voltage``, ``set_position(um)``,
+        ``max_travel`` and ``ao_channel``.
+    positions : sequence of float
+        Z positions in micrometers to visit (e.g. from ``np.linspace``).
+    dwell_time : float
+        Per-point integration time in seconds (clock period = ``1/dwell_time``).
+    plot_callback : Optional[Callable[[str, list, list], None]]
+        Called during the sweep with ``(stage, positions, rates)`` accumulated
+        so far, for real-time plotting.
+    stop_check : Optional[Callable[[], bool]]
+        Returns True to abort the sweep early.
+    task_ref, cbm_ref, lock :
+        Passed through to ``run_hardware_timed_sweep`` for Stop integration.
+
+    Returns
+    -------
+    Tuple[list, list]
+        (positions, count_rates)
+    """
+    positions = list(positions)
+    if not positions:
+        return [], []
+
+    rate = 1.0 / dwell_time
+    print(f"Starting Z scan ({len(positions)} points, dwell={dwell_time*1e3:.1f} ms)...")
+    rates = _sweep_phase(
+        tagger, z_controller, positions, rate, "Z Scan",
+        plot_callback, stop_check, task_ref, cbm_ref, lock
+    )
+    print("Z scan complete.")
+    return positions, list(rates)
+
+
+class AutoFocusWidget(QWidget):
+    """Scan Z panel: start button and pyqtgraph result plot.
+
+    Parameters (Z min/max, resolution, dwell) are read from
+    ``scan_params_manager`` (Scan Parameters widget), not from this UI.
+    The sweep does not move the piezo to the peak; it leaves Z at the last
+    commanded point of the ramp (Z max).
+    """
+
+    # Cross-thread signals (emitted from the worker, handled on the main thread).
+    _live_signal = pyqtSignal(str, list, list)
+    _plot_signal = pyqtSignal(list, list)
+    _notify_signal = pyqtSignal(str)
+    _zupdate_signal = pyqtSignal()
+    _finished_signal = pyqtSignal()
+
+    def __init__(self, tagger, z_controller, scan_params_manager,
+                 scan_lock, scan_in_progress, stop_scan_requested,
+                 scan_task_ref, cbm_ref,
+                 bg_color='#262930', parent=None):
+        super().__init__(parent)
+        self.tagger = tagger
+        self.z_controller = z_controller
+        self.scan_params_manager = scan_params_manager
+        self.scan_lock = scan_lock
+        self.scan_in_progress = scan_in_progress
+        self.stop_scan_requested = stop_scan_requested
+        self.scan_task_ref = scan_task_ref
+        self.cbm_ref = cbm_ref
+        # Optional piezo control widget refreshed after a successful scan.
         self.z_control_widget = None
-    
-    def _update_focus_plot(self, coarse_pos, coarse_counts, fine_pos, fine_counts, name):
-        """Update the focus plot widget from the main thread"""
-        # Create plot widget if it doesn't exist
-        if self.focus_plot_widget is None:
-            self.focus_plot_widget = create_focus_plot_widget(
-                coarse_pos, coarse_counts, fine_pos, fine_counts
+        # Optional callback invoked after a click-to-move on the Z plot so the
+        # rest of the app (global position state) can stay in sync.
+        # Signature: move_callback(z_um).
+        self.move_callback = None
+        # Last measured Z positions (µm), used to snap clicks to scanned points.
+        self.last_scan_points = []
+
+        self._live_signal.connect(self._on_live)
+        self._plot_signal.connect(self._on_plot)
+        self._notify_signal.connect(show_info)
+        self._zupdate_signal.connect(self._on_zupdate)
+        self._finished_signal.connect(self._on_finished)
+
+        self._build_ui(bg_color)
+
+    # ------------------------------------------------------------------
+    # UI
+    # ------------------------------------------------------------------
+    def _build_ui(self, bg_color):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+        self.setLayout(layout)
+
+        self.focus_btn = QPushButton('🔍 Scan Z')
+        self.focus_btn.clicked.connect(self._start)
+        layout.addWidget(self.focus_btn)
+
+        self.plot_widget = pg.PlotWidget()
+        self.plot_widget.setBackground(bg_color)
+        self.plot_item = self.plot_widget.getPlotItem()
+        # Disable mouse pan/zoom (left-drag would move the whole plot) so the
+        # left click is used only for click-to-move, matching the X/Y tabs.
+        self.plot_item.setMouseEnabled(x=False, y=False)
+        self.plot_item.setMenuEnabled(True)
+        self.plot_item.hideButtons()
+        self.plot_item.showGrid(x=True, y=True, alpha=0.3)
+        self.plot_item.setLabel('bottom', 'Z Position (µm)', color='white')
+        self.plot_item.setLabel('left', 'Counts', color='white')
+        for axis_name in ('left', 'bottom'):
+            axis = self.plot_item.getAxis(axis_name)
+            axis.setTextPen('white')
+            axis.setPen('white')
+        self.curve = self.plot_item.plot(
+            [], [], pen=pg.mkPen('#00ff00', width=1),
+            symbol='o', symbolSize=5, symbolBrush='#00ff00'
+        )
+        self.peak_marker = self.plot_item.plot(
+            [], [], pen=None, symbol='o', symbolSize=12,
+            symbolBrush=None, symbolPen=pg.mkPen('red', width=2)
+        )
+        # Vertical line marking the last clicked (selected) Z position.
+        self.sel_line = pg.InfiniteLine(
+            angle=90, movable=False,
+            pen=pg.mkPen('#ffaa00', width=1, style=Qt.PenStyle.DashLine)
+        )
+        self.sel_line.setVisible(False)
+        self.plot_item.addItem(self.sel_line)
+        # Click-to-move: map the clicked X (µm) to a piezo Z position.
+        self.plot_widget.scene().sigMouseClicked.connect(self._on_plot_clicked)
+        # Let the plot expand to fill the tab so the Z tab matches X/Y.
+        self.plot_widget.setMinimumHeight(160)
+        layout.addWidget(self.plot_widget)
+
+    # ------------------------------------------------------------------
+    # Worker control
+    # ------------------------------------------------------------------
+    def _start(self):
+        if self.scan_in_progress[0]:
+            show_info('⚠️ A scan is already in progress')
+            return
+        self.focus_btn.setEnabled(False)
+        # Clear previous traces so the new sweep plots from scratch in real time.
+        self.curve.setData([], [])
+        self.peak_marker.setData([], [])
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        # Acquire exclusive access to the DAQ AO engine / Time Tagger clock.
+        with self.scan_lock:
+            if self.scan_in_progress[0]:
+                self._notify_signal.emit('⚠️ A scan is already in progress')
+                self._finished_signal.emit()
+                return
+            self.scan_in_progress[0] = True
+            self.stop_scan_requested[0] = False
+
+        # Remember the Z position before the sweep so we can return there
+        # afterwards instead of leaving the piezo at the end of the ramp.
+        z_before = self.z_controller.position
+
+        try:
+            self._notify_signal.emit('🔍 Starting Z scan...')
+
+            if not self.z_controller.available:
+                self._notify_signal.emit('❌ Z control via DAQ not available')
+                return
+
+            params = self.scan_params_manager.get_params()
+            z_scan = params['z_scan']
+            z_min, z_max = z_scan['range']
+            z_res = int(z_scan['resolution'])
+            dwell_time = float(z_scan['dwell_time'])
+
+            if z_max <= z_min:
+                self._notify_signal.emit('❌ Z Max must be greater than Z Min')
+                return
+            if z_res < 2:
+                self._notify_signal.emit('❌ Z Resolution must be at least 2')
+                return
+
+            positions = np.linspace(z_min, z_max, z_res)
+
+            def plot_callback(stage, pos, rates):
+                self._live_signal.emit(stage, pos, rates)
+
+            positions, rates = run_z_sweep(
+                self.tagger,
+                self.z_controller,
+                positions,
+                dwell_time,
+                plot_callback=plot_callback,
+                stop_check=lambda: self.stop_scan_requested[0],
+                task_ref=self.scan_task_ref,
+                cbm_ref=self.cbm_ref,
+                lock=self.scan_lock,
             )
-            self.focus_dock_widget = self.viewer.window.add_dock_widget(
-                self.focus_plot_widget, 
-                area='right', 
-                name=name
-            )
+
+            self._plot_signal.emit(list(positions), list(rates))
+
+            if self.stop_scan_requested[0]:
+                self._notify_signal.emit('🛑 Z scan stopped by user')
+                return
+
+            peak_x, _ = self._peak(positions, rates)
+            if peak_x is not None:
+                self._notify_signal.emit(
+                    f'✅ Z scan done. Peak at Z = {peak_x:.2f} µm'
+                )
+            else:
+                self._notify_signal.emit('✅ Z scan done')
+
+        except Exception as e:
+            self._notify_signal.emit(f'❌ Z scan error: {str(e)}')
+        finally:
+            # Return the piezo to its pre-sweep position (not the ramp's Z max).
+            # The hardware-timed task has released ao2 by now, so the ephemeral
+            # set_position write is safe.
+            try:
+                if self.z_controller.available:
+                    self.z_controller.set_position(z_before)
+                    self._zupdate_signal.emit()
+            except Exception as e:
+                self._notify_signal.emit(f'⚠️ Failed to restore Z: {e}')
+            with self.scan_lock:
+                self.scan_in_progress[0] = False
+            self._finished_signal.emit()
+
+    # ------------------------------------------------------------------
+    # Main-thread slots
+    # ------------------------------------------------------------------
+    def _on_live(self, stage, positions, rates):
+        """Plot accumulated points in real time."""
+        self.curve.setData(positions, rates)
+        self.last_scan_points = list(positions)
+        self._refresh_peak_marker()
+
+    def _on_plot(self, positions, rates):
+        self.curve.setData(positions, rates)
+        self.last_scan_points = list(positions)
+        self._refresh_peak_marker()
+
+    def _refresh_peak_marker(self):
+        """Mark the peak of the Z curve."""
+        peak_x, peak_y = self._peak(*self.curve.getData())
+        if peak_x is None:
+            self.peak_marker.setData([], [])
         else:
-            _plot_focus_results(
-                self.focus_plot_widget, coarse_pos, coarse_counts, fine_pos, fine_counts
-            )
-    
-    def _update_progress(self, value, text):
-        """Update the progress bar from the main thread"""
-        if self.focus_plot_widget and hasattr(self.focus_plot_widget, 'update_progress'):
-            self.focus_plot_widget.update_progress(value, text)
-    
-    def _show_progress(self):
-        """Show the progress bar from the main thread"""
-        if self.focus_plot_widget and hasattr(self.focus_plot_widget, 'show_progress'):
-            self.focus_plot_widget.show_progress()
-    
-    def _hide_progress(self):
-        """Hide the progress bar from the main thread"""
-        if self.focus_plot_widget and hasattr(self.focus_plot_widget, 'hide_progress'):
-            self.focus_plot_widget.hide_progress()
-    
-    def _update_z_control(self):
-        """Update the Z control widget from the main thread"""
-        if self.z_control_widget:
+            self.peak_marker.setData([peak_x], [peak_y])
+
+    def _on_zupdate(self):
+        if self.z_control_widget is not None:
             self.z_control_widget._update_ui_with_current_position()
 
-    def _on_notify(self, msg):
-        """Show notification on the main thread"""
-        show_info(msg)
+    def _on_finished(self):
+        self.focus_btn.setEnabled(True)
 
+    # ------------------------------------------------------------------
+    # Click-to-move
+    # ------------------------------------------------------------------
+    def _on_plot_clicked(self, event):
+        """Move the piezo Z to the clicked position on the plot (micrometers)."""
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        if self.scan_in_progress[0]:
+            show_info('⚠️ Scan in progress; click-to-move ignored')
+            return
+        if not self.z_controller.available:
+            show_info('❌ Z control via DAQ not available')
+            return
 
+        vb = self.curve.getViewBox()
+        scene_pos = event.scenePos()
+        if vb is None or not vb.sceneBoundingRect().contains(scene_pos):
+            return
+        z_um = float(vb.mapSceneToView(scene_pos).x())
 
+        # Snap to the nearest measured point if a scan has been run.
+        if self.last_scan_points:
+            arr = np.asarray(self.last_scan_points, dtype=float)
+            z_um = float(arr[int(np.argmin(np.abs(arr - z_um)))])
+        z_um = self.z_controller.clamp_um(z_um)
 
+        try:
+            self.z_controller.set_position(z_um)
+        except Exception as e:
+            show_info(f'❌ Error moving Z: {str(e)}')
+            return
 
-def run_focus_sweep(z_controller,
-                    count_function,
-                    progress_callback=None,
-                    coarse_step=PIEZO_COARSE_STEP,
-                    fine_step=PIEZO_FINE_STEP,
-                    fine_range=PIEZO_FINE_RANGE,
-                    settling_time=0.1):
-    """Find the optimal Z position by sweeping the piezo and measuring counts.
+        self.sel_line.setValue(z_um)
+        self.sel_line.setVisible(True)
+        self._on_zupdate()
+        if self.move_callback is not None:
+            self.move_callback(z_um)
 
-    Performs a coarse sweep over the full travel followed by an optional fine
-    sweep around the coarse peak. Movement is delegated to ``z_controller``
-    (which commands the piezo via DAQ analog output), keeping this routine
-    hardware-agnostic.
-
-    Parameters
-    ----------
-    z_controller : DAQZController
-        Controller exposing ``set_position(um)`` and ``max_travel``.
-    count_function : Callable[[], float]
-        Returns the current photon count/count-rate.
-    progress_callback : Optional[Callable[[int, int, str, float, float], None]]
-        Signature: (current_step, total_steps, stage, position, counts).
-    coarse_step, fine_step, fine_range : float
-        Sweep parameters in micrometers.
-    settling_time : float
-        Seconds to wait after each move before measuring.
-
-    Returns
-    -------
-    Tuple[list, list, list, list, float]
-        (coarse_positions, coarse_counts, fine_positions, fine_counts, optimal_position)
-    """
-    max_pos = z_controller.max_travel
-
-    # Coarse sweep positions across the full travel.
-    coarse_positions = []
-    pos = 0.0
-    while pos <= max_pos:
-        coarse_positions.append(pos)
-        pos += coarse_step
-
-    total_coarse_steps = len(coarse_positions)
-    # Rough estimate of fine steps for the initial progress total.
-    total_fine_steps = int(fine_range / fine_step) + 1
-    total_steps = total_coarse_steps + total_fine_steps
-    current_step = 0
-
-    coarse_counts = []
-    print("Starting coarse auto-focus scan...")
-    for coarse_pos in coarse_positions:
-        z_controller.set_position(coarse_pos)
-        time.sleep(settling_time)
-        count = count_function()
-        coarse_counts.append(count)
-        current_step += 1
-        if progress_callback:
-            progress_callback(current_step, total_steps, "Coarse Scan", coarse_pos, count)
-
-    coarse_optimal_pos = coarse_positions[int(np.argmax(coarse_counts))]
-    print(f"Coarse scan complete. Peak found at {coarse_optimal_pos:.1f} µm")
-
-    # Fine sweep around the coarse peak.
-    print("Starting fine-tuning scan...")
-    fine_start = max(0.0, coarse_optimal_pos - fine_range / 2)
-    fine_end = min(max_pos, coarse_optimal_pos + fine_range / 2)
-
-    fine_positions = []
-    fine_pos = fine_start
-    while fine_pos <= fine_end:
-        fine_positions.append(fine_pos)
-        fine_pos += fine_step
-
-    total_fine_steps = len(fine_positions)
-    total_steps = total_coarse_steps + total_fine_steps
-
-    fine_counts = []
-    for i, position in enumerate(fine_positions):
-        z_controller.set_position(position)
-        time.sleep(settling_time)
-        count = count_function()
-        fine_counts.append(count)
-        current_step = total_coarse_steps + i + 1
-        if progress_callback:
-            progress_callback(current_step, total_steps, "Fine Scan", position, count)
-
-    optimal_pos = fine_positions[int(np.argmax(fine_counts))]
-    print(f"Fine scan complete. Refined peak found at {optimal_pos:.2f} µm")
-
-    # Move to the final optimal position.
-    z_controller.set_position(optimal_pos)
-    time.sleep(settling_time)
-    if progress_callback:
-        progress_callback(
-            total_steps, total_steps, "Complete", optimal_pos, max(fine_counts)
-        )
-    print(f"Auto-focus complete. Final position: {optimal_pos:.2f} µm")
-
-    return coarse_positions, coarse_counts, fine_positions, fine_counts, optimal_pos
-
-
-def auto_focus(counter, binwidth, signal_bridge, z_controller):
-    """Factory function to create auto_focus widget with dependencies
-    
-    Parameters
-    ----------
-    counter : TimeTagger.Counter
-        Counter object for photon counting
-    binwidth : int
-        Bin width for photon counting
-    signal_bridge : SignalBridge
-        Bridge for thread-safe GUI updates
-    z_controller : DAQZController
-        DAQ-based Z (piezo) controller instance (required)
-    """
-    
-    @magicgui(call_button="🔍 Auto Focus")
-    def _auto_focus():
-        """Automatically find the optimal Z position by scanning for maximum signal"""
-        def run_auto_focus():
-            try:
-                signal_bridge.notify_signal.emit('🔍 Starting Z scan...')
-                signal_bridge.show_progress_signal.emit()
-                
-                if not z_controller.available:
-                    signal_bridge.notify_signal.emit('❌ Z control via DAQ not available')
-                    signal_bridge.hide_progress_signal.emit()
-                    return
-                
-                try:
-                    # Create progress callback function
-                    def progress_callback(current_step, total_steps, stage, position=None, counts=None):
-                        progress_percent = int((current_step / total_steps) * 100)
-                        if position is not None and counts is not None:
-                            status_text = f'{stage}: Position {position:.1f} µm, Counts: {counts:.0f}'
-                        else:
-                            status_text = f'{stage}: Step {current_step}/{total_steps}'
-                        signal_bridge.update_progress_signal.emit(progress_percent, status_text)
-                    
-                    # Get count data using the counter
-                    count_function = lambda: counter.getData()[0][0]/(binwidth/1e12)
-                    coarse_pos, coarse_counts, fine_pos, fine_counts, optimal_pos = run_focus_sweep(
-                        z_controller,
-                        count_function,
-                        progress_callback=progress_callback
-                    )
-                    
-                    signal_bridge.notify_signal.emit(f'✅ Focus optimized at Z = {optimal_pos} µm')
-                    signal_bridge.update_focus_plot_signal.emit(
-                        coarse_pos, coarse_counts, fine_pos, fine_counts, 'Auto-Focus Plot'
-                    )
-                    signal_bridge.update_z_control_signal.emit()  # Update Z control widget
-                    
-                finally:
-                    signal_bridge.hide_progress_signal.emit()
-                
-            except Exception as e:
-                signal_bridge.notify_signal.emit(f'❌ Auto-focus error: {str(e)}')
-                signal_bridge.hide_progress_signal.emit()
-        
-        threading.Thread(target=run_auto_focus, daemon=True).start()
-    
-    return _auto_focus
-
-
-def _plot_focus_results(plot_widget, coarse_pos, coarse_counts, fine_pos, fine_counts):
-    """Plot coarse and fine sweeps as separate series (no connecting line)."""
-    plot_widget.plot_data(
-        x_data=[],
-        y_data=[],
-        x_label='Z Position (µm)',
-        y_label='Counts',
-        title='Auto-Focus Results',
-        mark_peak=len(fine_counts) > 0 or len(coarse_counts) > 0,
-        series=[
-            {"x": coarse_pos, "y": coarse_counts, "label": "Coarse", "color": "#90a4ae"},
-            {"x": fine_pos, "y": fine_counts, "label": "Fine", "color": "#00ff00"},
-        ],
-    )
-
-
-def create_focus_plot_widget(coarse_pos, coarse_counts, fine_pos=None, fine_counts=None):
-    """
-    Creates a plot widget to display auto-focus results using SingleAxisPlot
-    
-    Parameters
-    ----------
-    coarse_pos, coarse_counts : list
-        Coarse Z sweep data
-    fine_pos, fine_counts : list, optional
-        Fine Z sweep data (empty/None until a scan completes)
-    
-    Returns
-    -------
-    SingleAxisPlot
-        A widget containing the focus plot with integrated progress bar
-    """
-    if fine_pos is None:
-        fine_pos = []
-    if fine_counts is None:
-        fine_counts = []
-    plot_widget = SingleAxisPlot(show_progress_bar=True)
-    _plot_focus_results(plot_widget, coarse_pos, coarse_counts, fine_pos, fine_counts)
-    return plot_widget 
+    @staticmethod
+    def _peak(x, y):
+        if x is None or y is None:
+            return None, None
+        arr = np.asarray(y, dtype=float)
+        if arr.size == 0 or np.all(np.isnan(arr)):
+            return None, None
+        idx = int(np.nanargmax(arr))
+        return float(x[idx]), float(arr[idx])

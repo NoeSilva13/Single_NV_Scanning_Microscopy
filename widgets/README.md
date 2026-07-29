@@ -9,10 +9,10 @@ widgets/
 ├── __init__.py              # Package initialization and exports
 ├── scan_controls.py         # Scan control widgets (new scan, reset zoom, etc.)
 ├── camera_controls.py       # Camera control widgets and threads
-├── auto_focus.py           # Auto-focus functionality and signal bridge
+├── auto_focus.py           # Scan Z tab (pyqtgraph plot + button) & linear Z-sweep logic
 ├── single_axis_scan.py     # Single axis scan widget
 ├── file_operations.py      # File loading/saving widgets
-├── piezo_controls.py      # Manual Z position widget (DAQ ao2 → piezo EXT IN)
+├── axis_controls.py       # Manual X/Y/Z position widget (galvo ao0/ao1 + piezo ao2)
 └── README.md               # This file
 ```
 
@@ -39,14 +39,11 @@ from widgets.camera_controls import (
     create_camera_control_widget
 )
 
-from widgets.auto_focus import (
-    auto_focus,
-    SignalBridge
-)
+from widgets.auto_focus import AutoFocusWidget
 
 from widgets.single_axis_scan import SingleAxisScanWidget
 from widgets.file_operations import load_scan
-from widgets.piezo_controls import PiezoControlWidget
+from widgets.axis_controls import AxisControlWidget
 ```
 
 ### Widget Factory Functions
@@ -62,13 +59,12 @@ Most widgets are implemented as factory functions that take dependencies as para
 
 ```python
 # Dependencies
-scan_pattern_func = my_scan_function
-scan_points_manager = ScanPointsManager(scan_params_manager)
+run_scan_func = run_selected_scan  # mode-aware dispatch (XY/XZ/YZ/XYZ)
 shapes_layer = viewer.layers['shapes']
 bridge = GUIBridge()  # from thread_safe_bridge, for thread-safe UI updates
 
 # Create widget
-new_scan_widget = new_scan(scan_pattern_func, scan_points_manager, shapes_layer, bridge, scan_in_progress=[False])
+new_scan_widget = new_scan(run_scan_func, shapes_layer, bridge, scan_in_progress=[False])
 
 # Add to viewer
 viewer.window.add_dock_widget(new_scan_widget, area="bottom")
@@ -88,7 +84,7 @@ class ScanParametersManager:
     def update_scan_parameters(self, x_range=None, y_range=None, x_res=None, y_res=None, dwell_time=None)
 
 class ScanPointsManager:
-    """Manages the X/Y voltage linspace grids used for scanning"""
+    """Manages the X/Y micrometer linspace grids used for scanning"""
     def __init__(self, scan_params_manager)
     def update_points(self, x_range=None, y_range=None, x_res=None, y_res=None)
     def get_points(self)
@@ -105,9 +101,9 @@ class ZoomLevelManager:
 
 ### Scan Controls (`scan_controls.py`)
 
-- **`new_scan(scan_pattern_func, scan_points_manager, shapes, bridge=None, scan_in_progress=None)`**
+- **`new_scan(run_scan_func, shapes, bridge=None, scan_in_progress=None)`**
   - Creates a "🔬 New Scan" button widget
-  - Runs the scan in a background thread; clears the zoom-region shape when done
+  - Calls `run_scan_func()` (mode-aware dispatch, e.g. `run_selected_scan` for XY/XZ/YZ/XYZ) in a background thread; clears the zoom-region shape when done
 
 - **`close_scanner(output_task)`**
   - Creates a "🎯 Set to Zero" button widget
@@ -117,13 +113,15 @@ class ZoomLevelManager:
   - Creates a "📷 Save Image" button widget
   - Screenshots the current napari canvas, named after the last saved scan's data path
 
-- **`reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points_manager, shapes, update_scan_parameters_func, update_scan_parameters_widget_func, zoom_level_manager, bridge=None, scan_in_progress=None)`**
+- **`reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points_manager, shapes, update_scan_parameters_func, update_scan_parameters_widget_func, zoom_level_manager, bridge=None, scan_in_progress=None, run_scan_points_func=None)`**
   - Creates a "🔄 Reset Zoom" button widget
   - Returns to the original (level-0) scan range and resets zoom level to 0
+  - Mode-aware: history entries are `(mode, axis_names, [fast_pts, slow_pts])` (a legacy `(x_pts, y_pts)` tuple is still accepted as XY). For non-XY modes it restores the original view via `run_scan_points_func(mode, axis_names, points_list)`
 
-- **`update_scan_parameters(scan_params_manager, scan_points_manager)`**
-  - Returns a `ScanParametersWidget` (`QWidget`) with X/Y range, resolution, and dwell-time spinboxes (plus live µm distance labels)
-  - Registers itself as the `scan_params_manager`'s widget instance
+- **`update_scan_parameters(scan_params_manager)`**
+  - Returns a `ScanParametersWidget` (`QWidget`) with a **Scan Mode** selector (XY/XZ/YZ/XYZ), X/Y/Z range and resolution spinboxes (all in µm), and XY/Z dwell-time fields; Z fields are exposed via `get_parameters()['z_scan']` and the mode via `get_parameters()['scan_mode']`
+  - All positions are returned in micrometers (canonical unit); the µm↔V conversion is deferred to the DAQ boundary
+  - Registers itself as the `scan_params_manager`'s widget instance; values are applied live (New Scan syncs XY points from the spinboxes at start; no Apply button)
 
 - **`update_scan_parameters_widget(widget_instance, scan_params_manager, bridge=None)`**
   - Returns a callback that refreshes the parameter widget's displayed values from the manager; marshals to the main thread via `bridge` if provided
@@ -151,28 +149,30 @@ class ZoomLevelManager:
 - **`create_camera_control_widget(viewer)`**
   - Factory that wires `camera_live`, `capture_shot`, and `CameraControlWidget` together into one ready-to-dock widget (this is what `confocal_main_control.py` actually imports)
 
-### Auto Focus (`auto_focus.py`)
+### Scan Z / Auto Focus (`auto_focus.py`)
 
-- **`run_focus_sweep(z_controller, count_function, progress_callback=None, ...)`**
-  - Coarse + fine Z sweep that maximizes SPD count rate
-  - Moves via `DAQZController.set_position`; returns `(positions, counts, optimal_pos)`
+- **`run_z_sweep(tagger, z_controller, positions, dwell_time, plot_callback=None, ...)`**
+  - Single linear Z sweep over the given positions (µm)
+  - Hardware-timed piezo ramp on `ao2`; photons are counted per point by `CountBetweenMarkers` (via `scanning_core.run_hardware_timed_sweep`)
+  - `plot_callback(stage, positions, rates)` is invoked during the sweep with the accumulated data for real-time plotting
+  - Returns `(positions, count_rates)`; does **not** move the piezo to the peak
 
-- **`auto_focus(counter, binwidth, signal_bridge, z_controller)`**
-  - Creates "🔍 Auto Focus" button widget
-  - Runs `run_focus_sweep` in a background thread and updates the focus plot / Z widget
-
-- **`SignalBridge(viewer)`**
-  - Thread-safe `QObject` bridge for GUI updates emitted from the auto-focus worker thread
-  - Handles focus-plot creation/updates and forwards Z position updates to the piezo control widget (`z_control_widget`)
-
-- **`create_focus_plot_widget(positions, counts)`**
-  - Creates a `SingleAxisPlot`-based plot widget (from `plot_widgets`) for auto-focus results
+- **`AutoFocusWidget(tagger, z_controller, scan_params_manager, scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref)`**
+  - Compact `QWidget` with a **"🔍 Scan Z"** button and a **pyqtgraph** result plot (single green curve + red peak marker)
+  - Reads Z Min / Z Max / Z Resolution / Z Dwell from `scan_params_manager` (Scan Parameters panel), builds `np.linspace(z_min, z_max, z_res)`, and runs `run_z_sweep` in a background thread
+  - Mutually exclusive with the raster/single-axis scans via the shared `scan_lock`/`scan_in_progress`; uses internal Qt signals for thread-safe UI updates
+  - Returns the piezo to its pre-sweep Z position when the sweep finishes (captured before the ramp), rather than leaving it at the ramp's Z max; notifies the detected peak without moving to it
+  - **Click-to-move**: left-clicking the plot moves the piezo Z to that position (snapping to the nearest measured point, clamped to travel), draws a selection line, refreshes the axis control widget, and fires the optional `move_callback(z_um)` so the app can sync `current_position_um['z']`. Mouse pan/zoom is disabled so the left click is used only for moving.
+  - Set `.z_control_widget` to have the axis control widget's Z position refreshed after a completed sweep or a click-to-move
 
 ### Single Axis Scan (`single_axis_scan.py`)
 
-- **`SingleAxisScanWidget(scan_params_manager, layer, output_task, counter, binwidth)`**
+- **`SingleAxisScanWidget(scan_params_manager, layer, output_task, tagger, galvo_controller, scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref)`**
   - Complete widget for 1D X/Y line scans at the current galvo position
-  - Includes scan buttons, a result plot (`SingleAxisPlot`), and `update_current_position(x, y)` for tracking the galvo's last commanded position
+  - Runs a hardware-timed AO ramp on the scanned galvo axis (holding the other fixed) with per-point photon counting via `CountBetweenMarkers` (`scanning_core.run_hardware_timed_sweep`); mutually exclusive with the raster/Scan Z scans
+  - Uses a `QTabWidget` with separate **X Axis** and **Y Axis** tabs; each tab holds its own scan button and a `pyqtgraph` result plot (with a red peak marker), and `update_current_position(x, y)` tracks the galvo's last commanded position
+  - **Click-to-move**: left-clicking a plot moves the galvo to that position on the tab's axis (snapping to the nearest measured point), draws a selection line, and fires the optional `move_callback(x_um, y_um)` so the app can sync `current_position_um` and the axis control widget. Mouse pan/zoom and the context menu are disabled so the left click is used only for moving.
+  - `add_z_tab(widget, title='Z Axis')` embeds an external panel (the `AutoFocusWidget`, whose button is labelled **"Scan Z"**) as a third tab so X/Y/Z line scans share one dock
 
 ### File Operations (`file_operations.py`)
 
@@ -180,16 +180,14 @@ class ZoomLevelManager:
   - Creates a "Load Scan" button widget
   - Opens a file dialog for `.npz` files, adds the loaded scan as a new napari layer at the correct physical scale, and optionally re-applies its saved parameters to the scan-parameters widget
 
-### Piezo Controls (`piezo_controls.py`)
+### Axis Controls (`axis_controls.py`)
 
-- **`PiezoControlWidget(z_controller)`**
-  - Manual Z-axis control via `DAQZController` (DAQ `ao2` → piezo EXT IN)
-  - Features:
-    - Debounced position spinbox (0–450 µm)
-    - Displays last commanded position (no analog readback)
-    - Spinbox disabled if the DAQ channel is unavailable at startup
-  - Size: 220x60 pixels
-  - Moves run in a short background thread so the GUI stays responsive
+- **`AxisControlWidget(axis_x, axis_y, z_controller, output_task, scan_in_progress, move_callback=None)`**
+  - Manual control for all three axes: galvo X/Y (written together through the persistent `output_task`) and piezo Z (via `DAQZController`, DAQ `ao2` → piezo EXT IN)
+  - Each axis has a synced slider (coarse drag) + spinbox (fine, 3 decimals / 0.001 µm); X/Y ranges come from the axes' `travel_um`, Z spans 0–450 µm
+  - Debounced (150 ms) moves run in a short background thread; refused while a scan owns the DAQ (`scan_in_progress`)
+  - Tracks the last commanded position (no analog readback); `refresh_positions(x, y, z)` updates the display without moving hardware (used on click-to-move and at end of a scan), and `move_callback(x, y, z)` lets the app mirror the new position into its own state
+  - `z_value()` returns the current Z spinbox value; `_update_ui_with_current_position()` refreshes Z after a Scan Z sweep
 
 ## Design Pattern: Factory Functions Over Globals
 

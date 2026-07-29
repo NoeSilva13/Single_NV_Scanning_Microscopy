@@ -17,13 +17,14 @@ Each application can be run independently and only requires the hardware/drivers
 ## ✨ Key capabilities
 
 ### Confocal Scan GUI (`confocal_main_control.py`)
+- **Multi-dimensional scanning (XY / XZ / YZ / XYZ)** selected via a **Scan Mode** dropdown that drives **New Scan**: 2D modes render an image, XYZ renders a 3D volume in napari, all through one generic N-axis raster engine (`raster_engine.py`). Every axis is calibrated in micrometers (canonical unit) through a shared `DAQAxis` abstraction (`daq_axis.py`); the µm→V conversion happens only at the DAQ boundary.
 - Live **XY raster scanning** with per-pixel, hardware-timed photon counting (NI-DAQ sample clock + Swabian TimeTagger `CountBetweenMarkers`).
 - **napari**-based viewer (zoom, pan, live contrast auto-scaling, scale bar in µm).
-- **Click-to-move** galvo positioning and rectangle **ROI zoom** (up to 9 nested zoom levels, with history/undo via "Reset Zoom").
-- Integrated **auto-focus** routine (coarse + fine piezo Z-sweep) and **single-axis line scans** along X or Y.
+- **Click-to-move** galvo positioning (on the scan image and on the single-axis line-scan plots) and rectangle **ROI zoom** (up to 9 nested zoom levels, with history/undo via "Reset Zoom").
+- Integrated **Scan Z** (linear piezo Z sweep) and **single-axis line scans** along X or Y, both hardware-timed with per-point photon counting via the DAQ clock + TimeTagger `CountBetweenMarkers` (shared `scanning_core.py`). Z min/max/resolution/dwell are set in the Scan Parameters panel.
 - Multi-backend **live camera preview** (POA / ZWO / USB webcam) and single-shot capture, docked in the viewer.
 - Real-time photon-count **strip-chart plot** with overflow indication.
-- Manual **Z-axis piezo control** widget (DAQ analog output `ao2` → piezo EXT IN) alongside the auto-focus routine.
+- Manual **X/Y/Z axis control** widget (slider + spinbox per axis) that also tracks the scanner's current position: galvo X/Y via the AO task, piezo Z via DAQ `ao2` → EXT IN. It updates on click-to-move and at the end of every scan.
 - Automatic data saving after every scan: `.csv` (metadata header), `.npz` (image + full metadata), `.tiff` (ImageJ/Fiji-compatible with scale calibration) and a `.png` heatmap.
 - **Load Scan** widget to reopen previously saved `.npz` scans at the correct physical scale.
 
@@ -62,7 +63,7 @@ Mandatory for confocal scans (`confocal_main_control.py`)
 - NI **USB-6453** DAQ (static + hardware-timed AO for galvos, sample clock export)
 - **Single-photon detector** (e.g. Excelitas SPCM-AQRH-10-FC)
 - **Swabian TimeTagger** (real, network, or virtual/replay fallback)
-- Optional: Thorlabs **piezo Z-stage** (initialized in closed loop by Thorlabs software; position commanded via DAQ `ao2` → EXT IN) for auto-focus; POA/ZWO/USB camera for live preview
+- Optional: Thorlabs **piezo Z-stage** (initialized in closed loop by Thorlabs software; position commanded via DAQ `ao2` → EXT IN) for Scan Z; POA/ZWO/USB camera for live preview
 
 Additional for ODMR / advanced timing (`odmr_gui_qt.py`)
 - **Swabian Pulse Streamer 8/2** (default IP `192.168.0.203`)
@@ -112,10 +113,10 @@ Actions inside the napari window:
 - "🔄 Reset Zoom" ⇒ return to the original field of view.
 - "🎯 Set to Zero" ⇒ return galvos to (0, 0) V.
 - "🛑 Stop Scan" ⇒ abort a running scan safely.
-- "Scan Parameters" dock ⇒ adjust voltage range / resolution / dwell time on-the-fly.
+- "Scan Parameters" dock ⇒ adjust XY voltage range / resolution / dwell and Z min/max/resolution/dwell on-the-fly.
 - "Camera Control" dock ⇒ switch between POA/ZWO/USB cameras, live view and single-shot capture.
-- "Single Axis Scan" dock ⇒ 1D line scans along X or Y at the current position.
-- Piezo control dock + "Auto Focus" ⇒ manual or automatic Z positioning.
+- "Single Axis Scan" dock ⇒ 1D line scans along X, Y, or Z (tabs) at the current position; left-click a point on an X/Y plot to move there.
+- "Axis Control" dock ⇒ manual X/Y/Z positioning (slider + spinbox) that mirrors the scanner's current position.
 
 ### 2. ODMR (continuous wave, Rabi, or T1)
 ```bash
@@ -143,10 +144,8 @@ The confocal system's calibration parameters and constants are centrally defined
 - `MICRONS_PER_VOLT = 24` - Galvo scanner calibration (µm/V); empirically re-measured per objective (comments in the file list values for other objectives, e.g. 130 for a 40x air objective, 51 for an oil objective).
 - `MAX_ZOOM_LEVEL = 9` - Maximum allowed nested zoom levels in the scanning interface.
 
-### Auto-Focus Parameters
-- `PIEZO_COARSE_STEP = 5.0` - Step size for coarse focus scan (µm)
-- `PIEZO_FINE_STEP = 0.5` - Step size for fine focus scan (µm)
-- `PIEZO_FINE_RANGE = 10.0` - Range around peak for fine scan (µm)
+### Z Scan Parameters
+Z Min (µm), Z Max (µm), Z Resolution (points), and Z Dwell Time (ms) are edited in the Scan Parameters dock. Defaults are 0–450 µm, 50 points, and 5 ms (increase for larger Z steps, as the piezo settles slower than the galvos). The Scan Z tab reads these via `scan_params_manager` and runs a single linear hardware-timed sweep.
 
 ### Z Piezo Analog Control (DAQ `ao2` → EXT IN)
 - `Z_UM_PER_VOLT = 45.0` - Closed-loop calibration (µm/V); 0–10 V maps to 0–450 µm
@@ -168,14 +167,15 @@ To modify these parameters:
 ---
 ## 📂 Data layout
 
-Confocal scans (via [data_manager.py](data_manager.py)):
+Confocal scans (via [data_manager.py](data_manager.py)), in a daily `mmddyy` folder with a shared, collision-free sequence number `mmddyy###`:
 ```
-YYYYMMDD/
- └─ scan_120530.csv     # photon counts + metadata header
- └─ scan_120530.npz     # image + scan config + points
- └─ scan_120530.tiff    # ImageJ/Fiji-compatible, scale-calibrated
- └─ scan_120530.png     # auto-saved heatmap figure
+072226/
+ └─ 072226001.csv     # photon counts + metadata header (2D modes: XY / XZ / YZ)
+ └─ 072226001.npz     # image/volume + per-axis µm metadata (all modes, incl. XYZ)
+ └─ 072226001.tiff    # ImageJ/Fiji-compatible, scale-calibrated (2D modes)
+ └─ 072226001.png     # auto-saved heatmap figure (2D modes)
 ```
+3D (XYZ) scans write only the `.npz` (image/volume + metadata); 2D modes (XY/XZ/YZ) additionally write `.csv`, `.tiff`, and `.png`.
 
 ODMR-family experiments (via [odmr_data_manager.py](odmr_data_manager.py)), one dated subfolder per experiment type (`odmr_contrast`, `rabi_contrast`, `t1_contrast`):
 ```
@@ -202,7 +202,10 @@ Single_NV_Scannig_Microscopy/
 ├─ data_manager.py               # DataManager: saves confocal scan CSVs with metadata
 ├─ odmr_data_manager.py          # ODMRDataManager: saves ODMR/Rabi/T1 CSVs per experiment type
 ├─ galvo_controller.py           # GalvoScannerController: NI-DAQ channel setup & voltage I/O
-├─ daq_z_controller.py           # DAQZController: NI-DAQ ao2 → piezo EXT IN for Z position
+├─ daq_axis.py                   # DAQAxis: per-axis µm↔V calibration, channel, travel/voltage limits
+├─ daq_z_controller.py           # DAQZController: DAQAxis subclass for the piezo (NI-DAQ ao2 → EXT IN)
+├─ scanning_core.py              # Shared hardware-timed AO + CountBetweenMarkers sweep primitive
+├─ raster_engine.py              # Generic N-axis raster (µm): waveform build, run, 2D/3D reconstruct
 ├─ plot_scan_results.py          # Thread-safe PNG heatmap export after each confocal scan
 ├─ thread_safe_bridge.py         # GUIBridge: marshal background-thread updates onto the Qt/napari main thread
 ├─ utils.py                      # Calibration constants + ImageJ-compatible TIFF export
@@ -210,14 +213,14 @@ Single_NV_Scannig_Microscopy/
 ├─ widgets/                      # Re-usable magicgui/Qt (qtpy) widgets for the confocal napari GUI
 │   ├─ scan_controls.py          #   New Scan / Stop / Reset Zoom / Scan Parameters panel
 │   ├─ camera_controls.py        #   Multi-backend (POA/ZWO/USB) live view + single shot
-│   ├─ auto_focus.py             #   Auto-focus sweep + button + thread-safe signal bridge
-│   ├─ single_axis_scan.py       #   1D X/Y line-scan widget with plot
+│   ├─ auto_focus.py             #   Scan Z tab: linear Z sweep + pyqtgraph plot
+│   ├─ single_axis_scan.py       #   1D X/Y/Z line-scan widget (pyqtgraph tabs)
 │   ├─ file_operations.py        #   Load a saved .npz scan back into napari
-│   └─ piezo_controls.py         #   Manual Z position widget (via DAQZController)
+│   └─ axis_controls.py          #   Manual X/Y/Z position widget (galvo + DAQZController)
 │
 ├─ plot_widgets/                 # Matplotlib plot widgets shared across apps
-│   ├─ single_axis_plot.py       #   Dark-themed 1D plot (auto-focus, line scans)
-│   ├─ live_plot_napari_widget.py#   Rolling strip-chart for live count rate (napari dock)
+│   ├─ single_axis_plot.py       #   Dark-themed 1D plot (single-axis line scans)
+│   ├─ live_plot_napari_widget.py#   pyqtgraph live count-rate plot with controls (napari dock)
 │   └─ pulse_pattern_visualizer.py# Pulse-timing diagram for ODMR/Rabi/T1 tabs
 │
 ├─ PulseBlaster/                 # Pulse Streamer & Rigol drivers + experiment logic

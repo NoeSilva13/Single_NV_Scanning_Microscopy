@@ -21,15 +21,14 @@ from .camera_controls import (
 )
 
 from .auto_focus import (
-    auto_focus,
-    SignalBridge,
-    create_focus_plot_widget
+    AutoFocusWidget,
+    run_z_sweep
 )
 
 from .single_axis_scan import SingleAxisScanWidget
 
 from .file_operations import load_scan
-from .piezo_controls import PiezoControlWidget
+from .axis_controls import AxisControlWidget
 
 __all__ = [
     # Scan controls
@@ -46,10 +45,9 @@ __all__ = [
     'CameraControlWidget',
     'CameraUpdateThread',
     
-    # Auto focus
-    'auto_focus',
-    'SignalBridge',
-    'create_focus_plot_widget',
+    # Auto focus / Scan Z
+    'AutoFocusWidget',
+    'run_z_sweep',
     
     # Single axis scan
     'SingleAxisScanWidget',
@@ -57,6 +55,6 @@ __all__ = [
     # File operations
     'load_scan',
     
-    # Piezo controls
-    'PiezoControlWidget'
+    # Manual axis controls
+    'AxisControlWidget'
 ] 

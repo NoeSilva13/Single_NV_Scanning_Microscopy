@@ -16,37 +16,49 @@ import numpy as np
 from magicgui import magicgui
 from napari.utils.notifications import show_info
 from utils import MICRONS_PER_VOLT
-from qtpy.QtWidgets import QWidget, QGridLayout, QLabel, QDoubleSpinBox, QSpinBox, QPushButton
 from qtpy.QtCore import Qt
+from qtpy.QtWidgets import (
+    QWidget, QGridLayout, QLabel, QDoubleSpinBox, QSpinBox, QComboBox
+)
+
+# Supported scan modes exposed by the New Scan selector.
+SCAN_MODES = ["XY", "XZ", "YZ", "XYZ"]
 
 
-def new_scan(scan_pattern_func, scan_points_manager, shapes, bridge=None, scan_in_progress=None):
-    """Factory function to create new_scan widget with dependencies"""
-    
+def new_scan(run_scan_func, shapes, bridge=None, scan_in_progress=None):
+    """Factory function to create the New Scan widget.
+
+    Args:
+        run_scan_func: Mode-aware callable (no args) that performs the scan
+            synchronously. It is dispatched on a background thread here.
+        shapes: Napari shapes layer cleared after the scan starts.
+    """
+
     @magicgui(call_button="🔬 New Scan")
     def _new_scan():
-        """Initiates a new scan using the current scan parameters from scan_points_manager.
-        Runs the scan in a separate thread to prevent UI freezing.
-        """
+        """Initiate a new scan using the current Scan Parameters (mode-aware)."""
         if scan_in_progress and scan_in_progress[0]:
             show_info("⚠️ A scan is already in progress")
             return
 
         def run_new_scan():
-            x_points, y_points = scan_points_manager.get_points()
-            scan_pattern_func(x_points, y_points)
+            run_scan_func()
             if bridge:
                 bridge.run_on_main(lambda: setattr(shapes, 'data', []))
             else:
                 shapes.data = []
         threading.Thread(target=run_new_scan, daemon=True).start()
         show_info("🔬 New scan started")
-    
+
     return _new_scan
 
 
-def close_scanner(output_task):
-    """Factory function to create close_scanner widget with dependencies"""
+def close_scanner(output_task, on_zero=None):
+    """Factory function to create close_scanner widget with dependencies.
+
+    ``on_zero`` is an optional callback invoked after the galvo reaches zero so
+    the caller can sync position state (e.g. refresh the axis control widget).
+    """
     
     @magicgui(call_button="🎯 Set to Zero")
     def _close_scanner():
@@ -55,6 +67,8 @@ def close_scanner(output_task):
         """
         def run_close():
             output_task.write([0, 0])
+            if on_zero is not None:
+                on_zero()
         
         threading.Thread(target=run_close, daemon=True).start()
         show_info("🎯 Scanner set to zero")
@@ -82,8 +96,15 @@ def save_image(viewer, data_path_func):
 
 def reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points_manager,
                shapes, update_scan_parameters_func, update_scan_parameters_widget_func,
-               zoom_level_manager, bridge=None, scan_in_progress=None):
-    """Factory function to create reset_zoom widget with dependencies"""
+               zoom_level_manager, bridge=None, scan_in_progress=None,
+               run_scan_points_func=None):
+    """Factory function to create reset_zoom widget with dependencies.
+
+    ``run_scan_points_func(mode, axis_names, points_list)`` lets Reset Zoom
+    restore the original view for non-XY modes (XZ / YZ). History entries are
+    mode-aware tuples ``(mode, axis_names, [fast_pts, slow_pts])``; a legacy
+    ``(x_pts, y_pts)`` tuple is still accepted and treated as XY.
+    """
     
     @magicgui(call_button="🔄 Reset Zoom")
     def _reset_zoom():
@@ -97,40 +118,66 @@ def reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points
         if scan_in_progress and scan_in_progress[0]:
             show_info("⚠️ A scan is already in progress")
             return
-        
-        if scan_history:
-            orig_x_points, orig_y_points = scan_history[0]
+
+        # Original (pre-zoom) grid is the bottom of the history stack.
+        entry = scan_history[0] if scan_history else None
+        if entry is not None and len(entry) == 3 and isinstance(entry[0], str):
+            orig_mode, orig_axes = entry[0], list(entry[1])
+            orig_fast = np.asarray(entry[2][0], dtype=float)
+            orig_slow = np.asarray(entry[2][1], dtype=float)
+        elif entry is not None:
+            orig_mode, orig_axes = 'XY', ['x', 'y']
+            orig_fast = np.asarray(entry[0], dtype=float)
+            orig_slow = np.asarray(entry[1], dtype=float)
         else:
             params = scan_params_manager.get_params()
             x_range = params['scan_range']['x']
             y_range = params['scan_range']['y']
             x_res = params['resolution']['x']
             y_res = params['resolution']['y']
-            orig_x_points = np.linspace(x_range[0], x_range[1], x_res)
-            orig_y_points = np.linspace(y_range[0], y_range[1], y_res)
+            orig_mode, orig_axes = 'XY', ['x', 'y']
+            orig_fast = np.linspace(x_range[0], x_range[1], x_res)
+            orig_slow = np.linspace(y_range[0], y_range[1], y_res)
         
         scan_history.clear()
         zoom_level_manager.set_zoom_level(0)
 
         def run_reset():
-            x_r = [orig_x_points[0], orig_x_points[-1]]
-            y_r = [orig_y_points[0], orig_y_points[-1]]
-            n_x = len(orig_x_points)
-            n_y = len(orig_y_points)
+            if orig_mode == 'XY':
+                x_r = [orig_fast[0], orig_fast[-1]]
+                y_r = [orig_slow[0], orig_slow[-1]]
+                n_x = len(orig_fast)
+                n_y = len(orig_slow)
 
-            if bridge:
-                bridge.run_on_main(lambda: update_scan_parameters_func(
-                    x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
-                ))
-            else:
-                update_scan_parameters_func(
+                if bridge:
+                    bridge.run_on_main(lambda: update_scan_parameters_func(
+                        x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
+                    ))
+                else:
+                    update_scan_parameters_func(
+                        x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
+                    )
+
+                scan_points_manager.update_points(
                     x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
                 )
-
-            scan_points_manager.update_points(
-                x_range=x_r, y_range=y_r, x_res=n_x, y_res=n_y
-            )
-            scan_pattern_func(orig_x_points, orig_y_points)
+                scan_pattern_func(orig_fast, orig_slow)
+            elif run_scan_points_func is not None:
+                # Sync the Scan Parameters widget for the restored axes (incl. Z).
+                def _axis_kwargs(name, pts):
+                    rng = [float(pts[0]), float(pts[-1])]
+                    if name == 'x':
+                        return {'x_range': rng, 'x_res': len(pts)}
+                    if name == 'y':
+                        return {'y_range': rng, 'y_res': len(pts)}
+                    return {'z_range': rng, 'z_res': len(pts)}
+                kwargs = {**_axis_kwargs(orig_axes[0], orig_fast),
+                          **_axis_kwargs(orig_axes[1], orig_slow)}
+                if bridge:
+                    bridge.run_on_main(lambda: update_scan_parameters_func(**kwargs))
+                else:
+                    update_scan_parameters_func(**kwargs)
+                run_scan_points_func(orig_mode, orig_axes, [orig_fast, orig_slow])
 
             if bridge:
                 bridge.run_on_main(lambda: setattr(shapes, 'data', []))
@@ -144,127 +191,122 @@ def reset_zoom(scan_pattern_func, scan_history, scan_params_manager, scan_points
     return _reset_zoom
 
 
-def update_scan_parameters(scan_params_manager, scan_points_manager):
-    """Factory function to create update_scan_parameters widget with dependencies"""
+def update_scan_parameters(scan_params_manager):
+    """Factory function to create the Scan Parameters widget.
+
+    Parameters are read live from the spinboxes via
+    ``scan_params_manager.get_params()``; New Scan rebuilds XY points from
+    those values at start time (no explicit Apply step).
+    """
     
     class ScanParametersWidget(QWidget):
         def __init__(self):
             super().__init__()
             self.scan_params_manager = scan_params_manager
-            self.scan_points_manager = scan_points_manager
             self.setup_ui()
             
         def setup_ui(self):
-            # Create the main layout
+            # Compact 3-column table: X / Y / Z as columns, and Min / Max /
+            # Resolution / Dwell as rows (units in the row labels).
             layout = QGridLayout()
-            
-            # Headers
-            layout.addWidget(QLabel("Parameter"), 0, 0)
-            layout.addWidget(QLabel("Voltage (V)"), 0, 1)
-            layout.addWidget(QLabel("Dist (µm)"), 0, 2)
-            
-            # Set default values directly in the widget
-            default_x_min = -1.0
-            default_x_max = 1.0
-            default_y_min = -1.0
-            default_y_max = 1.0
+            layout.setContentsMargins(6, 6, 6, 6)
+            layout.setHorizontalSpacing(6)
+            layout.setVerticalSpacing(4)
+
+            # All axes are edited and stored in micrometers (the canonical unit).
+            # The µm <-> volt conversion happens only at the DAQ boundary.
+            default_x_min = -1.0 * MICRONS_PER_VOLT
+            default_x_max = 1.0 * MICRONS_PER_VOLT
+            default_y_min = -1.0 * MICRONS_PER_VOLT
+            default_y_max = 1.0 * MICRONS_PER_VOLT
             default_x_res = 50
             default_y_res = 50
-            default_dwell_time = 0.001  # Default dwell time in seconds
-            
-            # X Min
-            layout.addWidget(QLabel("X Min:"), 1, 0)
-            self.x_min_spinbox = QDoubleSpinBox()
-            self.x_min_spinbox.setRange(-10, 10)
-            self.x_min_spinbox.setSingleStep(0.1)
-            self.x_min_spinbox.setDecimals(4)  # Increased precision for zoom accuracy
-            self.x_min_spinbox.setValue(default_x_min)
-            layout.addWidget(self.x_min_spinbox, 1, 1)
-            
-            self.x_min_label = QLabel(f"{default_x_min * MICRONS_PER_VOLT:.2f}")
-            self.x_min_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(self.x_min_label, 1, 2)
-            
-            # X Max
-            layout.addWidget(QLabel("X Max:"), 2, 0)
-            self.x_max_spinbox = QDoubleSpinBox()
-            self.x_max_spinbox.setRange(-10, 10)
-            self.x_max_spinbox.setSingleStep(0.1)
-            self.x_max_spinbox.setDecimals(4)  # Increased precision for zoom accuracy
-            self.x_max_spinbox.setValue(default_x_max)
-            layout.addWidget(self.x_max_spinbox, 2, 1)
-            
-            self.x_max_label = QLabel(f"{default_x_max * MICRONS_PER_VOLT:.2f}")
-            self.x_max_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(self.x_max_label, 2, 2)
-            
-            # Y Min
-            layout.addWidget(QLabel("Y Min:"), 3, 0)
-            self.y_min_spinbox = QDoubleSpinBox()
-            self.y_min_spinbox.setRange(-10, 10)
-            self.y_min_spinbox.setSingleStep(0.1)
-            self.y_min_spinbox.setDecimals(4)  # Increased precision for zoom accuracy
-            self.y_min_spinbox.setValue(default_y_min)
-            layout.addWidget(self.y_min_spinbox, 3, 1)
-            
-            self.y_min_label = QLabel(f"{default_y_min * MICRONS_PER_VOLT:.2f}")
-            self.y_min_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(self.y_min_label, 3, 2)
-            
-            # Y Max
-            layout.addWidget(QLabel("Y Max:"), 4, 0)
-            self.y_max_spinbox = QDoubleSpinBox()
-            self.y_max_spinbox.setRange(-10, 10)
-            self.y_max_spinbox.setSingleStep(0.1)
-            self.y_max_spinbox.setDecimals(4)  # Increased precision for zoom accuracy
-            self.y_max_spinbox.setValue(default_y_max)
-            layout.addWidget(self.y_max_spinbox, 4, 1)
-            
-            self.y_max_label = QLabel(f"{default_y_max * MICRONS_PER_VOLT:.2f}")
-            self.y_max_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(self.y_max_label, 4, 2)
-            
-            # X Resolution
-            layout.addWidget(QLabel("X Resolution:"), 5, 0)
-            self.x_res_spinbox = QSpinBox()
-            self.x_res_spinbox.setRange(2, 1000)
-            self.x_res_spinbox.setValue(default_x_res)
-            self.x_res_spinbox.setSuffix(" px")
-            layout.addWidget(self.x_res_spinbox, 5, 1, 1, 2)  # Span 2 columns
-            
-            # Y Resolution
-            layout.addWidget(QLabel("Y Resolution:"), 6, 0)
-            self.y_res_spinbox = QSpinBox()
-            self.y_res_spinbox.setRange(2, 1000)
-            self.y_res_spinbox.setValue(default_y_res)
-            self.y_res_spinbox.setSuffix(" px")
-            layout.addWidget(self.y_res_spinbox, 6, 1, 1, 2)  # Span 2 columns
-            
-            # Dwell Time
-            layout.addWidget(QLabel("Dwell Time:"), 7, 0)
-            self.dwell_time_spinbox = QDoubleSpinBox()
-            self.dwell_time_spinbox.setRange(0.0001, 10.0)  # 1ms to 10s
-            self.dwell_time_spinbox.setSingleStep(0.0001)
-            self.dwell_time_spinbox.setDecimals(4)
-            self.dwell_time_spinbox.setValue(default_dwell_time)
-            self.dwell_time_spinbox.setSuffix(" s")
-            layout.addWidget(self.dwell_time_spinbox, 7, 1, 1, 2)  # Span 2 columns
-            
-            # Apply button
-            self.apply_button = QPushButton("Apply Changes")
-            layout.addWidget(self.apply_button, 8, 0, 1, 3)  # Span all columns
-            
+            default_dwell_time = 1.0  # Default XY dwell time in milliseconds
+            default_z_min = 0.0
+            default_z_max = 450.0
+            default_z_res = 50
+            default_z_dwell = 5.0  # 5 ms default piezo settling (adjust per step size)
+
+            xy_um_limit = 10.0 * MICRONS_PER_VOLT  # ±10 V galvo range in µm
+            spin_w = 80  # minimum width; columns stretch to fill extra space
+
+            def _dspin(mn, mx, step, dec, val):
+                s = QDoubleSpinBox()
+                s.setRange(mn, mx)
+                s.setSingleStep(step)
+                s.setDecimals(dec)
+                s.setValue(val)
+                s.setMinimumWidth(spin_w)
+                return s
+
+            def _ispin(mn, mx, val):
+                s = QSpinBox()
+                s.setRange(mn, mx)
+                s.setValue(val)
+                s.setMinimumWidth(spin_w)
+                return s
+
+            # Scan mode selector (controls what the New Scan button acquires)
+            layout.addWidget(QLabel("Scan Mode:"), 0, 0)
+            self.scan_mode_combo = QComboBox()
+            self.scan_mode_combo.addItems(SCAN_MODES)
+            self.scan_mode_combo.setCurrentText("XY")
+            layout.addWidget(self.scan_mode_combo, 0, 1, 1, 3)
+
+            # Axis column headers
+            for col, name in ((1, "X"), (2, "Y"), (3, "Z")):
+                header = QLabel(name)
+                header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                layout.addWidget(header, 1, col)
+
+            # Min row
+            layout.addWidget(QLabel("Min (µm):"), 2, 0)
+            self.x_min_spinbox = _dspin(-xy_um_limit, xy_um_limit, 1.0, 3, default_x_min)
+            self.y_min_spinbox = _dspin(-xy_um_limit, xy_um_limit, 1.0, 3, default_y_min)
+            self.z_min_spinbox = _dspin(0.0, 450.0, 1.0, 3, default_z_min)
+            layout.addWidget(self.x_min_spinbox, 2, 1)
+            layout.addWidget(self.y_min_spinbox, 2, 2)
+            layout.addWidget(self.z_min_spinbox, 2, 3)
+
+            # Max row
+            layout.addWidget(QLabel("Max (µm):"), 3, 0)
+            self.x_max_spinbox = _dspin(-xy_um_limit, xy_um_limit, 1.0, 3, default_x_max)
+            self.y_max_spinbox = _dspin(-xy_um_limit, xy_um_limit, 1.0, 3, default_y_max)
+            self.z_max_spinbox = _dspin(0.0, 450.0, 1.0, 3, default_z_max)
+            layout.addWidget(self.x_max_spinbox, 3, 1)
+            layout.addWidget(self.y_max_spinbox, 3, 2)
+            layout.addWidget(self.z_max_spinbox, 3, 3)
+
+            # Resolution row
+            layout.addWidget(QLabel("Res (px):"), 4, 0)
+            self.x_res_spinbox = _ispin(2, 1000, default_x_res)
+            self.y_res_spinbox = _ispin(2, 1000, default_y_res)
+            self.z_res_spinbox = _ispin(2, 1000, default_z_res)
+            layout.addWidget(self.x_res_spinbox, 4, 1)
+            layout.addWidget(self.y_res_spinbox, 4, 2)
+            layout.addWidget(self.z_res_spinbox, 4, 3)
+
+            # Dwell row (milliseconds): one XY dwell (spans X+Y) and a Z dwell.
+            layout.addWidget(QLabel("Dwell (ms):"), 5, 0)
+            self.dwell_time_spinbox = _dspin(0.1, 10000.0, 0.1, 3, default_dwell_time)
+            self.z_dwell_spinbox = _dspin(0.1, 10000.0, 0.5, 3, default_z_dwell)
+            layout.addWidget(self.dwell_time_spinbox, 5, 1, 1, 2)  # XY dwell (X+Y)
+            layout.addWidget(self.z_dwell_spinbox, 5, 3)
+
+            # Let the three axis columns share the available width evenly while
+            # the label column stays tight.
+            layout.setColumnStretch(0, 0)
+            layout.setColumnStretch(1, 1)
+            layout.setColumnStretch(2, 1)
+            layout.setColumnStretch(3, 1)
+
             self.setLayout(layout)
-            
-            # Connect signals
-            self.x_min_spinbox.valueChanged.connect(self.update_x_min_distance)
-            self.x_max_spinbox.valueChanged.connect(self.update_x_max_distance)
-            self.y_min_spinbox.valueChanged.connect(self.update_y_min_distance)
-            self.y_max_spinbox.valueChanged.connect(self.update_y_max_distance)
-            self.apply_button.clicked.connect(self.apply_changes)
-        
+
         def get_parameters(self):
-            """Get all parameters from the GUI (similar to odmr_gui_qt.py)"""
+            """Get all parameters from the GUI. All positions are in micrometers
+            (the canonical unit); the µm <-> volt conversion is deferred to the
+            DAQ boundary (waveform generation / analog writes).
+            """
             try:
                 return {
                     'scan_range': {
@@ -275,56 +317,43 @@ def update_scan_parameters(scan_params_manager, scan_points_manager):
                         'x': self.x_res_spinbox.value(),
                         'y': self.y_res_spinbox.value()
                     },
-                    'dwell_time': self.dwell_time_spinbox.value()
+                    # Dwell times are edited in ms but returned in seconds
+                    # (the acquisition core works in seconds: rate = 1/dwell).
+                    'dwell_time': self.dwell_time_spinbox.value() / 1000.0,
+                    'z_scan': {
+                        'range': [self.z_min_spinbox.value(), self.z_max_spinbox.value()],
+                        'resolution': self.z_res_spinbox.value(),
+                        'dwell_time': self.z_dwell_spinbox.value() / 1000.0
+                    },
+                    'scan_mode': self.scan_mode_combo.currentText()
                 }
             except Exception as e:
                 show_info(f"Error getting parameters: {e}")
                 return None
-            
-        def update_x_min_distance(self, value):
-            self.x_min_label.setText(f"{value * MICRONS_PER_VOLT:.2f}")
-            
-        def update_x_max_distance(self, value):
-            self.x_max_label.setText(f"{value * MICRONS_PER_VOLT:.2f}")
-            
-        def update_y_min_distance(self, value):
-            self.y_min_label.setText(f"{value * MICRONS_PER_VOLT:.2f}")
-            
-        def update_y_max_distance(self, value):
-            self.y_max_label.setText(f"{value * MICRONS_PER_VOLT:.2f}")
-            
-        def apply_changes(self):
-            # Update scan parameters manager (this will call back to get_parameters)
-            params = self.get_parameters()
-            if params:
-                # Update scan points manager
-                self.scan_points_manager.update_points(
-                    x_range=params['scan_range']['x'],
-                    y_range=params['scan_range']['y'],
-                    x_res=params['resolution']['x'],
-                    y_res=params['resolution']['y']
-                )
-                
-                show_info('⚠️ Scan parameters updated successfully!')
-            
-        def update_values(self, x_range, y_range, x_res, y_res, dwell_time=None):
-            """Update all widget values"""
+
+        def get_scan_mode(self):
+            return self.scan_mode_combo.currentText()
+
+        def update_values(self, x_range, y_range, x_res, y_res, dwell_time=None,
+                          z_range=None, z_res=None):
+            """Update all widget values (ranges are in micrometers)."""
             self.x_min_spinbox.setValue(x_range[0])
             self.x_max_spinbox.setValue(x_range[1])
             self.y_min_spinbox.setValue(y_range[0])
             self.y_max_spinbox.setValue(y_range[1])
             self.x_res_spinbox.setValue(x_res)
             self.y_res_spinbox.setValue(y_res)
-            
-            # Update dwell time if provided
+
+            # Update dwell time if provided (incoming value is in seconds).
             if dwell_time is not None:
-                self.dwell_time_spinbox.setValue(dwell_time)
-            
-            # Update distance labels
-            self.x_min_label.setText(f"{x_range[0] * MICRONS_PER_VOLT:.2f}")
-            self.x_max_label.setText(f"{x_range[1] * MICRONS_PER_VOLT:.2f}")
-            self.y_min_label.setText(f"{y_range[0] * MICRONS_PER_VOLT:.2f}")
-            self.y_max_label.setText(f"{y_range[1] * MICRONS_PER_VOLT:.2f}")
+                self.dwell_time_spinbox.setValue(dwell_time * 1000.0)
+
+            # Update Z range/resolution if provided (e.g. from an XZ/YZ zoom).
+            if z_range is not None:
+                self.z_min_spinbox.setValue(z_range[0])
+                self.z_max_spinbox.setValue(z_range[1])
+            if z_res is not None:
+                self.z_res_spinbox.setValue(z_res)
     
     widget_instance = ScanParametersWidget()
     # Set the widget instance in the scan_params_manager so it can get parameters from it
