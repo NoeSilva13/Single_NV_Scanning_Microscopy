@@ -99,12 +99,32 @@ class CameraWorker(QThread):
         if self.camera.is_connected:
             self.camera.set_gain(gain)
     
+    def set_resolution(self, width: int, height: int) -> Tuple[int, int]:
+        """Change the camera resolution, safely pausing the acquisition thread.
+
+        The QThread run-loop reads the camera buffer/dimensions, so it must be
+        fully stopped before the image size changes and restarted afterwards.
+        """
+        was_streaming = self.running
+        if was_streaming:
+            self.stop_streaming()
+
+        width, height = self.camera.set_resolution(width, height)
+
+        if was_streaming:
+            self.start_streaming()
+
+        return width, height
+
     def get_camera_info(self) -> dict:
         """Get camera information"""
         if self.camera.is_connected:
+            max_w, max_h = self.camera.get_max_resolution()
             return {
                 'width': self.camera.img_width,
                 'height': self.camera.img_height,
+                'max_width': max_w,
+                'max_height': max_h,
                 'exposure': self.camera.get_exposure(),
                 'gain': self.camera.get_gain(),
                 'model': self.camera.camera_props.cameraModelName if self.camera.camera_props else 'Unknown'
@@ -198,7 +218,17 @@ class SpectrumProcessor:
 
 class SpectrometerMainWindow(QMainWindow):
     """Main window for the spectrometer application"""
-    
+
+    # App-defined resolution presets as (label, width, height). A trailing
+    # "Custom..." entry (width/height typed manually) is appended in setup_ui.
+    RESOLUTION_PRESETS = [
+        ("6252 x 480 (Spectrometer)", 6252, 480),
+        ("6252 x 4176 (Full)", 6252, 4176),
+        ("6252 x 240", 6252, 240),
+        ("6252 x 1044", 6252, 1044),
+        ("3072 x 480", 3072, 480),
+    ]
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("CCD Camera Spectrometer")
@@ -303,6 +333,10 @@ class SpectrometerMainWindow(QMainWindow):
         self.current_frame = None
         self.is_recording = False
         self.recorded_spectra = []
+
+        # Current camera image dimensions (updated on connect / resolution change).
+        self.img_width = 6252
+        self.img_height = 480
         
         # Setup UI
         self.setup_ui()
@@ -351,26 +385,26 @@ class SpectrometerMainWindow(QMainWindow):
         
         roi_layout.addWidget(QLabel("Start Y:"), 0, 0)
         self.roi_start_spinbox = QSpinBox()
-        self.roi_start_spinbox.setRange(0, 480)
+        self.roi_start_spinbox.setRange(0, self.img_height)
         self.roi_start_spinbox.setValue(0)
         roi_layout.addWidget(self.roi_start_spinbox, 0, 1)
         
         roi_layout.addWidget(QLabel("Height:"), 1, 0)
         self.roi_height_spinbox = QSpinBox()
-        self.roi_height_spinbox.setRange(1, 480)
-        self.roi_height_spinbox.setValue(480)
+        self.roi_height_spinbox.setRange(1, self.img_height)
+        self.roi_height_spinbox.setValue(self.img_height)
         roi_layout.addWidget(self.roi_height_spinbox, 1, 1)
         
         roi_layout.addWidget(QLabel("Start X:"), 2, 0)
         self.roi_start_x_spinbox = QSpinBox()
-        self.roi_start_x_spinbox.setRange(0, 6252)
+        self.roi_start_x_spinbox.setRange(0, self.img_width)
         self.roi_start_x_spinbox.setValue(0)
         roi_layout.addWidget(self.roi_start_x_spinbox, 2, 1)
         
         roi_layout.addWidget(QLabel("Width:"), 3, 0)
         self.roi_width_spinbox = QSpinBox()
-        self.roi_width_spinbox.setRange(1, 6252)
-        self.roi_width_spinbox.setValue(6252)
+        self.roi_width_spinbox.setRange(1, self.img_width)
+        self.roi_width_spinbox.setValue(self.img_width)
         roi_layout.addWidget(self.roi_width_spinbox, 3, 1)
         
         # Add the ROI button after it's created
@@ -420,6 +454,42 @@ class SpectrometerMainWindow(QMainWindow):
         camera_layout.addLayout(button_layout, 2, 0, 1, 3)
         
         left_layout.addWidget(camera_group)
+        
+        # Resolution controls (preset dropdown + custom width/height)
+        resolution_group = QGroupBox("Resolution")
+        resolution_layout = QGridLayout(resolution_group)
+        
+        resolution_layout.addWidget(QLabel("Preset:"), 0, 0)
+        self.resolution_combo = QComboBox()
+        for label, w, h in self.RESOLUTION_PRESETS:
+            self.resolution_combo.addItem(label, (w, h))
+        self.resolution_combo.addItem("Custom...", None)
+        self.resolution_combo.setToolTip("Select a camera resolution preset, or 'Custom...' to type one")
+        resolution_layout.addWidget(self.resolution_combo, 0, 1, 1, 2)
+        
+        resolution_layout.addWidget(QLabel("Width:"), 1, 0)
+        self.res_width_spinbox = QSpinBox()
+        self.res_width_spinbox.setRange(4, 6252)
+        self.res_width_spinbox.setSingleStep(4)
+        self.res_width_spinbox.setValue(6252)
+        self.res_width_spinbox.setEnabled(False)
+        self.res_width_spinbox.setToolTip("Custom width (multiple of 4, clamped to sensor max)")
+        resolution_layout.addWidget(self.res_width_spinbox, 1, 1, 1, 2)
+        
+        resolution_layout.addWidget(QLabel("Height:"), 2, 0)
+        self.res_height_spinbox = QSpinBox()
+        self.res_height_spinbox.setRange(2, 4176)
+        self.res_height_spinbox.setSingleStep(2)
+        self.res_height_spinbox.setValue(480)
+        self.res_height_spinbox.setEnabled(False)
+        self.res_height_spinbox.setToolTip("Custom height (multiple of 2, clamped to sensor max)")
+        resolution_layout.addWidget(self.res_height_spinbox, 2, 1, 1, 2)
+        
+        self.apply_resolution_button = QPushButton("Apply Resolution")
+        self.apply_resolution_button.setToolTip("Change the camera resolution (resets ROI and calibration)")
+        resolution_layout.addWidget(self.apply_resolution_button, 3, 0, 1, 3)
+        
+        left_layout.addWidget(resolution_group)
         
         # Calibration controls (wavelength + save/load of full setup)
         cal_group = QGroupBox("Calibration")
@@ -508,6 +578,8 @@ class SpectrometerMainWindow(QMainWindow):
         # Button connections
         self.start_button.clicked.connect(self.start_camera)
         self.stop_button.clicked.connect(self.stop_camera)
+        self.resolution_combo.currentIndexChanged.connect(self._on_resolution_preset_changed)
+        self.apply_resolution_button.clicked.connect(self.apply_resolution)
         self.apply_calibration_button.clicked.connect(self.apply_wavelength_calibration)
         self.save_calibration_button.clicked.connect(self.save_calibration)
         self.load_calibration_button.clicked.connect(self.load_calibration)
@@ -579,16 +651,24 @@ class SpectrometerMainWindow(QMainWindow):
         # Try to initialize camera
         if self.camera_worker.initialize_camera():
             info = self.camera_worker.get_camera_info()
-            self.status_bar.showMessage(f"Camera ready: {info.get('model', 'Unknown')} - {info.get('width', 0)}x{info.get('height', 0)}")
+            width = info.get('width', self.img_width)
+            height = info.get('height', self.img_height)
+            self.status_bar.showMessage(f"Camera ready: {info.get('model', 'Unknown')} - {width}x{height}")
+            
+            # Fix the custom-resolution spinbox maxima to the sensor limits.
+            max_w = info.get('max_width', 0) or width
+            max_h = info.get('max_height', 0) or height
+            self.res_width_spinbox.setMaximum(max_w)
+            self.res_height_spinbox.setMaximum(max_h)
+            
+            # Select the preset matching the current resolution (or Custom).
+            self._select_resolution_in_combo(width, height)
             
             # Sync GUI with actual camera values
             self.sync_gui_with_camera_values()
             
-            # Set initial ROI
-            self.update_roi()
-            
-            # Apply default wavelength calibration
-            self.apply_wavelength_calibration()
+            # Initialize all width/height-dependent UI (ROI ranges + calibration).
+            self._update_dimensions(width, height)
         else:
             self.status_bar.showMessage("Failed to initialize camera")
     
@@ -610,6 +690,104 @@ class SpectrometerMainWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         self.status_bar.showMessage("Camera streaming stopped")
     
+    def _on_resolution_preset_changed(self, index: int):
+        """Enable custom width/height only for the 'Custom...' entry.
+
+        For a concrete preset, mirror its dimensions into the spinboxes so the
+        user can switch to Custom and tweak from there.
+        """
+        data = self.resolution_combo.itemData(index)
+        is_custom = data is None
+        self.res_width_spinbox.setEnabled(is_custom)
+        self.res_height_spinbox.setEnabled(is_custom)
+        if not is_custom:
+            w, h = data
+            self.res_width_spinbox.blockSignals(True)
+            self.res_height_spinbox.blockSignals(True)
+            self.res_width_spinbox.setValue(w)
+            self.res_height_spinbox.setValue(h)
+            self.res_width_spinbox.blockSignals(False)
+            self.res_height_spinbox.blockSignals(False)
+
+    def _select_resolution_in_combo(self, width: int, height: int):
+        """Select the combo entry matching (width, height), else 'Custom...'."""
+        self.resolution_combo.blockSignals(True)
+        matched = -1
+        for i in range(self.resolution_combo.count()):
+            data = self.resolution_combo.itemData(i)
+            if data is not None and tuple(data) == (width, height):
+                matched = i
+                break
+        if matched >= 0:
+            self.resolution_combo.setCurrentIndex(matched)
+            self.res_width_spinbox.setEnabled(False)
+            self.res_height_spinbox.setEnabled(False)
+        else:
+            # Custom... is the last item.
+            self.resolution_combo.setCurrentIndex(self.resolution_combo.count() - 1)
+            self.res_width_spinbox.setEnabled(True)
+            self.res_height_spinbox.setEnabled(True)
+        self.res_width_spinbox.setValue(width)
+        self.res_height_spinbox.setValue(height)
+        self.resolution_combo.blockSignals(False)
+
+    def apply_resolution(self):
+        """Change the camera resolution from the preset/custom selection."""
+        if not self.camera_worker.camera.is_connected:
+            self.status_bar.showMessage("Cannot change resolution: camera not connected")
+            return
+
+        data = self.resolution_combo.currentData()
+        if data is None:
+            width = self.res_width_spinbox.value()
+            height = self.res_height_spinbox.value()
+        else:
+            width, height = data
+
+        was_streaming = self.camera_worker.running
+        actual_w, actual_h = self.camera_worker.set_resolution(width, height)
+
+        # Keep Start/Stop button states consistent with the stream state.
+        self.start_button.setEnabled(not self.camera_worker.running)
+        self.stop_button.setEnabled(self.camera_worker.running)
+
+        self._update_dimensions(actual_w, actual_h)
+        self.status_bar.showMessage(
+            f"Resolution set to {actual_w}x{actual_h} - ROI and calibration reset")
+
+    def _update_dimensions(self, width: int, height: int):
+        """Sync all width/height-dependent UI to the current camera image size.
+
+        Resets the ROI to the full frame and re-applies the wavelength
+        calibration over the new frame (both are reset on a resolution change).
+        """
+        self.img_width = int(width)
+        self.img_height = int(height)
+
+        # Update ROI spinbox ranges to the new frame, then reset ROI to full.
+        for spinbox in (self.roi_start_spinbox, self.roi_height_spinbox,
+                        self.roi_start_x_spinbox, self.roi_width_spinbox):
+            spinbox.blockSignals(True)
+        self.roi_start_spinbox.setRange(0, self.img_height)
+        self.roi_height_spinbox.setRange(1, self.img_height)
+        self.roi_start_x_spinbox.setRange(0, self.img_width)
+        self.roi_width_spinbox.setRange(1, self.img_width)
+        self.roi_start_spinbox.setValue(0)
+        self.roi_height_spinbox.setValue(self.img_height)
+        self.roi_start_x_spinbox.setValue(0)
+        self.roi_width_spinbox.setValue(self.img_width)
+        for spinbox in (self.roi_start_spinbox, self.roi_height_spinbox,
+                        self.roi_start_x_spinbox, self.roi_width_spinbox):
+            spinbox.blockSignals(False)
+
+        # Push the full-frame ROI to the spectrum processor.
+        self.update_roi()
+
+        # Reset the wavelength calibration to defaults over the new full frame.
+        self.start_wavelength_spinbox.setValue(400)
+        self.end_wavelength_spinbox.setValue(800)
+        self.apply_wavelength_calibration()
+
     def update_frame(self, frame: np.ndarray):
         """Update camera view and process spectrum"""
         self.current_frame = frame
@@ -664,6 +842,10 @@ class SpectrometerMainWindow(QMainWindow):
         """Collect current ROI, camera, and wavelength settings"""
         return {
             "version": 1,
+            "resolution": {
+                "width": self.img_width,
+                "height": self.img_height,
+            },
             "roi": {
                 "start_y": self.roi_start_spinbox.value(),
                 "height": self.roi_height_spinbox.value(),
@@ -707,9 +889,22 @@ class SpectrometerMainWindow(QMainWindow):
             with open(filename, "r", encoding="utf-8") as f:
                 data = json.load(f)
             
+            resolution = data.get("resolution", {})
             roi = data.get("roi", {})
             camera = data.get("camera", {})
             wavelength = data.get("wavelength", {})
+            
+            # Resolution first: changing it resets the ROI to the full frame, so
+            # the saved ROI below is applied on top of the correct dimensions.
+            if "width" in resolution and "height" in resolution:
+                target_w, target_h = int(resolution["width"]), int(resolution["height"])
+                if (target_w, target_h) != (self.img_width, self.img_height):
+                    if self.camera_worker.camera.is_connected:
+                        actual_w, actual_h = self.camera_worker.set_resolution(target_w, target_h)
+                        self.start_button.setEnabled(not self.camera_worker.running)
+                        self.stop_button.setEnabled(self.camera_worker.running)
+                        self._update_dimensions(actual_w, actual_h)
+                        self._select_resolution_in_combo(actual_w, actual_h)
             
             # ROI (signals update spectrum processor)
             if "start_y" in roi:
@@ -870,8 +1065,8 @@ class SpectrometerMainWindow(QMainWindow):
                     else:
                         img_height, img_width = self.current_frame.shape
                 else:
-                    # Use defaults if no frame available (spectrometer: 6252x480)
-                    img_width, img_height = 6252, 480
+                    # Use the current camera dimensions if no frame is available
+                    img_width, img_height = self.img_width, self.img_height
                 
                 # Set ROI size from spinbox values
                 roi_width = width
@@ -919,9 +1114,9 @@ class SpectrometerMainWindow(QMainWindow):
                 # Only update when resize is finished, not during
                 roi_item.sigRegionChangeFinished.connect(self._on_roi_resize_finished)
             
-            # Set reasonable bounds to prevent extreme resizing (spectrometer: 6252x480)
+            # Set reasonable bounds to prevent extreme resizing (current frame)
             if hasattr(roi_item, 'maxBounds'):
-                roi_item.maxBounds = pg.QtCore.QRectF(0, 0, 6252, 480)
+                roi_item.maxBounds = pg.QtCore.QRectF(0, 0, self.img_width, self.img_height)
             
             # Disable real-time ROI statistics computation
             if hasattr(roi_item, 'setVisible'):
@@ -1073,11 +1268,11 @@ class SpectrometerMainWindow(QMainWindow):
                 width = int(size[0])
                 height = int(size[1])
                 
-                # Clamp values to valid ranges (spectrometer: 6252x480)
-                start_x = max(0, min(start_x, 6251))
-                start_y = max(0, min(start_y, 479))
-                width = max(1, min(width, 6252 - start_x))
-                height = max(1, min(height, 480 - start_y))
+                # Clamp values to valid ranges (current camera frame)
+                start_x = max(0, min(start_x, self.img_width - 1))
+                start_y = max(0, min(start_y, self.img_height - 1))
+                width = max(1, min(width, self.img_width - start_x))
+                height = max(1, min(height, self.img_height - start_y))
                 
                 # Update our controls
                 self.roi_start_spinbox.setValue(start_y)
