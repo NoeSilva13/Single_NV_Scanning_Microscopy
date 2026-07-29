@@ -11,7 +11,7 @@ import threading
 
 import numpy as np
 import pyqtgraph as pg
-from qtpy.QtCore import Signal as pyqtSignal
+from qtpy.QtCore import Qt, Signal as pyqtSignal
 from qtpy.QtWidgets import QWidget, QVBoxLayout, QPushButton
 from napari.utils.notifications import show_info
 
@@ -133,6 +133,12 @@ class AutoFocusWidget(QWidget):
         self.cbm_ref = cbm_ref
         # Optional piezo control widget refreshed after a successful scan.
         self.z_control_widget = None
+        # Optional callback invoked after a click-to-move on the Z plot so the
+        # rest of the app (global position state) can stay in sync.
+        # Signature: move_callback(z_um).
+        self.move_callback = None
+        # Last measured Z positions (µm), used to snap clicks to scanned points.
+        self.last_scan_points = []
 
         self._live_signal.connect(self._on_live)
         self._plot_signal.connect(self._on_plot)
@@ -158,6 +164,11 @@ class AutoFocusWidget(QWidget):
         self.plot_widget = pg.PlotWidget()
         self.plot_widget.setBackground(bg_color)
         self.plot_item = self.plot_widget.getPlotItem()
+        # Disable mouse pan/zoom (left-drag would move the whole plot) so the
+        # left click is used only for click-to-move, matching the X/Y tabs.
+        self.plot_item.setMouseEnabled(x=False, y=False)
+        self.plot_item.setMenuEnabled(True)
+        self.plot_item.hideButtons()
         self.plot_item.showGrid(x=True, y=True, alpha=0.3)
         self.plot_item.setLabel('bottom', 'Z Position (µm)', color='white')
         self.plot_item.setLabel('left', 'Counts', color='white')
@@ -173,6 +184,15 @@ class AutoFocusWidget(QWidget):
             [], [], pen=None, symbol='o', symbolSize=12,
             symbolBrush=None, symbolPen=pg.mkPen('red', width=2)
         )
+        # Vertical line marking the last clicked (selected) Z position.
+        self.sel_line = pg.InfiniteLine(
+            angle=90, movable=False,
+            pen=pg.mkPen('#ffaa00', width=1, style=Qt.PenStyle.DashLine)
+        )
+        self.sel_line.setVisible(False)
+        self.plot_item.addItem(self.sel_line)
+        # Click-to-move: map the clicked X (µm) to a piezo Z position.
+        self.plot_widget.scene().sigMouseClicked.connect(self._on_plot_clicked)
         # Let the plot expand to fill the tab so the Z tab matches X/Y.
         self.plot_widget.setMinimumHeight(160)
         layout.addWidget(self.plot_widget)
@@ -199,6 +219,10 @@ class AutoFocusWidget(QWidget):
                 return
             self.scan_in_progress[0] = True
             self.stop_scan_requested[0] = False
+
+        # Remember the Z position before the sweep so we can return there
+        # afterwards instead of leaving the piezo at the end of the ramp.
+        z_before = self.z_controller.position
 
         try:
             self._notify_signal.emit('🔍 Starting Z scan...')
@@ -243,11 +267,6 @@ class AutoFocusWidget(QWidget):
                 self._notify_signal.emit('🛑 Z scan stopped by user')
                 return
 
-            # Leave the piezo at the end of the ramp (Z max); do not move to peak.
-            if positions:
-                self.z_controller.set_position(positions[-1])
-                self._zupdate_signal.emit()
-
             peak_x, _ = self._peak(positions, rates)
             if peak_x is not None:
                 self._notify_signal.emit(
@@ -259,6 +278,15 @@ class AutoFocusWidget(QWidget):
         except Exception as e:
             self._notify_signal.emit(f'❌ Z scan error: {str(e)}')
         finally:
+            # Return the piezo to its pre-sweep position (not the ramp's Z max).
+            # The hardware-timed task has released ao2 by now, so the ephemeral
+            # set_position write is safe.
+            try:
+                if self.z_controller.available:
+                    self.z_controller.set_position(z_before)
+                    self._zupdate_signal.emit()
+            except Exception as e:
+                self._notify_signal.emit(f'⚠️ Failed to restore Z: {e}')
             with self.scan_lock:
                 self.scan_in_progress[0] = False
             self._finished_signal.emit()
@@ -269,10 +297,12 @@ class AutoFocusWidget(QWidget):
     def _on_live(self, stage, positions, rates):
         """Plot accumulated points in real time."""
         self.curve.setData(positions, rates)
+        self.last_scan_points = list(positions)
         self._refresh_peak_marker()
 
     def _on_plot(self, positions, rates):
         self.curve.setData(positions, rates)
+        self.last_scan_points = list(positions)
         self._refresh_peak_marker()
 
     def _refresh_peak_marker(self):
@@ -289,6 +319,44 @@ class AutoFocusWidget(QWidget):
 
     def _on_finished(self):
         self.focus_btn.setEnabled(True)
+
+    # ------------------------------------------------------------------
+    # Click-to-move
+    # ------------------------------------------------------------------
+    def _on_plot_clicked(self, event):
+        """Move the piezo Z to the clicked position on the plot (micrometers)."""
+        if event.button() != Qt.MouseButton.LeftButton:
+            return
+        if self.scan_in_progress[0]:
+            show_info('⚠️ Scan in progress; click-to-move ignored')
+            return
+        if not self.z_controller.available:
+            show_info('❌ Z control via DAQ not available')
+            return
+
+        vb = self.curve.getViewBox()
+        scene_pos = event.scenePos()
+        if vb is None or not vb.sceneBoundingRect().contains(scene_pos):
+            return
+        z_um = float(vb.mapSceneToView(scene_pos).x())
+
+        # Snap to the nearest measured point if a scan has been run.
+        if self.last_scan_points:
+            arr = np.asarray(self.last_scan_points, dtype=float)
+            z_um = float(arr[int(np.argmin(np.abs(arr - z_um)))])
+        z_um = self.z_controller.clamp_um(z_um)
+
+        try:
+            self.z_controller.set_position(z_um)
+        except Exception as e:
+            show_info(f'❌ Error moving Z: {str(e)}')
+            return
+
+        self.sel_line.setValue(z_um)
+        self.sel_line.setVisible(True)
+        self._on_zupdate()
+        if self.move_callback is not None:
+            self.move_callback(z_um)
 
     @staticmethod
     def _peak(x, y):

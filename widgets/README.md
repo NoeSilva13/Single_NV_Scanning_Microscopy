@@ -161,8 +161,9 @@ class ZoomLevelManager:
   - Compact `QWidget` with a **"🔍 Scan Z"** button and a **pyqtgraph** result plot (single green curve + red peak marker)
   - Reads Z Min / Z Max / Z Resolution / Z Dwell from `scan_params_manager` (Scan Parameters panel), builds `np.linspace(z_min, z_max, z_res)`, and runs `run_z_sweep` in a background thread
   - Mutually exclusive with the raster/single-axis scans via the shared `scan_lock`/`scan_in_progress`; uses internal Qt signals for thread-safe UI updates
-  - Leaves the piezo at the end of the ramp (Z max); notifies the detected peak without moving to it
-  - Set `.z_control_widget` to have the axis control widget's Z position refreshed after a completed sweep
+  - Returns the piezo to its pre-sweep Z position when the sweep finishes (captured before the ramp), rather than leaving it at the ramp's Z max; notifies the detected peak without moving to it
+  - **Click-to-move**: left-clicking the plot moves the piezo Z to that position (snapping to the nearest measured point, clamped to travel), draws a selection line, refreshes the axis control widget, and fires the optional `move_callback(z_um)` so the app can sync `current_position_um['z']`. Mouse pan/zoom is disabled so the left click is used only for moving.
+  - Set `.z_control_widget` to have the axis control widget's Z position refreshed after a completed sweep or a click-to-move
 
 ### Single Axis Scan (`single_axis_scan.py`)
 

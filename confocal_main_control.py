@@ -724,6 +724,10 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
                                axis_y.position_to_voltage(park_y)])
             current_position_um['x'], current_position_um['y'] = park_x, park_y
             axis_control_widget.refresh_positions(x=park_x, y=park_y)
+            # Keep the single-axis widget's internal tracker in sync so a
+            # subsequent single scan holds the correct fixed-axis value.
+            if single_axis_widget_ref is not None:
+                single_axis_widget_ref.update_current_position(park_x, park_y)
         except Exception as e:
             bridge.notify(f"⚠️ Failed to restart galvo control: {e}")
         bridge.notify("🎯 Scanner returned to home position")
@@ -910,6 +914,13 @@ axis_control_widget = AxisControlWidget(
 
 # Let Scan Z refresh the axis control widget after a completed sweep
 auto_focus_widget.z_control_widget = axis_control_widget
+
+# Click-to-move on the Scan Z plot keeps global Z state in sync (the axis
+# control widget display is refreshed via the widget's own z-update signal).
+def _on_z_move(z_um):
+    current_position_um['z'] = z_um
+
+auto_focus_widget.move_callback = _on_z_move
 
 # Click-to-move on the single-axis plots keeps global state and the axis
 # control widget in sync (the widget already updates its own X/Y tracking).
