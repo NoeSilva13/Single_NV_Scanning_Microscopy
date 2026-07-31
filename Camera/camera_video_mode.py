@@ -233,6 +233,63 @@ class POACameraController:
         """
         return self.img_width, self.img_height
     
+    def get_max_resolution(self) -> Tuple[int, int]:
+        """
+        Get the sensor's maximum resolution.
+        
+        Returns:
+            tuple: (max_width, max_height); (0, 0) if not connected
+        """
+        if self.camera_props is not None:
+            return self.camera_props.maxWidth, self.camera_props.maxHeight
+        return 0, 0
+    
+    def set_resolution(self, width: int, height: int) -> Tuple[int, int]:
+        """
+        Change the camera image size (resolution) while connected.
+        
+        The stream is stopped (if running) before changing the image size, as
+        required by the SDK, and restarted afterwards. Width is forced to a
+        multiple of 4 and height to a multiple of 2, and both are clamped to the
+        sensor's maximum.
+        
+        Args:
+            width: Desired image width
+            height: Desired image height
+        
+        Returns:
+            tuple: (width, height) actually applied by the camera
+        """
+        if not self.is_connected or self.camera_id is None:
+            return self.img_width, self.img_height
+        
+        was_streaming = self.is_streaming
+        if was_streaming:
+            self.stop_stream()
+        
+        # Clamp to the sensor limits and enforce the SDK's divisibility rules.
+        max_w, max_h = self.get_max_resolution()
+        if max_w <= 0:
+            max_w = width
+        if max_h <= 0:
+            max_h = height
+        width = (max(4, min(int(width), max_w)) // 4) * 4
+        height = (max(2, min(int(height), max_h)) // 2) * 2
+        
+        pyPOACamera.SetImageStartPos(self.camera_id, 0, 0)
+        pyPOACamera.SetImageSize(self.camera_id, width, height)
+        pyPOACamera.SetImageBin(self.camera_id, 1)
+        
+        # Read back the size the camera actually applied and resize the buffer.
+        error, self.img_width, self.img_height = pyPOACamera.GetImageSize(self.camera_id)
+        img_size = pyPOACamera.ImageCalcSize(self.img_height, self.img_width, self.image_format)
+        self.buffer = np.zeros(img_size, dtype=np.uint8)
+        
+        if was_streaming:
+            self.start_stream()
+        
+        return self.img_width, self.img_height
+    
     def __del__(self):
         """Ensure resources are cleaned up when the object is destroyed."""
         self.disconnect()

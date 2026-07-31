@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "resolution": {
+    "width": 6252,
+    "height": 1044
+  },
+  "roi": {
+    "start_y": 366,
+    "height": 409,
+    "start_x": 1750,
+    "width": 3000
+  },
+  "camera": {
+    "exposure_ms": 10.0,
+    "gain": 307
+  },
+  "wavelength": {
+    "start_nm": 380.0,
+    "end_nm": 790.0
+  }
+}

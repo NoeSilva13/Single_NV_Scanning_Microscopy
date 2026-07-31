@@ -5,7 +5,7 @@ A Qt-based spectrometer application that uses a POA (Player One Astronomy) camer
 ## Features
 
 - **Real-time spectral analysis** - Processes horizontal line spectra from camera images
-- **6252x480 line-scan resolution** - Uses the camera's full sensor width as the dispersion axis for maximum spectral detail
+- **Selectable resolution** - Choose the camera image size from a preset dropdown (default `6252x480` line-scan; full sensor up to `6252x4176`) or enter a custom width/height; the full sensor width serves as the dispersion axis for maximum spectral detail. Changing the resolution resets the ROI to the full frame and restores the default wavelength calibration.
 - **Wavelength calibration** - Linear calibration from pixel to wavelength mapping
 - **Dark frame correction** - Subtracts dark current noise
 - **Reference normalization** - Normalizes spectra against reference measurements
@@ -54,6 +54,7 @@ python spectrometer_app.py
 4. **Camera Settings**
    - **Exposure**: Adjust exposure time (0.1-10000 ms)
    - **Gain**: Adjust camera gain (0-1000)
+   - **Resolution**: Pick a preset from the dropdown or select "Custom..." to type a width/height (width is rounded to a multiple of 4, height to a multiple of 2, both clamped to the sensor maximum of `6252x4176`), then click "Apply Resolution". The camera stream is briefly stopped and restarted, and the ROI/calibration are reset to the new full frame.
    - Optimize settings for your light source and spectrometer
 
 ### Wavelength Calibration
