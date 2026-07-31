@@ -289,17 +289,6 @@ class SpectrometerMainWindow(QMainWindow):
             QLineEdit:focus {
                 border: 2px solid #00d4aa;
             }
-            QSpinBox, QDoubleSpinBox, QComboBox {
-                background-color: #3c3c3c;
-                color: #ffffff;
-                border: 1px solid #555555;
-                border-radius: 4px;
-                padding: 5px;
-                font-size: 10pt;
-            }
-            QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus {
-                border: 2px solid #00d4aa;
-            }
             QTextEdit {
                 background-color: #1e1e1e;
                 color: #00ff00;
