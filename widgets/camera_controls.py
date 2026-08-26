@@ -128,7 +128,10 @@ def camera_live(viewer, get_camera_type_func=None):
                     name="Live",
                     colormap=colormap,
                     blending="additive",
-                    visible=True
+                    visible=True,
+                    # Match scan-layer units so napari stays consistent (reference
+                    # image only; no scale calibration).
+                    units=('µm', 'µm'),
                 )
             else:
                 # Reuse existing layer but reconnect camera
@@ -281,7 +284,8 @@ def capture_shot(viewer, settings_callback=None, get_camera_type_func=None):
                     name=layer_name,
                     colormap=colormap,
                     blending="additive",
-                    visible=True
+                    visible=True,
+                    units=('µm', 'µm'),
                 )
                 show_info(f"✨ Captured image saved as '{layer_name}'")
             else:
