@@ -273,20 +273,27 @@ class ODMRExperiments:
     def rabi_oscillation_contrast(self,
                                    mw_durations: List[int],
                                    mw_frequency: float = 2.87e9,
-                                   laser_duration: int = 1000,
-                                   detection_duration: int = 500,
-                                   laser_delay: int = 0,
-                                   mw_delay: Optional[int] = None,
-                                   detection_delay: Optional[int] = None,
-                                   sequence_interval: int = 10000,
+                                   init_laser_duration: int = 3000,
+                                   readout_laser_duration: int = 3000,
+                                   detection_duration: int = 1500,
+                                   init_laser_delay: int = 0,
+                                   mw_gap: int = 200,
+                                   readout_gap: int = 200,
+                                   detection_delay: int = 1500,
+                                   sequence_interval: int = 5000,
                                    repetitions: int = 1000,
                                    progress_callback: Optional[Callable] = None) -> Dict:
         """
         Perform Rabi oscillation measurement using the contrast method.
 
-        For each MW pulse duration τ, the sequence alternates between two sub-sequences:
-          - Reference (even bins): laser + detection, MW off  → bright ms=0 PL
-          - Signal   (odd  bins): laser + detection, MW on(τ) → PL after spin rotation
+        For each MW pulse duration τ, the sequence alternates between two sub-sequences
+        that share identical optical and detection timing:
+
+          AOM: |── init ──| ← mw_gap → [MW slot τ] ← readout_gap → |── readout ──|
+          SPD:                                                   |detect|
+
+          - Reference (even bins): MW off  → bright ms=0 PL at readout
+          - Signal   (odd  bins): MW on(τ) → PL after spin rotation
 
         The contrast (ref − sig) / ref starts near 0 for τ ≈ 0 and oscillates with the
         Rabi frequency. Normalising by the interleaved reference removes common-mode noise
@@ -294,12 +301,14 @@ class ODMRExperiments:
 
         Args:
             mw_durations: List of MW pulse durations to sweep in ns
-            mw_frequency: MW frequency in Hz
-            laser_duration: Laser pulse duration in ns
+            mw_frequency: MW frequency in Hz (use the ODMR resonance of your NV)
+            init_laser_duration: Initialization laser pulse duration in ns
+            readout_laser_duration: Readout laser pulse duration in ns
             detection_duration: Detection window duration in ns
-            laser_delay: Delay before laser pulse in ns
-            mw_delay: Delay before MW pulse in ns
-            detection_delay: Delay before detection window in ns
+            init_laser_delay: Delay before initialization laser in ns
+            mw_gap: Dark time between init laser and MW pulse in ns
+            readout_gap: Dark time between MW pulse and readout laser in ns
+            detection_delay: SPD gate offset relative to readout edge (AOM compensation) in ns
             sequence_interval: Interval between sub-sequences in ns
             repetitions: Number of repetitions per duration point
             progress_callback: Optional callback(durations, contrasts) for live updates
@@ -329,16 +338,15 @@ class ODMRExperiments:
         for mw_duration in mw_durations:
             print(f"⏱️ MW duration: {mw_duration} ns")
 
-            local_laser_delay = mw_delay + mw_duration + laser_delay
-            local_detection_delay = mw_delay + mw_duration + detection_delay
-
             sequence, total_duration = self.pulse_controller.create_rabi_sequence_contrast(
-                laser_duration=laser_duration,
-                mw_duration=mw_duration,
+                init_laser_duration=init_laser_duration,
+                readout_laser_duration=readout_laser_duration,
+                mw_duration=int(mw_duration),
                 detection_duration=detection_duration,
-                laser_delay=local_laser_delay,
-                mw_delay=mw_delay,
-                detection_delay=local_detection_delay,
+                init_laser_delay=init_laser_delay,
+                mw_gap=mw_gap,
+                readout_gap=readout_gap,
+                detection_delay=detection_delay,
                 sequence_interval=sequence_interval
             )
             time.sleep(0.2)
@@ -350,7 +358,7 @@ class ODMRExperiments:
                 self.counter.start()
                 ready = False
                 self.pulse_controller.run_sequence(sequence, repetitions)
-                
+
                 while ready is False:
                     time.sleep(0.2)
                     ready = self.counter.ready()
@@ -397,10 +405,12 @@ class ODMRExperiments:
             'mw_on_rates': mw_on_rates,
             'parameters': {
                 'mw_frequency': mw_frequency,
-                'laser_duration': laser_duration,
+                'init_laser_duration': init_laser_duration,
+                'readout_laser_duration': readout_laser_duration,
                 'detection_duration': detection_duration,
-                'laser_delay': laser_delay,
-                'mw_delay': mw_delay,
+                'init_laser_delay': init_laser_delay,
+                'mw_gap': mw_gap,
+                'readout_gap': readout_gap,
                 'detection_delay': detection_delay,
                 'sequence_interval': sequence_interval,
                 'repetitions': repetitions
@@ -803,17 +813,19 @@ def run_example_experiments():
 
         # 2. Rabi oscillation with contrast (signal/reference normalisation)
         # print("\n" + "="*50)
-        # mw_durations = np.linspace(0, 3000, 100)
+        # mw_durations = np.arange(0, 400, 8)  # 0–400 ns, 8 ns steps (Pulse Streamer alignment)
         # rabi_contrast_result = experiments.rabi_oscillation_contrast(
         #     mw_durations=mw_durations,
-        #     mw_frequency=2.875e9,
-        #     laser_duration=25000,
+        #     mw_frequency=2.875e9,          # use your NV ODMR resonance frequency
+        #     init_laser_duration=5000,
+        #     readout_laser_duration=3000,
         #     detection_duration=2000,
-        #     laser_delay=0,
-        #     mw_delay=0,
-        #     detection_delay=1000,
-        #     sequence_interval=2000,
-        #     repetitions=20000
+        #     init_laser_delay=0,
+        #     mw_gap=200,
+        #     readout_gap=200,
+        #     detection_delay=1500,          # AOM compensation (same as ODMR/T1)
+        #     sequence_interval=5000,
+        #     repetitions=50000
         # )
         # experiments.plot_results('rabi_contrast')
 
