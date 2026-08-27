@@ -15,7 +15,6 @@ Lab: Burke Lab, Department of Electrical Engineering and Computer Science, Unive
 Date: 2025
 """
 
-import threading
 from typing import List, Tuple, Optional, Dict
 try:
     from pulsestreamer import PulseStreamer, OutputState, Sequence
@@ -200,9 +199,6 @@ class SwabianPulseController:
 
             full_duration = total_duration * 2
             print(f"✅ ODMR contrast sequence created: {full_duration} ns total ({total_duration} ns per sub-sequence, 8ns aligned)")
-
-            # if threading.current_thread() is threading.main_thread():
-            #     sequence.plot()
 
             return sequence, full_duration
 

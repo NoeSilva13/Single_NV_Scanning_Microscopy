@@ -137,6 +137,7 @@ class ODMRExperiments:
                       detection_delay: int = 0,
                       sequence_interval: int = 10000,
                       repetitions: int = 100,
+                      plot_sequence: bool = False,
                       progress_callback: Optional[Callable] = None) -> Dict:
         """
         Perform ODMR contrast measurement.
@@ -160,6 +161,7 @@ class ODMRExperiments:
             detection_delay: Delay before detection window in ns
             sequence_interval: Interval between measurement sequences in ns
             repetitions: Number of sequence repetitions per frequency point
+            plot_sequence: If True, call sequence.plot() at each sweep point (blocks until closed)
 
         Returns:
             Dictionary containing frequencies, contrasts, and MW off/on rates
@@ -195,7 +197,8 @@ class ODMRExperiments:
                 detection_delay=detection_delay,
                 sequence_interval=sequence_interval
             )
-            #sequence.plot()
+            if plot_sequence and sequence:
+                sequence.plot()
             time.sleep(0.2)
 
             if sequence:
@@ -282,6 +285,7 @@ class ODMRExperiments:
                                    detection_delay: int = 1500,
                                    sequence_interval: int = 5000,
                                    repetitions: int = 1000,
+                                   plot_sequence: bool = False,
                                    progress_callback: Optional[Callable] = None) -> Dict:
         """
         Perform Rabi oscillation measurement using the contrast method.
@@ -311,6 +315,7 @@ class ODMRExperiments:
             detection_delay: SPD gate offset relative to readout edge (AOM compensation) in ns
             sequence_interval: Interval between sub-sequences in ns
             repetitions: Number of repetitions per duration point
+            plot_sequence: If True, call sequence.plot() at each sweep point (blocks until closed)
             progress_callback: Optional callback(durations, contrasts) for live updates
 
         Returns:
@@ -349,8 +354,9 @@ class ODMRExperiments:
                 detection_delay=detection_delay,
                 sequence_interval=sequence_interval
             )
+            if plot_sequence and sequence:
+                sequence.plot()
             time.sleep(0.2)
-            # sequence.plot()
             if sequence:
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(True)
@@ -432,6 +438,7 @@ class ODMRExperiments:
                           detection_delay: int = 0,
                           sequence_interval: int = 10000,
                           repetitions: int = 1000,
+                          plot_sequence: bool = False,
                           progress_callback: Optional[Callable] = None) -> Dict:
         """
         Perform T1 decay measurement using the contrast method.
@@ -463,6 +470,7 @@ class ODMRExperiments:
                              to the trailing end of the init laser.
             sequence_interval: Interval between sequences in ns
             repetitions: Number of repetitions per delay point
+            plot_sequence: If True, call sequence.plot() at each sweep point (blocks until closed)
             progress_callback: Optional callback(delays, contrasts) for live updates
 
         Returns:
@@ -495,6 +503,8 @@ class ODMRExperiments:
                 sequence_interval=sequence_interval,
                 detection_delay=detection_delay
             )
+            if plot_sequence and sequence:
+                sequence.plot()
 
             time.sleep(0.2)
 
@@ -807,7 +817,8 @@ def run_example_experiments():
         #     mw_delay=0,
         #     detection_delay=1500,
         #     sequence_interval=2000,
-        #     repetitions=5000
+        #     repetitions=5000,
+        #     plot_sequence=False
         # )
         # experiments.plot_results('odmr_contrast')
 
@@ -825,7 +836,8 @@ def run_example_experiments():
         #     readout_gap=200,
         #     detection_delay=1500,          # AOM compensation (same as ODMR/T1)
         #     sequence_interval=5000,
-        #     repetitions=50000
+        #     repetitions=50000,
+        #     plot_sequence=False
         # )
         # experiments.plot_results('rabi_contrast')
 
@@ -841,7 +853,8 @@ def run_example_experiments():
             init_laser_delay=0,
             detection_delay=1500,
             sequence_interval=2000,
-            repetitions=3000
+            repetitions=3000,
+            plot_sequence=False
         )
         experiments.plot_results('t1_contrast')
         
