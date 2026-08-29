@@ -82,9 +82,10 @@ class ODMRExperiments:
     
     # Maps internal result keys to ODMRDataManager experiment types and x-data keys
     _SAVE_MAP = {
-        'odmr_contrast':  ('odmr_contrast', 'frequencies'),
-        'rabi_contrast':  ('rabi_contrast', 'durations'),
-        't1_contrast':    ('t1_contrast', 'delays'),
+        'odmr_contrast':        ('odmr_contrast', 'frequencies'),
+        'pulsed_odmr_contrast': ('pulsed_odmr_contrast', 'frequencies'),
+        'rabi_contrast':        ('rabi_contrast', 'durations'),
+        't1_contrast':          ('t1_contrast', 'delays'),
     }
 
     def _save_results(self, result_key: str, result: Dict):
@@ -93,7 +94,7 @@ class ODMRExperiments:
         try:
             extra_columns = None
             count_rates = result.get('count_rates')
-            if result_key == 'odmr_contrast':
+            if result_key in ('odmr_contrast', 'pulsed_odmr_contrast'):
                 sig = np.array(result['mw_on_rates'])
                 ref = np.array(result['mw_off_rates'])
                 sig_over_ref = np.where(ref > 0, sig / ref, np.nan)
@@ -429,6 +430,174 @@ class ODMRExperiments:
         print("✅ Rabi contrast measurement completed")
         return self.results['rabi_contrast']
 
+    def pulsed_odmr_contrast(self,
+                              mw_frequencies: List[float],
+                              mw_duration: int = 1000,
+                              init_laser_duration: int = 3000,
+                              readout_laser_duration: int = 1000,
+                              detection_duration: int = 300,
+                              init_laser_delay: int = 0,
+                              mw_gap: int = 500,
+                              readout_gap: int = 500,
+                              detection_delay: int = 0,
+                              sequence_interval: int = 2000,
+                              repetitions: int = 100000,
+                              plot_sequence: bool = False,
+                              progress_callback: Optional[Callable] = None) -> Dict:
+        """
+        Perform pulsed ODMR contrast measurement.
+
+        Uses the same pulse sequence as the Rabi experiment (init laser → MW pulse in the
+        dark → readout laser + detection), but sweeps the MW frequency with the MW pulse
+        duration held fixed:
+
+          AOM: |── init ──| ← mw_gap → [MW slot, fixed] ← readout_gap → |── readout ──|
+          SPD:                                                        |detect|
+
+          - Reference (even bins): MW off  → bright ms=0 PL at readout
+          - Signal   (odd  bins): MW on   → PL after spin rotation at the swept frequency
+
+        Because the MW is applied in the dark rather than simultaneously with the laser,
+        the resonance is not power-broadened by optical pumping. The linewidth is limited
+        by 1/(pi*T2*) and by the MW pulse duration (~0.8/mw_duration), typically giving
+        1-3 MHz instead of the ~10 MHz of continuous-wave ODMR. This is narrow enough to
+        resolve the 14N hyperfine triplet (2.16 MHz splitting).
+
+        Setting mw_duration to the pi-pulse duration measured with rabi_oscillation_contrast
+        maximises the contrast. A longer pulse (1-2 us) also works and needs no calibration,
+        which makes this measurement a useful positive control for the pulsed sequence:
+        the resonance frequency is already known from the CW ODMR, so a missing dip points
+        to a sequence or readout timing problem rather than to spin physics.
+
+        Args:
+            mw_frequencies: List of microwave frequencies to sweep (Hz)
+            mw_duration: Fixed MW pulse duration in ns (use the pi-pulse duration if known)
+            init_laser_duration: Initialization laser pulse duration in ns
+            readout_laser_duration: Readout laser pulse duration in ns
+            detection_duration: Detection window duration in ns
+            init_laser_delay: Delay before initialization laser in ns
+            mw_gap: Dark time between init laser and MW pulse in ns
+            readout_gap: Dark time between MW pulse and readout laser in ns
+            detection_delay: SPD gate offset relative to readout edge (AOM compensation) in ns
+            sequence_interval: Interval between sub-sequences in ns
+            repetitions: Number of repetitions per frequency point
+            plot_sequence: If True, call sequence.plot() at each sweep point (blocks until closed)
+            progress_callback: Optional callback(frequencies, contrasts) for live updates
+
+        Returns:
+            Dictionary containing frequencies, contrasts, and MW off/on rates
+        """
+        print("🔬 Starting pulsed ODMR contrast measurement...")
+
+        frequencies = []
+        contrasts = []
+        mw_off_rates = []
+        mw_on_rates = []
+
+        # Each contrast sequence run produces 2 detection windows (MW off then MW on)
+        self.counter = TimeTagger.CountBetweenMarkers(
+            tagger=self.tagger,
+            click_channel=1,
+            begin_channel=2,
+            end_channel=-2,
+            n_values=repetitions * 2
+        )
+
+        if self.mw_generator:
+            self.mw_generator.prepare_for_odmr(mw_frequencies[0] / 1e9, -10.0)
+
+        # The MW pulse length is fixed, so the sequence is identical for every frequency
+        sequence, total_duration = self.pulse_controller.create_rabi_sequence_contrast(
+            init_laser_duration=init_laser_duration,
+            readout_laser_duration=readout_laser_duration,
+            mw_duration=int(mw_duration),
+            detection_duration=detection_duration,
+            init_laser_delay=init_laser_delay,
+            mw_gap=mw_gap,
+            readout_gap=readout_gap,
+            detection_delay=detection_delay,
+            sequence_interval=sequence_interval
+        )
+        if plot_sequence and sequence:
+            sequence.plot()
+        time.sleep(0.2)
+
+        for freq in mw_frequencies:
+            print(f"📡 Measuring at {freq/1e6:.2f} MHz")
+
+            if sequence:
+                if self.mw_generator:
+                    self.mw_generator.set_odmr_frequency(freq / 1e9)
+                    self.mw_generator.set_rf_output(True)
+                time.sleep(0.2)
+                self.counter.start()
+                ready = False
+                self.pulse_controller.run_sequence(sequence, repetitions)
+
+                while ready is False:
+                    time.sleep(0.2)
+                    ready = self.counter.ready()
+                    information = self.counter.getBinWidths()
+                    print(f"Information: {information}")
+                    print(f"Ready: {ready}")
+                    counts = self.counter.getData()
+                    print(f"Counts: {counts}")
+
+                self.counter.clear()
+
+                counts_arr = np.array(counts)
+                info_arr = np.array(information)
+
+                # Even bins → MW off (reference); odd bins → MW on (signal)
+                counts_off = counts_arr[0::2]
+                counts_on  = counts_arr[1::2]
+                info_off   = info_arr[0::2]
+                info_on    = info_arr[1::2]
+
+                rate_off = np.mean(counts_off) / (np.mean(info_off) * 1e-12)
+                rate_on  = np.mean(counts_on)  / (np.mean(info_on)  * 1e-12)
+                contrast = (rate_off - rate_on) / rate_off if rate_off > 0 else 0.0
+
+                print(f"MW off: {rate_off:.2f} Hz | MW on: {rate_on:.2f} Hz | Contrast: {contrast:.4f}")
+
+                frequencies.append(freq)
+                contrasts.append(contrast)
+                mw_off_rates.append(rate_off)
+                mw_on_rates.append(rate_on)
+
+                if progress_callback:
+                    progress_callback(frequencies.copy(), contrasts.copy())
+
+                if self.mw_generator:
+                    self.mw_generator.set_rf_output(False)
+
+                time.sleep(0.05)
+
+        self.results['pulsed_odmr_contrast'] = {
+            'frequencies': frequencies,
+            'contrasts': contrasts,
+            'mw_off_rates': mw_off_rates,
+            'mw_on_rates': mw_on_rates,
+            'parameters': {
+                'mw_duration': self.pulse_controller.align_timing(int(mw_duration)),
+                'init_laser_duration': init_laser_duration,
+                'readout_laser_duration': readout_laser_duration,
+                'detection_duration': detection_duration,
+                'init_laser_delay': init_laser_delay,
+                'mw_gap': mw_gap,
+                'readout_gap': readout_gap,
+                'detection_delay': detection_delay,
+                'sequence_interval': sequence_interval,
+                'repetitions': repetitions
+            }
+        }
+
+        self._save_results('pulsed_odmr_contrast', self.results['pulsed_odmr_contrast'])
+        print(f"Contrasts: {contrasts}")
+        print(f"Frequencies: {frequencies}")
+        print("✅ Pulsed ODMR contrast measurement completed")
+        return self.results['pulsed_odmr_contrast']
+
     def t1_decay_contrast(self,
                           delay_times: List[int],
                           init_laser_duration: int = 1000,
@@ -582,7 +751,8 @@ class ODMRExperiments:
 
         plt.figure(figsize=(10, 6))
 
-        if experiment_type == 'odmr_contrast':
+        if experiment_type in ('odmr_contrast', 'pulsed_odmr_contrast'):
+            title = 'Pulsed ODMR' if experiment_type == 'pulsed_odmr_contrast' else 'ODMR'
             freqs = np.array(data['frequencies']) / 1e9
             sig = np.array(data['mw_on_rates'])
             ref = np.array(data['mw_off_rates'])
@@ -595,7 +765,7 @@ class ODMRExperiments:
 
             axes[0].plot(freqs, ref, 'bo-', label='Reference (MW off)')
             axes[0].set_ylabel('Count Rate (cps)')
-            axes[0].set_title('ODMR Contrast')
+            axes[0].set_title(f'{title} Contrast')
             axes[0].legend()
             axes[0].grid(True, alpha=0.3)
 
@@ -622,7 +792,7 @@ class ODMRExperiments:
             ax_ratio.plot(freqs, sig_over_ref, 'mo-', label='Signal / Reference')
             ax_ratio.set_xlabel('Frequency (GHz)')
             ax_ratio.set_ylabel('Signal / Reference')
-            ax_ratio.set_title('ODMR – Signal / Reference')
+            ax_ratio.set_title(f'{title} – Signal / Reference')
             ax_ratio.legend()
             ax_ratio.grid(True, alpha=0.3)
             fig_ratio.tight_layout()
@@ -631,7 +801,7 @@ class ODMRExperiments:
             ax_con.plot(freqs, contrasts_pct, 'go-', label='Contrast = (ref − sig) / ref')
             ax_con.set_xlabel('Frequency (GHz)')
             ax_con.set_ylabel('Contrast (%)')
-            ax_con.set_title('ODMR – Contrast')
+            ax_con.set_title(f'{title} – Contrast')
             ax_con.legend()
             ax_con.grid(True, alpha=0.3)
             fig_con.tight_layout()
@@ -822,26 +992,45 @@ def run_example_experiments():
         # )
         # experiments.plot_results('odmr_contrast')
 
-        # 2. Rabi oscillation with contrast (signal/reference normalisation)
+        # 2. Pulsed ODMR with contrast (same sequence as Rabi, MW duration fixed)
         # print("\n" + "="*50)
-        # mw_durations = np.arange(0, 400, 8)  # 0–400 ns, 8 ns steps (Pulse Streamer alignment)
+        # frequencies = np.linspace(2.83e9, 2.87e9, 81)   # 0.5 MHz steps around the CW dip
+        # pulsed_odmr_result = experiments.pulsed_odmr_contrast(
+        #     mw_frequencies=frequencies,
+        #     mw_duration=1000,              # fixed; use the pi-pulse duration once known
+        #     init_laser_duration=3000,
+        #     readout_laser_duration=1000,
+        #     detection_duration=300,
+        #     init_laser_delay=0,
+        #     mw_gap=500,
+        #     readout_gap=500,
+        #     detection_delay=0,
+        #     sequence_interval=2000,
+        #     repetitions=100000,
+        #     plot_sequence=False
+        # )
+        # experiments.plot_results('pulsed_odmr_contrast')
+
+        # 3. Rabi oscillation with contrast (signal/reference normalisation)
+        # print("\n" + "="*50)
+        # mw_durations = np.linspace(0, 504, 64)   # 0–504 ns, exact 8 ns steps
         # rabi_contrast_result = experiments.rabi_oscillation_contrast(
         #     mw_durations=mw_durations,
-        #     mw_frequency=2.875e9,          # use your NV ODMR resonance frequency
-        #     init_laser_duration=5000,
-        #     readout_laser_duration=3000,
-        #     detection_duration=2000,
+        #     mw_frequency=2.850e9,          # use your NV ODMR resonance frequency
+        #     init_laser_duration=3000,
+        #     readout_laser_duration=1000,
+        #     detection_duration=300,        # short gate: spin contrast lives in the first ~300 ns
         #     init_laser_delay=0,
-        #     mw_gap=200,
-        #     readout_gap=200,
-        #     detection_delay=1500,          # AOM compensation (same as ODMR/T1)
-        #     sequence_interval=5000,
-        #     repetitions=50000,
+        #     mw_gap=500,
+        #     readout_gap=500,
+        #     detection_delay=0,             # calibrate by sweeping it at fixed mw_duration
+        #     sequence_interval=2000,
+        #     repetitions=400000,
         #     plot_sequence=False
         # )
         # experiments.plot_results('rabi_contrast')
 
-        # 3. T1 decay with contrast (signal/reference normalisation)
+        # 4. T1 decay with contrast (signal/reference normalisation)
         print("\n" + "="*50)
         delay_times = np.linspace(0, 30e6, 50)  # 0-10 µs in 50 steps
         #delay_times = np.logspace(np.log10(0.5e3), np.log10(5e6), 50)

@@ -31,6 +31,16 @@ class ODMRDataManager:
             'x_unit': 'Hz',
             'x_range_format': lambda min_x, max_x: f"{min_x:.1f} Hz ({min_x/1e9:.6f} to {max_x/1e9:.6f} GHz)"
         },
+        'pulsed_odmr_contrast': {
+            'folder_name': 'Pulsed_ODMR_Contrast',
+            'file_suffix': '_Pulsed_ODMR_Contrast',
+            'x_column': 'Frequency_Hz',
+            'x_columns_converted': [],
+            'data_key': 'mw_frequencies',
+            'x_label': 'Frequency',
+            'x_unit': 'Hz',
+            'x_range_format': lambda min_x, max_x: f"{min_x:.1f} Hz ({min_x/1e9:.6f} to {max_x/1e9:.6f} GHz)"
+        },
         't1_contrast': {
             'folder_name': 'T1_Contrast',
             'file_suffix': '_T1_Contrast',
