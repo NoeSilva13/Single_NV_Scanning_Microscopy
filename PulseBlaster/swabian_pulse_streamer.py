@@ -432,6 +432,157 @@ class SwabianPulseController:
             print(f"❌ Error creating Rabi contrast sequence: {e}")
             return None
 
+    def create_readout_transient_sequence(self,
+                                          init_laser_duration: int,
+                                          readout_laser_duration: int,
+                                          mw_duration: int,
+                                          detection_duration: int,
+                                          mw_on: bool,
+                                          init_laser_delay: int = 0,
+                                          mw_gap: int = 0,
+                                          readout_gap: int = 0,
+                                          pre_readout: int = 0,
+                                          sequence_interval: int = 10000) -> Optional[Tuple]:
+        """
+        Create a single-half sequence for time-resolved readout characterisation.
+
+        This is the Rabi contrast sequence reduced to ONE sub-sequence, with the SPD
+        gate opened wide enough to span the whole readout pulse. It is meant to be
+        combined with a TimeTagger.Histogram started on the SPD gate rising edge, so
+        that the photon arrival time distribution during the readout pulse is measured
+        directly instead of being integrated into a single number.
+
+        Only one sub-sequence is emitted, so each run produces exactly one gate edge
+        and the histogram is unambiguous. The MW state is fixed for the whole run
+        (mw_on), which means two runs are needed to obtain the reference and signal
+        transients.
+
+          AOM: |── init ──| ← mw_gap → [MW slot τ] ← readout_gap → |── readout ──| interval |
+          MW:                     (OFF / ON for the whole run)
+          SPD:                                            |───── wide gate ─────|  interval |
+                                                          ↑ readout − pre_readout
+
+        Opening the gate pre_readout nanoseconds before the readout laser edge puts a
+        few dark bins at the start of the histogram. Those bins give the background
+        level and make the laser turn-on visible as a step, which is what allows the
+        electronic latency to be read off the data rather than guessed.
+
+        Args:
+            init_laser_duration: Duration of initialization laser pulse in ns
+            readout_laser_duration: Duration of readout laser pulse in ns
+            mw_duration: Duration of the MW slot in ns
+            detection_duration: Width of the SPD gate in ns. Should be at least
+                                pre_readout + readout_laser_duration so the gate
+                                spans the whole readout pulse.
+            mw_on: If True the MW channel is high during the MW slot (signal
+                   transient); if False it stays low (reference transient)
+            init_laser_delay: Delay before the initialization laser in ns
+            mw_gap: Dark time between end of init laser and start of MW in ns
+            readout_gap: Dark time between end of MW and start of readout in ns.
+                         Must be >= pre_readout so the gate does not open while
+                         the MW pulse is still on.
+            pre_readout: How long before the readout laser edge the SPD gate opens in ns
+            sequence_interval: Idle time appended after the sub-sequence in ns
+
+        Returns:
+            Tuple (Sequence, total_duration_ns) or None if error
+        """
+        if not self.is_connected:
+            print("❌ Device not connected")
+            return None
+
+        try:
+            init_laser_duration    = self.align_timing(init_laser_duration)
+            readout_laser_duration = self.align_timing(readout_laser_duration)
+            mw_duration            = self.align_timing(mw_duration)
+            detection_duration     = self.align_timing(detection_duration)
+            init_laser_delay       = self.align_timing(init_laser_delay)
+            mw_gap                 = self.align_timing(mw_gap)
+            readout_gap            = self.align_timing(readout_gap)
+            pre_readout            = self.align_timing(pre_readout)
+            sequence_interval      = self.align_timing(sequence_interval)
+
+            if readout_gap < pre_readout:
+                print(f"❌ Error: readout_gap ({readout_gap} ns) must be >= pre_readout "
+                      f"({pre_readout} ns) so the SPD gate does not open during the MW pulse.")
+                return None
+
+            init_end      = init_laser_delay + init_laser_duration
+            mw_start      = init_end + mw_gap
+            mw_end        = mw_start + mw_duration
+            readout_start = mw_end + readout_gap
+            detect_start  = self.align_timing(readout_start - pre_readout)
+
+            single_seq_duration = self.align_timing(max(
+                readout_start + readout_laser_duration,
+                detect_start + detection_duration
+            ))
+
+            # AOM: init | mw_gap | (MW slot, laser OFF) | readout_gap | readout | fill | interval
+            aom_pattern = []
+            if init_laser_delay > 0:
+                aom_pattern.append((init_laser_delay, 0))
+            aom_pattern.append((init_laser_duration, 1))
+
+            if mw_gap > 0:
+                aom_pattern.append((mw_gap, 0))
+            if mw_duration > 0:
+                aom_pattern.append((mw_duration, 0))
+            if readout_gap > 0:
+                aom_pattern.append((readout_gap, 0))
+            aom_pattern.append((readout_laser_duration, 1))
+
+            used_aom = readout_start + readout_laser_duration
+            remaining_aom = single_seq_duration - used_aom
+            if remaining_aom > 0:
+                aom_pattern.append((remaining_aom, 0))
+            if sequence_interval > 0:
+                aom_pattern.append((sequence_interval, 0))
+
+            # MW: high during the MW slot only when mw_on
+            mw_pattern = []
+            if mw_start > 0:
+                mw_pattern.append((mw_start, 0))
+            if mw_duration > 0:
+                mw_pattern.append((mw_duration, 1 if mw_on else 0))
+            remaining_mw = single_seq_duration - (mw_start + mw_duration)
+            if remaining_mw > 0:
+                mw_pattern.append((remaining_mw, 0))
+            if sequence_interval > 0:
+                mw_pattern.append((sequence_interval, 0))
+
+            # SPD: one wide gate spanning the readout pulse
+            spd_pattern = []
+            if detect_start > 0:
+                spd_pattern.append((detect_start, 0))
+            spd_pattern.append((detection_duration, 1))
+
+            remaining_spd = single_seq_duration - (detect_start + detection_duration)
+            if remaining_spd > 0:
+                spd_pattern.append((remaining_spd, 0))
+            if sequence_interval > 0:
+                spd_pattern.append((sequence_interval, 0))
+
+            total_duration = sum(d for d, _ in aom_pattern)
+            if total_duration % 8 != 0:
+                print(f"❌ Error: Total sequence length ({total_duration} ns) not multiple of 8 ns")
+                return None
+
+            sequence = self.pulse_streamer.createSequence()
+            sequence.setDigital(self.CHANNEL_AOM, aom_pattern)
+            sequence.setDigital(self.CHANNEL_MW, mw_pattern)
+            sequence.setDigital(self.CHANNEL_SPD, spd_pattern)
+
+            print(f"✅ Readout transient sequence created: MW {'ON' if mw_on else 'OFF'}, "
+                  f"gate={detection_duration} ns opening {pre_readout} ns before readout, "
+                  f"{total_duration} ns total (8ns aligned)")
+
+            return sequence, total_duration
+
+        except Exception as e:
+            print(f"❌ Error creating readout transient sequence: {e}")
+            return None
+
     def run_sequence(self, sequence: Sequence, n_runs: int = None):
         """
         Upload and run a pulse sequence.

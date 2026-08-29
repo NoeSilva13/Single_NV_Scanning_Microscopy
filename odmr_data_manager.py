@@ -41,6 +41,18 @@ class ODMRDataManager:
             'x_unit': 'Hz',
             'x_range_format': lambda min_x, max_x: f"{min_x:.1f} Hz ({min_x/1e9:.6f} to {max_x/1e9:.6f} GHz)"
         },
+        'readout_transient': {
+            'folder_name': 'Readout_Transient',
+            'file_suffix': '_Readout_Transient',
+            'x_column': 'Time_ns',
+            'x_columns_converted': [
+                ('Time_s', 1e-9),
+            ],
+            'data_key': 'times',
+            'x_label': 'Time since readout edge',
+            'x_unit': 'ns',
+            'x_range_format': lambda min_x, max_x: f"{min_x} to {max_x} ns ({min_x*1e-9:.9f} to {max_x*1e-9:.9f} s)"
+        },
         't1_contrast': {
             'folder_name': 'T1_Contrast',
             'file_suffix': '_T1_Contrast',
