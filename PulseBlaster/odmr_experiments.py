@@ -33,6 +33,60 @@ from odmr_data_manager import ODMRDataManager
 # TimeTagger imports for real data acquisition
 import TimeTagger
 
+class _LiveContrastPlot:
+    """
+    Interactive single-panel plot refreshed after every sweep point.
+
+    Any failure (non-interactive backend, closed window) disables the plot instead
+    of interrupting the measurement.
+    """
+
+    def __init__(self, xlabel: str, ylabel: str, title: str,
+                 x_scale: float = 1.0, marker: str = 'o-'):
+        self.x_scale = x_scale
+        self.enabled = False
+        self._was_interactive = plt.isinteractive()
+        try:
+            plt.ion()
+            self.fig, self.ax = plt.subplots(figsize=(10, 6))
+            self.line, = self.ax.plot([], [], marker, color='green')
+            self.ax.set_xlabel(xlabel)
+            self.ax.set_ylabel(ylabel)
+            self.ax.set_title(title)
+            self.ax.grid(True, alpha=0.3)
+            self.fig.tight_layout()
+            self.fig.show()
+            self.fig.canvas.flush_events()
+            self.enabled = True
+        except Exception as e:
+            print(f"Warning: live plot disabled ({e})")
+            if not self._was_interactive:
+                plt.ioff()
+
+    def update(self, x_values, y_values):
+        if not self.enabled:
+            return
+        try:
+            self.line.set_data(np.asarray(x_values, dtype=float) / self.x_scale,
+                               np.asarray(y_values, dtype=float))
+            self.ax.relim()
+            self.ax.autoscale_view()
+            self.fig.canvas.draw_idle()
+            self.fig.canvas.flush_events()
+        except Exception as e:
+            print(f"Warning: live plot update failed ({e})")
+            self.enabled = False
+
+    def close(self):
+        try:
+            plt.close(self.fig)
+        except Exception:
+            pass
+        self.enabled = False
+        if not self._was_interactive:
+            plt.ioff()
+
+
 class ODMRExperiments:
     """
     Class containing various ODMR experiment implementations.
@@ -54,7 +108,7 @@ class ODMRExperiments:
         
         # Initialize TimeTagger for real data acquisition
         try:
-            self.tagger = TimeTagger.createTimeTaggerNetwork("192.168.0.221")
+            self.tagger = TimeTagger.createTimeTaggerNetwork("192.168.0.10")
             print("✅ Connected to Network TimeTagger device")
         except Exception as e:
             print(f"⚠️ Network TimeTagger not detected: {str(e)}")
@@ -148,6 +202,7 @@ class ODMRExperiments:
                       sequence_interval: int = 10000,
                       repetitions: int = 100,
                       plot_sequence: bool = False,
+                      live_plot: bool = True,
                       progress_callback: Optional[Callable] = None) -> Dict:
         """
         Perform ODMR contrast measurement.
@@ -172,6 +227,7 @@ class ODMRExperiments:
             sequence_interval: Interval between measurement sequences in ns
             repetitions: Number of sequence repetitions per frequency point
             plot_sequence: If True, call sequence.plot() at each sweep point (blocks until closed)
+            live_plot: If True, show a contrast plot that refreshes after each frequency point
 
         Returns:
             Dictionary containing frequencies, contrasts, and MW off/on rates
@@ -182,6 +238,11 @@ class ODMRExperiments:
         contrasts = []
         mw_off_rates = []
         mw_on_rates = []
+
+        live = None
+        if live_plot and progress_callback is None:
+            live = _LiveContrastPlot(xlabel='Frequency (MHz)', ylabel='Contrast (%)',
+                                     title='ODMR Contrast (live)', x_scale=1e6)
 
         # Each contrast sequence run produces 2 detection windows (MW off then MW on)
         self.counter = TimeTagger.CountBetweenMarkers(
@@ -253,11 +314,16 @@ class ODMRExperiments:
 
                 if progress_callback:
                     progress_callback(frequencies.copy(), contrasts.copy())
+                if live:
+                    live.update(frequencies, np.array(contrasts) * 100)
 
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(False)
 
                 time.sleep(0.05)
+
+        if live:
+            live.close()
 
         self.results['odmr_contrast'] = {
             'frequencies': frequencies,
@@ -296,6 +362,7 @@ class ODMRExperiments:
                                    sequence_interval: int = 5000,
                                    repetitions: int = 1000,
                                    plot_sequence: bool = False,
+                                   live_plot: bool = True,
                                    progress_callback: Optional[Callable] = None) -> Dict:
         """
         Perform Rabi oscillation measurement using the contrast method.
@@ -326,6 +393,7 @@ class ODMRExperiments:
             sequence_interval: Interval between sub-sequences in ns
             repetitions: Number of repetitions per duration point
             plot_sequence: If True, call sequence.plot() at each sweep point (blocks until closed)
+            live_plot: If True, show a contrast plot that refreshes after each duration point
             progress_callback: Optional callback(durations, contrasts) for live updates
 
         Returns:
@@ -337,6 +405,11 @@ class ODMRExperiments:
         contrasts = []
         mw_off_rates = []
         mw_on_rates = []
+
+        live = None
+        if live_plot and progress_callback is None:
+            live = _LiveContrastPlot(xlabel='MW Duration (ns)', ylabel='Contrast (%)',
+                                     title='Rabi Contrast (live)')
 
         self.counter = TimeTagger.CountBetweenMarkers(
             tagger=self.tagger,
@@ -408,11 +481,16 @@ class ODMRExperiments:
 
                 if progress_callback:
                     progress_callback(durations.copy(), contrasts.copy())
+                if live:
+                    live.update(durations, np.array(contrasts) * 100)
 
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(False)
 
                 time.sleep(0.05)
+
+        if live:
+            live.close()
 
         self.results['rabi_contrast'] = {
             'durations': durations,
@@ -452,6 +530,7 @@ class ODMRExperiments:
                               sequence_interval: int = 2000,
                               repetitions: int = 100000,
                               plot_sequence: bool = False,
+                              live_plot: bool = True,
                               progress_callback: Optional[Callable] = None) -> Dict:
         """
         Perform pulsed ODMR contrast measurement.
@@ -491,6 +570,7 @@ class ODMRExperiments:
             sequence_interval: Interval between sub-sequences in ns
             repetitions: Number of repetitions per frequency point
             plot_sequence: If True, call sequence.plot() at each sweep point (blocks until closed)
+            live_plot: If True, show a contrast plot that refreshes after each frequency point
             progress_callback: Optional callback(frequencies, contrasts) for live updates
 
         Returns:
@@ -502,6 +582,11 @@ class ODMRExperiments:
         contrasts = []
         mw_off_rates = []
         mw_on_rates = []
+
+        live = None
+        if live_plot and progress_callback is None:
+            live = _LiveContrastPlot(xlabel='Frequency (MHz)', ylabel='Contrast (%)',
+                                     title='Pulsed ODMR Contrast (live)', x_scale=1e6)
 
         # Each contrast sequence run produces 2 detection windows (MW off then MW on)
         self.counter = TimeTagger.CountBetweenMarkers(
@@ -576,11 +661,16 @@ class ODMRExperiments:
 
                 if progress_callback:
                     progress_callback(frequencies.copy(), contrasts.copy())
+                if live:
+                    live.update(frequencies, np.array(contrasts) * 100)
 
                 if self.mw_generator:
                     self.mw_generator.set_rf_output(False)
 
                 time.sleep(0.05)
+
+        if live:
+            live.close()
 
         self.results['pulsed_odmr_contrast'] = {
             'frequencies': frequencies,
@@ -955,6 +1045,7 @@ class ODMRExperiments:
                           sequence_interval: int = 10000,
                           repetitions: int = 1000,
                           plot_sequence: bool = False,
+                          live_plot: bool = True,
                           progress_callback: Optional[Callable] = None) -> Dict:
         """
         Perform T1 decay measurement using the contrast method.
@@ -987,6 +1078,7 @@ class ODMRExperiments:
             sequence_interval: Interval between sequences in ns
             repetitions: Number of repetitions per delay point
             plot_sequence: If True, call sequence.plot() at each sweep point (blocks until closed)
+            live_plot: If True, show a Signal/Reference plot that refreshes after each delay point
             progress_callback: Optional callback(delays, contrasts) for live updates
 
         Returns:
@@ -998,6 +1090,11 @@ class ODMRExperiments:
         contrasts = []
         sig_rates = []
         ref_rates = []
+
+        live = None
+        if live_plot and progress_callback is None:
+            live = _LiveContrastPlot(xlabel='Delay (µs)', ylabel='Signal / Reference',
+                                     title='T1 Contrast (live)', x_scale=1e3)
 
         self.counter = TimeTagger.CountBetweenMarkers(
             tagger=self.tagger,
@@ -1062,8 +1159,13 @@ class ODMRExperiments:
 
                 if progress_callback:
                     progress_callback(delays.copy(), contrasts.copy())
+                if live:
+                    live.update(delays, contrasts)
 
                 time.sleep(0.05)
+
+        if live:
+            live.close()
 
         self.results['t1_contrast'] = {
             'delays': delays,
@@ -1416,16 +1518,17 @@ def run_example_experiments():
         #     detection_delay=1500,
         #     sequence_interval=2000,
         #     repetitions=5000,
-        #     plot_sequence=False
+        #     plot_sequence=False,
+        #     live_plot=True
         # )
         # experiments.plot_results('odmr_contrast')
 
         # 2. Readout transient — calibrates detection_delay and detection_duration
-        #    Run this once after the CW ODMR, before Rabi, and feed the printed
-        #    detection_delay / detection_duration into the experiments below.
+        #   Run this once after the CW ODMR, before Rabi, and feed the printed
+        #   detection_delay / detection_duration into the experiments below.
         # print("\n" + "="*50)
         # transient_result = experiments.readout_transient(
-        #     mw_frequency=2.850e9,          # use your NV ODMR resonance frequency
+        #     mw_frequency=2.846e9,          # use your NV ODMR resonance frequency
         #     mw_duration=1000,              # long saturating pulse, no calibration needed
         #     init_laser_duration=3000,
         #     readout_laser_duration=3000,   # long enough to contain the full transient
@@ -1442,7 +1545,7 @@ def run_example_experiments():
 
         # 3. Pulsed ODMR with contrast (same sequence as Rabi, MW duration fixed)
         # print("\n" + "="*50)
-        # frequencies = np.linspace(2.83e9, 2.87e9, 81)   # 0.5 MHz steps around the CW dip
+        # frequencies = np.linspace(2.8e9, 2.95e9, 80)   # 0.5 MHz steps around the CW dip
         # pulsed_odmr_result = experiments.pulsed_odmr_contrast(
         #     mw_frequencies=frequencies,
         #     mw_duration=1000,              # fixed; use the pi-pulse duration once known
@@ -1452,48 +1555,51 @@ def run_example_experiments():
         #     init_laser_delay=0,
         #     mw_gap=500,
         #     readout_gap=500,
-        #     detection_delay=0,
+        #     detection_delay=100,
         #     sequence_interval=2000,
-        #     repetitions=100000,
-        #     plot_sequence=False
+        #     repetitions=400000,
+        #     plot_sequence=False,
+        #     live_plot=True
         # )
         # experiments.plot_results('pulsed_odmr_contrast')
 
         # 4. Rabi oscillation with contrast (signal/reference normalisation)
-        # print("\n" + "="*50)
-        # mw_durations = np.linspace(0, 504, 64)   # 0–504 ns, exact 8 ns steps
-        # rabi_contrast_result = experiments.rabi_oscillation_contrast(
-        #     mw_durations=mw_durations,
-        #     mw_frequency=2.850e9,          # use your NV ODMR resonance frequency
-        #     init_laser_duration=3000,
-        #     readout_laser_duration=1000,
-        #     detection_duration=300,        # short gate: spin contrast lives in the first ~300 ns
-        #     init_laser_delay=0,
-        #     mw_gap=500,
-        #     readout_gap=500,
-        #     detection_delay=0,             # calibrate by sweeping it at fixed mw_duration
-        #     sequence_interval=2000,
-        #     repetitions=400000,
-        #     plot_sequence=False
-        # )
-        # experiments.plot_results('rabi_contrast')
+        print("\n" + "="*50)
+        mw_durations = np.linspace(0, 1008, 128)   # 0–504 ns, exact 8 ns steps
+        rabi_contrast_result = experiments.rabi_oscillation_contrast(
+            mw_durations=mw_durations,
+            mw_frequency=2.846e9,          # use your NV ODMR resonance frequency
+            init_laser_duration=3000,
+            readout_laser_duration=1000,
+            detection_duration=300,        # short gate: spin contrast lives in the first ~300 ns
+            init_laser_delay=0,
+            mw_gap=500,
+            readout_gap=500,
+            detection_delay=100,             # calibrate by sweeping it at fixed mw_duration
+            sequence_interval=2000,
+            repetitions=400000,
+            plot_sequence=False,
+            live_plot=True
+        )
+        experiments.plot_results('rabi_contrast')
 
         # 5. T1 decay with contrast (signal/reference normalisation)
-        print("\n" + "="*50)
-        delay_times = np.linspace(0, 30e6, 50)  # 0-10 µs in 50 steps
-        #delay_times = np.logspace(np.log10(0.5e3), np.log10(5e6), 50)
-        t1_contrast_result = experiments.t1_decay_contrast(
-            delay_times=delay_times,
-            init_laser_duration=50000,
-            readout_laser_duration=50000,
-            detection_duration=3000,
-            init_laser_delay=0,
-            detection_delay=1500,
-            sequence_interval=2000,
-            repetitions=3000,
-            plot_sequence=False
-        )
-        experiments.plot_results('t1_contrast')
+        # print("\n" + "="*50)
+        # delay_times = np.linspace(0, 30e6, 50)  # 0-10 µs in 50 steps
+        # #delay_times = np.logspace(np.log10(0.5e3), np.log10(5e6), 50)
+        # t1_contrast_result = experiments.t1_decay_contrast(
+        #     delay_times=delay_times,
+        #     init_laser_duration=50000,
+        #     readout_laser_duration=50000,
+        #     detection_duration=3000,
+        #     init_laser_delay=0,
+        #     detection_delay=1500,
+        #     sequence_interval=2000,
+        #     repetitions=3000,
+        #     plot_sequence=False,
+        #     live_plot=True
+        # )
+        # experiments.plot_results('t1_contrast')
         
         
         print("\n✅ All example experiments completed!")
