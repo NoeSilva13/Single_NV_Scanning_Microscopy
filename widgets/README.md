@@ -61,7 +61,7 @@ Most widgets are implemented as factory functions that take dependencies as para
 # Dependencies
 run_scan_func = run_selected_scan  # mode-aware dispatch (XY/XZ/YZ/XYZ)
 shapes_layer = viewer.layers['shapes']
-bridge = GUIBridge()  # from thread_safe_bridge, for thread-safe UI updates
+bridge = GUIBridge()  # from confocal.thread_safe_bridge, for thread-safe UI updates
 
 # Create widget
 new_scan_widget = new_scan(run_scan_func, shapes_layer, bridge, scan_in_progress=[False])
@@ -153,7 +153,7 @@ class ZoomLevelManager:
 
 - **`run_z_sweep(tagger, z_controller, positions, dwell_time, plot_callback=None, ...)`**
   - Single linear Z sweep over the given positions (µm)
-  - Hardware-timed piezo ramp on `ao2`; photons are counted per point by `CountBetweenMarkers` (via `scanning_core.run_hardware_timed_sweep`)
+  - Hardware-timed piezo ramp on `ao2`; photons are counted per point by `CountBetweenMarkers` (via `confocal.scanning_core.run_hardware_timed_sweep`)
   - `plot_callback(stage, positions, rates)` is invoked during the sweep with the accumulated data for real-time plotting
   - Returns `(positions, count_rates)`; does **not** move the piezo to the peak
 
@@ -169,7 +169,7 @@ class ZoomLevelManager:
 
 - **`SingleAxisScanWidget(scan_params_manager, layer, output_task, tagger, galvo_controller, scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref)`**
   - Complete widget for 1D X/Y line scans at the current galvo position
-  - Runs a hardware-timed AO ramp on the scanned galvo axis (holding the other fixed) with per-point photon counting via `CountBetweenMarkers` (`scanning_core.run_hardware_timed_sweep`); mutually exclusive with the raster/Scan Z scans
+  - Runs a hardware-timed AO ramp on the scanned galvo axis (holding the other fixed) with per-point photon counting via `CountBetweenMarkers` (`confocal.scanning_core.run_hardware_timed_sweep`); mutually exclusive with the raster/Scan Z scans
   - Uses a `QTabWidget` with separate **X Axis** and **Y Axis** tabs; each tab holds its own scan button and a `pyqtgraph` result plot (with a red peak marker), and `update_current_position(x, y)` tracks the galvo's last commanded position
   - **Click-to-move**: left-clicking a plot moves the galvo to that position on the tab's axis (snapping to the nearest measured point), draws a selection line, and fires the optional `move_callback(x_um, y_um)` so the app can sync `current_position_um` and the axis control widget. Mouse pan/zoom and the context menu are disabled so the left click is used only for moving.
   - `add_z_tab(widget, title='Z Axis')` embeds an external panel (the `AutoFocusWidget`, whose button is labelled **"Scan Z"**) as a third tab so X/Y/Z line scans share one dock

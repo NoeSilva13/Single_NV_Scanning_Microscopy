@@ -8,8 +8,8 @@ A Python toolkit developed at the **[Burke Lab](https://www.burkelab.com/)** for
 It bundles two graphical applications plus a script-driven ODMR experiment suite that share common infrastructure (data management, calibration constants, reusable Qt/napari widgets):
 
 1. **Confocal Scan GUI** ([confocal_main_control.py](confocal_main_control.py)) - real-time galvo raster scanning, live photon counting, click-to-move positioning, region zoom, auto-focus and single-axis line scans, built on a [napari](https://napari.org/) viewer.
-2. **ODMR experiments** ([PulseBlaster/odmr_experiments.py](PulseBlaster/odmr_experiments.py)) - script-driven continuous-wave **ODMR**, **pulsed ODMR**, **Rabi**, **T1**, and **readout transient** measurements with live matplotlib updates and PDF/CSV export.
-3. **Spectrometer Control** ([spectrometer_app.py](spectrometer_app.py)) - real-time spectral analysis using a Player One Astronomy (POA) camera in line-scan mode, with wavelength calibration and data recording.
+2. **ODMR experiments** ([run_odmr_experiments.py](run_odmr_experiments.py) → [PulseBlaster/odmr_experiments.py](PulseBlaster/odmr_experiments.py)) - script-driven continuous-wave **ODMR**, **pulsed ODMR**, **Rabi**, **T1**, and **readout transient** measurements with live matplotlib updates and PDF/CSV export.
+3. **Spectrometer Control** ([spectrometer_app.py](spectrometer_app.py)) - real-time spectral analysis using a Player One Astronomy (POA) camera in line-scan mode, with wavelength calibration and data recording. Details: [docs/spectrometer.md](docs/spectrometer.md).
 
 Each entry point can be run independently and only requires the hardware/drivers relevant to it (see [Hardware requirements](#-hardware-requirements)).
 
@@ -17,18 +17,18 @@ Each entry point can be run independently and only requires the hardware/drivers
 ## ✨ Key capabilities
 
 ### Confocal Scan GUI (`confocal_main_control.py`)
-- **Multi-dimensional scanning (XY / XZ / YZ / XYZ)** selected via a **Scan Mode** dropdown that drives **New Scan**: 2D modes render an image, XYZ renders a 3D volume in napari, all through one generic N-axis raster engine (`raster_engine.py`). Every axis is calibrated in micrometers (canonical unit) through a shared `DAQAxis` abstraction (`daq_axis.py`); the µm→V conversion happens only at the DAQ boundary.
+- **Multi-dimensional scanning (XY / XZ / YZ / XYZ)** selected via a **Scan Mode** dropdown that drives **New Scan**: 2D modes render an image, XYZ renders a 3D volume in napari, all through one generic N-axis raster engine ([confocal/raster_engine.py](confocal/raster_engine.py)). Every axis is calibrated in micrometers (canonical unit) through a shared `DAQAxis` abstraction ([confocal/daq_axis.py](confocal/daq_axis.py)); the µm→V conversion happens only at the DAQ boundary.
 - Live **XY raster scanning** with per-pixel, hardware-timed photon counting (NI-DAQ sample clock + Swabian TimeTagger `CountBetweenMarkers`).
 - **napari**-based viewer (zoom, pan, live contrast auto-scaling, scale bar in µm).
 - **Click-to-move** galvo positioning (on the scan image and on the single-axis line-scan plots) and rectangle **ROI zoom** (up to 9 nested zoom levels, with history/undo via "Reset Zoom").
-- Integrated **Scan Z** (linear piezo Z sweep) and **single-axis line scans** along X or Y, both hardware-timed with per-point photon counting via the DAQ clock + TimeTagger `CountBetweenMarkers` (shared `scanning_core.py`). Z min/max/resolution/dwell are set in the Scan Parameters panel.
+- Integrated **Scan Z** (linear piezo Z sweep) and **single-axis line scans** along X or Y, both hardware-timed with per-point photon counting via the DAQ clock + TimeTagger `CountBetweenMarkers` (shared [confocal/scanning_core.py](confocal/scanning_core.py)). Z min/max/resolution/dwell are set in the Scan Parameters panel.
 - Multi-backend **live camera preview** (POA / ZWO / USB webcam) and single-shot capture, docked in the viewer.
 - Real-time photon-count **strip-chart plot** with overflow indication.
 - Manual **X/Y/Z axis control** widget (slider + spinbox per axis) that also tracks the scanner's current position: galvo X/Y via the AO task, piezo Z via DAQ `ao2` → EXT IN. It updates on click-to-move and at the end of every scan.
 - Automatic data saving after every scan: `.csv` (metadata header), `.npz` (image + full metadata), `.tiff` (ImageJ/Fiji-compatible with scale calibration) and a `.png` heatmap.
 - **Load Scan** widget to reopen previously saved `.npz` scans at the correct physical scale.
 
-### ODMR experiments (`PulseBlaster/odmr_experiments.py`)
+### ODMR experiments (`run_odmr_experiments.py`)
 - Script-driven measurement loops with interleaved signal/reference **contrast** for common-mode noise rejection:
   - **`odmr_contrast`** - continuous-wave frequency sweep to locate the NV resonance.
   - **`pulsed_odmr_contrast`** - frequency sweep with a fixed MW pulse in the dark (narrower linewidths than CW).
@@ -38,7 +38,7 @@ Each entry point can be run independently and only requires the hardware/drivers
 - Optional **live matplotlib plot** (`live_plot=True`) that refreshes after every sweep point; final multi-panel figures are still saved as PDF via `plot_results()`.
 - Ethernet control of a **Rigol DSG836** and a **Swabian Pulse Streamer 8/2** (laser/MW/SPD gate timing, 8 ns resolution).
 - Automatic CSV saving via `ODMRDataManager` into dated, per-experiment-type folders under [`data/`](data/).
-- Edit timing/frequency parameters in `run_example_experiments()` (or call the methods from your own script).
+- Edit timing/frequency parameters in `run_example_experiments()` inside [PulseBlaster/odmr_experiments.py](PulseBlaster/odmr_experiments.py) (or call the methods from your own script).
 
 ### Spectrometer Control (`spectrometer_app.py`)
 - Real-time **spectral analysis** using a POA camera configured in a **6252x480** line-scan mode.
@@ -48,12 +48,13 @@ Each entry point can be run independently and only requires the hardware/drivers
 - Live spectrum plot (pyqtgraph) updated every camera frame (~30 FPS acquisition).
 - Time-series **recording** and multi-spectrum **CSV export**.
 - Automatic exposure/gain control with GUI/hardware value sync.
+- See [docs/spectrometer.md](docs/spectrometer.md) for the full guide.
 
 ### Common infrastructure
-- Modular **hardware controller** classes: [galvo_controller.py](galvo_controller.py) (NI-DAQ galvo I/O), [daq_z_controller.py](daq_z_controller.py) (NI-DAQ `ao2` → piezo EXT IN for Z position), [PulseBlaster/swabian_pulse_streamer.py](PulseBlaster/swabian_pulse_streamer.py) and [PulseBlaster/rigol_dsg836.py](PulseBlaster/rigol_dsg836.py).
-- [data_manager.py](data_manager.py) / [odmr_data_manager.py](odmr_data_manager.py) - automatic, date-stamped CSV folder hierarchies for confocal scans and ODMR-family experiments respectively.
-- [utils.py](utils.py) - centralized calibration constants and TIFF metadata export shared by the confocal app.
-- Reusable **napari/magicgui widgets** ([widgets/](widgets/)) and **matplotlib plot widgets** ([plot_widgets/](plot_widgets/)) shared across applications.
+- Confocal hardware stack in [`confocal/`](confocal/): [galvo_controller.py](confocal/galvo_controller.py), [daq_z_controller.py](confocal/daq_z_controller.py), [daq_axis.py](confocal/daq_axis.py), [scanning_core.py](confocal/scanning_core.py), [raster_engine.py](confocal/raster_engine.py), [data_manager.py](confocal/data_manager.py), [plot_scan_results.py](confocal/plot_scan_results.py), [thread_safe_bridge.py](confocal/thread_safe_bridge.py).
+- Shared helpers in [`common/`](common/): [utils.py](common/utils.py) (calibration constants, `experiment_data_root()`, TIFF export) and [odmr_data_manager.py](common/odmr_data_manager.py).
+- Pulse / MW drivers: [PulseBlaster/swabian_pulse_streamer.py](PulseBlaster/swabian_pulse_streamer.py), [PulseBlaster/rigol_dsg836.py](PulseBlaster/rigol_dsg836.py).
+- Reusable **napari/magicgui widgets** ([widgets/](widgets/)) and the live count plot ([plot_widgets/](plot_widgets/)).
 - Tested on Python 3.8-3.12, Windows 10/11.
 
 ---
@@ -66,7 +67,7 @@ Mandatory for confocal scans (`confocal_main_control.py`)
 - **Swabian TimeTagger** (real, network, or virtual/replay fallback)
 - Optional: Thorlabs **piezo Z-stage** (initialized in closed loop by Thorlabs software; position commanded via DAQ `ao2` → EXT IN) for Scan Z; POA/ZWO/USB camera for live preview
 
-Additional for ODMR / advanced timing (`PulseBlaster/odmr_experiments.py`)
+Additional for ODMR / advanced timing (`run_odmr_experiments.py`)
 - **Swabian Pulse Streamer 8/2** (default IP `192.168.0.203`)
 - **Rigol DSG836** microwave source, Ethernet/VISA (default IP `192.168.0.223`)
 - **Acousto-Optic Modulator** (AOM) for laser gating
@@ -121,9 +122,9 @@ Actions inside the napari window:
 
 ### 2. ODMR (CW, pulsed, Rabi, T1, readout transient)
 ```bash
-python PulseBlaster/odmr_experiments.py
+python run_odmr_experiments.py
 ```
-Edit the active call inside `run_example_experiments()` (timing, frequencies, repetitions, `live_plot=True`). The sweep updates a live contrast plot after each point, then `plot_results(...)` saves the final PDFs. Data CSVs land under `data/mmddyy/<ExperimentType>/`. See [PulseBlaster/README.md](PulseBlaster/README.md) for API details.
+Edit the active call inside `run_example_experiments()` in [PulseBlaster/odmr_experiments.py](PulseBlaster/odmr_experiments.py) (timing, frequencies, repetitions, `live_plot=True`). The sweep updates a live contrast plot after each point, then `plot_results(...)` saves the final PDFs. Data CSVs land under `data/mmddyy/<ExperimentType>/`. See [PulseBlaster/README.md](PulseBlaster/README.md) for API details.
 
 ### 3. Spectrometer Control
 ```bash
@@ -135,11 +136,12 @@ Basic operation:
 - Configure exposure and gain settings.
 - Capture dark/reference frames if needed, then apply wavelength calibration (a recent preset is in [`Camera/072926SpectrometerCal02OK.json`](Camera/072926SpectrometerCal02OK.json)).
 - Record and export spectral data to CSV.
+- Full guide: [docs/spectrometer.md](docs/spectrometer.md).
 
 ---
 ## ⚖️ Calibration Parameters
 
-The confocal system's calibration parameters and constants are centrally defined in [utils.py](utils.py):
+The confocal system's calibration parameters and constants are centrally defined in [common/utils.py](common/utils.py):
 
 ### Microscope Calibration
 - `MICRONS_PER_VOLT = 24` - Galvo scanner calibration (µm/V); empirically re-measured per objective (comments in the file list values for other objectives, e.g. 130 for a 40x air objective, 51 for an oil objective).
@@ -159,7 +161,7 @@ The piezo controller is initialized and kept in closed loop by external Thorlabs
 - `BINWIDTH = int(5e9)` - Default binwidth for the TimeTagger live-count strip chart (picoseconds; 5e9 = 5 milliseconds)
 
 To modify these parameters:
-1. Open [utils.py](utils.py).
+1. Open [common/utils.py](common/utils.py).
 2. Update the desired constant value (re-measure `MICRONS_PER_VOLT` whenever the objective or optical path changes).
 3. Restart the application for changes to take effect.
 
@@ -170,7 +172,7 @@ To modify these parameters:
 
 All experiment outputs are written under [`data/`](data/) (override with env var `NV_EXPERIMENT_DATA`). The folder is gitignored so you can delete dated subfolders anytime without affecting the code.
 
-Confocal scans (via [data_manager.py](data_manager.py)), in a daily `mmddyy` folder with a shared, collision-free sequence number `mmddyy###`:
+Confocal scans (via [confocal/data_manager.py](confocal/data_manager.py)), in a daily `mmddyy` folder with a shared, collision-free sequence number `mmddyy###`:
 ```
 data/072226/
  └─ 072226001.csv     # photon counts + metadata header (2D modes: XY / XZ / YZ)
@@ -180,7 +182,7 @@ data/072226/
 ```
 3D (XYZ) scans write only the `.npz` (image/volume + metadata); 2D modes (XY/XZ/YZ) additionally write `.csv`, `.tiff`, and `.png`.
 
-ODMR-family experiments (via [odmr_data_manager.py](odmr_data_manager.py)), one dated subfolder per experiment type:
+ODMR-family experiments (via [common/odmr_data_manager.py](common/odmr_data_manager.py)), one dated subfolder per experiment type:
 ```
 data/072226/
  └─ ODMR_Contrast/
@@ -198,49 +200,31 @@ Each measurement is automatically placed in a date folder by the corresponding `
 
 ```
 Single_NV_Scannig_Microscopy/
-├─ confocal_main_control.py     # Entry point: napari GUI for confocal galvo scanning
-├─ spectrometer_app.py           # Entry point: Qt (PySide6/qtpy) GUI for POA-camera spectrometer
-├─ data/                         # Experiment outputs (mmddyy/...); gitignored, clean manually
+├─ confocal_main_control.py      # Entry: napari confocal GUI
+├─ run_odmr_experiments.py       # Entry: ODMR / Rabi / T1 / readout transient
+├─ spectrometer_app.py           # Entry: POA spectrometer GUI
+├─ data/                         # Experiment outputs (mmddyy/...); gitignored
 │
-├─ data_manager.py               # DataManager: saves confocal scan CSVs with metadata
-├─ odmr_data_manager.py          # ODMRDataManager: saves ODMR/Rabi/T1 CSVs per experiment type
-├─ galvo_controller.py           # GalvoScannerController: NI-DAQ channel setup & voltage I/O
-├─ daq_axis.py                   # DAQAxis: per-axis µm↔V calibration, channel, travel/voltage limits
-├─ daq_z_controller.py           # DAQZController: DAQAxis subclass for the piezo (NI-DAQ ao2 → EXT IN)
-├─ scanning_core.py              # Shared hardware-timed AO + CountBetweenMarkers sweep primitive
-├─ raster_engine.py              # Generic N-axis raster (µm): waveform build, run, 2D/3D reconstruct
-├─ plot_scan_results.py          # Thread-safe PNG heatmap export after each confocal scan
-├─ thread_safe_bridge.py         # GUIBridge: marshal background-thread updates onto the Qt/napari main thread
-├─ utils.py                      # Calibration constants, experiment_data_root(), TIFF export
+├─ common/                       # Shared helpers
+│   ├─ utils.py                  #   Calibration + experiment_data_root() + TIFF export
+│   └─ odmr_data_manager.py      #   ODMR/Rabi/T1 CSV writer
 │
-├─ widgets/                      # Re-usable magicgui/Qt (qtpy) widgets for the confocal napari GUI
-│   ├─ scan_controls.py          #   New Scan / Stop / Reset Zoom / Scan Parameters panel
-│   ├─ camera_controls.py        #   Multi-backend (POA/ZWO/USB) live view + single shot
-│   ├─ auto_focus.py             #   Scan Z tab: linear Z sweep + pyqtgraph plot
-│   ├─ single_axis_scan.py       #   1D X/Y/Z line-scan widget (pyqtgraph tabs)
-│   ├─ file_operations.py        #   Load a saved .npz scan back into napari
-│   └─ axis_controls.py          #   Manual X/Y/Z position widget (galvo + DAQZController)
+├─ confocal/                     # Confocal scanning engine
+│   ├─ galvo_controller.py       #   NI-DAQ galvo I/O
+│   ├─ daq_axis.py / daq_z_controller.py
+│   ├─ scanning_core.py          #   Hardware-timed AO + CountBetweenMarkers
+│   ├─ raster_engine.py          #   N-axis raster (µm)
+│   ├─ data_manager.py           #   Confocal CSV/NPZ paths
+│   ├─ plot_scan_results.py      #   PNG heatmap export
+│   └─ thread_safe_bridge.py     #   Background → Qt main thread
 │
-├─ plot_widgets/                 # Plot widgets shared across apps
-│   └─ live_plot_napari_widget.py#   pyqtgraph live count-rate plot with controls (napari dock)
-│
-├─ PulseBlaster/                 # Pulse Streamer & Rigol drivers + experiment logic
-│   ├─ swabian_pulse_streamer.py #   SwabianPulseController: pulse sequence generation (ODMR/Rabi/T1)
-│   ├─ rigol_dsg836.py           #   RigolDSG836Controller: SCPI/VISA microwave source control
-│   └─ odmr_experiments.py       #   ODMRExperiments: measurement loops, TimeTagger acquisition, plotting
-│
-├─ Camera/                       # Camera backends (used by confocal & spectrometer apps)
-│   ├─ camera_video_mode.py      #   POACameraController
-│   ├─ pyPOACamera.py            #   Low-level POA SDK ctypes bindings
-│   ├─ zwo_camera.py / zwo_camera_controller.py  # ZWO ASI camera backend
-│   ├─ usb_webcam_controller.py  #   Generic OpenCV USB webcam backend
-│   └─ 072926SpectrometerCal02OK.json  # Latest spectrometer wavelength/ROI calibration
-│
-├─ TimeTagger/                   # TimeTagger helpers and virtual-device replay data
-│   ├─ time_tags_test.ttbin      #   Recorded photon-tag stream used as a virtual TimeTagger fallback
-│   └─ CountRateLive.py          #   Standalone live count-rate widget (standalone detector health check)
-│
-├─ requirements.txt              # Python dependencies (see file for vendor SDK notes)
+├─ widgets/                      # Confocal napari docks
+├─ plot_widgets/                 # Live count-rate plot
+├─ PulseBlaster/                 # Pulse Streamer, Rigol, ODMRExperiments
+├─ Camera/                       # POA / ZWO / USB backends + spectrometer cal JSON
+├─ TimeTagger/                   # Virtual .ttbin fallback + CountRateLive
+├─ docs/                         # Extra guides (e.g. spectrometer.md)
+├─ requirements.txt
 └─ CHANGELOG.md
 ```
 
@@ -249,34 +233,36 @@ Single_NV_Scannig_Microscopy/
 ```mermaid
 flowchart TD
     subgraph confocalApp [confocal_main_control.py]
-        DataManager
-        GalvoController[galvo_controller]
-        DAQZController[daq_z_controller]
-        PlotScanResults[plot_scan_results]
-        ThreadSafeBridge[thread_safe_bridge]
-        Utils[utils]
         Widgets["widgets/*"]
         LivePlot["plot_widgets.live_plot_napari_widget"]
+        ConfocalPkg["confocal/*"]
     end
 
-    subgraph odmrApp [PulseBlaster/odmr_experiments.py]
-        ODMRDataManager[odmr_data_manager]
+    subgraph odmrApp [run_odmr_experiments.py]
+        Experiments["PulseBlaster.odmr_experiments"]
+        ODMRDataManager["common.odmr_data_manager"]
         PulseStreamer["PulseBlaster.swabian_pulse_streamer"]
         Rigol["PulseBlaster.rigol_dsg836"]
-        Experiments["ODMRExperiments"]
     end
 
     subgraph spectrometerApp [spectrometer_app.py]
         POACamera["Camera.camera_video_mode"]
     end
 
-    Widgets --> DAQZController
-    Widgets --> Camera["Camera/* backends"]
+    CommonUtils["common.utils"]
+    DataDir["data/"]
+
+    Widgets --> ConfocalPkg
+    ConfocalPkg --> CommonUtils
+    ConfocalPkg --> DataDir
     Experiments --> ODMRDataManager
+    ODMRDataManager --> CommonUtils
+    ODMRDataManager --> DataDir
+    Experiments --> PulseStreamer
+    Experiments --> Rigol
     Experiments --> TimeTagger
     confocalApp --> TimeTagger
-    DataManager --> DataDir["data/"]
-    ODMRDataManager --> DataDir
+    Widgets --> Camera["Camera/*"]
 ```
 
 ---

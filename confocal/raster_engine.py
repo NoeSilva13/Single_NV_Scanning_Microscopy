@@ -20,7 +20,7 @@ import itertools
 
 import numpy as np
 
-from scanning_core import run_hardware_timed_sweep, counts_to_rate
+from .scanning_core import run_hardware_timed_sweep, counts_to_rate
 
 
 def build_raster_waveforms(axes_points, n_flyback=0):

@@ -14,8 +14,8 @@ This is a thin specialization of :class:`daq_axis.DAQAxis`: it shares the
 Z-specific defaults (channel, travel 0-450 µm, closed-loop voltage range).
 """
 
-from daq_axis import DAQAxis
-from utils import Z_UM_PER_VOLT, Z_MAX_TRAVEL_UM, Z_VOLTAGE_RANGE
+from .daq_axis import DAQAxis
+from common.utils import Z_UM_PER_VOLT, Z_MAX_TRAVEL_UM, Z_VOLTAGE_RANGE
 
 
 class DAQZController(DAQAxis):

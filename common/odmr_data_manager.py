@@ -3,7 +3,7 @@ import time
 import json
 import pandas as pd
 import numpy as np
-from utils import experiment_data_root
+from .utils import experiment_data_root
 
 class ODMRDataManager:
     """Data manager for ODMR-related experiments."""

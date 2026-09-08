@@ -28,7 +28,7 @@ except ImportError:
     from rigol_dsg836 import RigolDSG836Controller
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from odmr_data_manager import ODMRDataManager
+from common.odmr_data_manager import ODMRDataManager
 
 # TimeTagger imports for real data acquisition
 import TimeTagger

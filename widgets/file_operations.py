@@ -11,7 +11,7 @@ import numpy as np
 from qtpy.QtWidgets import QFileDialog, QMessageBox
 from magicgui import magicgui
 from napari.utils.notifications import show_info
-from utils import MICRONS_PER_VOLT
+from common.utils import MICRONS_PER_VOLT
 
 
 def _is_um_format(data):

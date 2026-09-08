@@ -17,7 +17,8 @@ def experiment_data_root() -> str:
     env = os.environ.get('NV_EXPERIMENT_DATA')
     if env:
         return env
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(repo_root, 'data')
 
 # Calibration constant: microns per volt based on empirical measurements
 # Air objective 40x 0.95 NA
