@@ -2,8 +2,22 @@
 Utility functions and constants for the Napari Scanning SPD application.
 """
 
+import os
 import numpy as np
 import tifffile
+
+
+def experiment_data_root() -> str:
+    """Directory where confocal and ODMR measurement folders are written.
+
+    Defaults to ``<repo>/data`` so dated ``mmddyy`` folders stay inside the
+    project and can be cleaned manually. Override with the
+    ``NV_EXPERIMENT_DATA`` environment variable if needed.
+    """
+    env = os.environ.get('NV_EXPERIMENT_DATA')
+    if env:
+        return env
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
 
 # Calibration constant: microns per volt based on empirical measurements
 # Air objective 40x 0.95 NA

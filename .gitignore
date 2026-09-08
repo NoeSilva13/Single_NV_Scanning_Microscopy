@@ -1,12 +1,16 @@
+# Experiment data under data/ (dated mmddyy folders; keep the folder itself)
+data/*
+!data/.gitkeep
+
+# Legacy: dated folders accidentally left at repo root
+[0-9][0-9][0-9][0-9][0-9][0-9]/
+[0-9][0-9][0-9][0-9][0-9][0-9]/*
+
 # Data files
 *.csv
 *.dat
 *.txt
 scan_data_*.csv
-
-# Data folders (keep folder structure but ignore contents)
-[0-9][0-9][0-9][0-9][0-9][0-9]/
-[0-9][0-9][0-9][0-9][0-9][0-9]/*
 
 # Python
 __pycache__/
@@ -31,6 +35,7 @@ wheels/
 *.egg
 
 # Virtual Environment
+.venv/
 venv/
 env/
 ENV/

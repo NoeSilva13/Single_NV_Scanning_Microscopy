@@ -27,7 +27,7 @@ RIGOL DSG836 Signal Generator controller providing:
 - Error handling and status monitoring
 
 ### `odmr_experiments.py`
-Integrated experiment implementations (all using the interleaved signal/reference **contrast** method for common-mode noise rejection), consumed directly by `odmr_gui_qt.py`:
+Integrated experiment implementations (all using the interleaved signal/reference **contrast** method for common-mode noise rejection). Run via `python PulseBlaster/odmr_experiments.py` or import `ODMRExperiments` from your own script:
 - `odmr_contrast()` - Continuous-wave frequency sweep with interleaved MW-off/MW-on measurement per point
 - `pulsed_odmr_contrast()` - Frequency sweep using the pulsed Rabi sequence (init → MW in the dark → readout) with the MW duration held fixed; avoids power broadening from optical pumping, so linewidths are limited by `T2*` rather than laser power
 - `rabi_oscillation_contrast()` - Microwave-duration sweep at fixed frequency to observe Rabi oscillations
@@ -45,8 +45,8 @@ pip install pulsestreamer
 ```
 
 2. Ensure your instruments are connected and accessible:
-   - Pulse Streamer 8/2 at IP address `192.168.0.203` (default used by `odmr_gui_qt.py`; the `SwabianPulseController` class default is also `192.168.0.203`)
-   - RIGOL DSG836 Signal Generator at IP address `192.168.0.223` (default used by `odmr_gui_qt.py`; note the standalone `RigolDSG836Controller` class default differs at `192.168.0.224` - always confirm the IP configured in the GUI's Device Settings tab)
+   - Pulse Streamer 8/2 at IP address `192.168.0.203` (`SwabianPulseController` default)
+   - RIGOL DSG836 Signal Generator at IP address `192.168.0.223` (example used in `run_example_experiments`; confirm the address for your setup — the `RigolDSG836Controller` class default may differ)
 
 ## Quick Start
 
@@ -135,7 +135,7 @@ controller.run_sequence(odmr_seq, n_runs=1000)
 - Detection delay: 200 ns
 - Sequence interval: 10000 ns (10 µs)
 
-These are only starting points; `odmr_gui_qt.py` and `odmr_experiments.py` methods accept explicit overrides for every parameter per-measurement.
+These are only starting points; `odmr_experiments.py` methods accept explicit overrides for every parameter per-measurement. With `live_plot=True` (default when no GUI `progress_callback` is passed), a matplotlib window refreshes after each sweep point.
 
 ## Hardware Requirements
 

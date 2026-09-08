@@ -5,13 +5,13 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 A Python toolkit developed at the **[Burke Lab](https://www.burkelab.com/)** for high-precision optical, microwave and timing control of single Nitrogen-Vacancy (NV) centers in diamond.
-It bundles three independent, standalone graphical applications that share common infrastructure (data management, calibration constants, reusable Qt/napari widgets):
+It bundles two graphical applications plus a script-driven ODMR experiment suite that share common infrastructure (data management, calibration constants, reusable Qt/napari widgets):
 
 1. **Confocal Scan GUI** ([confocal_main_control.py](confocal_main_control.py)) - real-time galvo raster scanning, live photon counting, click-to-move positioning, region zoom, auto-focus and single-axis line scans, built on a [napari](https://napari.org/) viewer.
-2. **ODMR Control Center** ([odmr_gui_qt.py](odmr_gui_qt.py)) - a Qt (PySide6 via qtpy) interface for continuous-wave **ODMR**, **Rabi oscillation**, and **T1 relaxation** pulse-sequence measurements.
+2. **ODMR experiments** ([PulseBlaster/odmr_experiments.py](PulseBlaster/odmr_experiments.py)) - script-driven continuous-wave **ODMR**, **pulsed ODMR**, **Rabi**, **T1**, and **readout transient** measurements with live matplotlib updates and PDF/CSV export.
 3. **Spectrometer Control** ([spectrometer_app.py](spectrometer_app.py)) - real-time spectral analysis using a Player One Astronomy (POA) camera in line-scan mode, with wavelength calibration and data recording.
 
-Each application can be run independently and only requires the hardware/drivers relevant to it (see [Hardware requirements](#-hardware-requirements)).
+Each entry point can be run independently and only requires the hardware/drivers relevant to it (see [Hardware requirements](#-hardware-requirements)).
 
 ---
 ## ✨ Key capabilities
@@ -28,16 +28,17 @@ Each application can be run independently and only requires the hardware/drivers
 - Automatic data saving after every scan: `.csv` (metadata header), `.npz` (image + full metadata), `.tiff` (ImageJ/Fiji-compatible with scale calibration) and a `.png` heatmap.
 - **Load Scan** widget to reopen previously saved `.npz` scans at the correct physical scale.
 
-### ODMR Control Center (`odmr_gui_qt.py`)
-- Three measurement tabs, each with live plotting, pulse-sequence preview, and its own parameter/result persistence:
-  - **ODMR** - continuous-wave frequency sweep to locate the NV resonance (contrast method: MW-off/MW-on interleaved).
-  - **Rabi** - microwave-duration sweep to observe coherent Rabi oscillations and calibrate π/2, π pulses.
-  - **T1** - dark-time delay sweep to measure the spin-lattice relaxation time (with an automatic stretched-exponential fit).
-- Ethernet control of a **Rigol DSG836** microwave generator (frequency / power / RF on-off) and a **Swabian Pulse Streamer 8/2** (laser/MW/SPD gate timing, 8 ns resolution).
-- Live pulse-pattern diagrams that update as you edit timing parameters.
-- Progress bars, a terminal-style logging console, and a Device Settings tab with per-instrument connection tests.
-- Save/Load parameter presets (`.json`) and export measurement results (`.json` or `.csv`).
-- Automatic experiment-data saving via `ODMRDataManager` into dated, per-experiment-type folders.
+### ODMR experiments (`PulseBlaster/odmr_experiments.py`)
+- Script-driven measurement loops with interleaved signal/reference **contrast** for common-mode noise rejection:
+  - **`odmr_contrast`** - continuous-wave frequency sweep to locate the NV resonance.
+  - **`pulsed_odmr_contrast`** - frequency sweep with a fixed MW pulse in the dark (narrower linewidths than CW).
+  - **`rabi_oscillation_contrast`** - microwave-duration sweep to calibrate π/2 and π pulses.
+  - **`t1_decay_contrast`** - dark-time delay sweep with automatic stretched-exponential fit.
+  - **`readout_transient`** - time-resolved readout histogram to choose `detection_delay` / `detection_duration`.
+- Optional **live matplotlib plot** (`live_plot=True`) that refreshes after every sweep point; final multi-panel figures are still saved as PDF via `plot_results()`.
+- Ethernet control of a **Rigol DSG836** and a **Swabian Pulse Streamer 8/2** (laser/MW/SPD gate timing, 8 ns resolution).
+- Automatic CSV saving via `ODMRDataManager` into dated, per-experiment-type folders under [`data/`](data/).
+- Edit timing/frequency parameters in `run_example_experiments()` (or call the methods from your own script).
 
 ### Spectrometer Control (`spectrometer_app.py`)
 - Real-time **spectral analysis** using a POA camera configured in a **6252x480** line-scan mode.
@@ -65,7 +66,7 @@ Mandatory for confocal scans (`confocal_main_control.py`)
 - **Swabian TimeTagger** (real, network, or virtual/replay fallback)
 - Optional: Thorlabs **piezo Z-stage** (initialized in closed loop by Thorlabs software; position commanded via DAQ `ao2` → EXT IN) for Scan Z; POA/ZWO/USB camera for live preview
 
-Additional for ODMR / advanced timing (`odmr_gui_qt.py`)
+Additional for ODMR / advanced timing (`PulseBlaster/odmr_experiments.py`)
 - **Swabian Pulse Streamer 8/2** (default IP `192.168.0.203`)
 - **Rigol DSG836** microwave source, Ethernet/VISA (default IP `192.168.0.223`)
 - **Acousto-Optic Modulator** (AOM) for laser gating
@@ -118,11 +119,11 @@ Actions inside the napari window:
 - "Single Axis Scan" dock ⇒ 1D line scans along X, Y, or Z (tabs) at the current position; left-click a point on an X/Y plot to move there.
 - "Axis Control" dock ⇒ manual X/Y/Z positioning (slider + spinbox) that mirrors the scanner's current position.
 
-### 2. ODMR (continuous wave, Rabi, or T1)
+### 2. ODMR (CW, pulsed, Rabi, T1, readout transient)
 ```bash
-python odmr_gui_qt.py
+python PulseBlaster/odmr_experiments.py
 ```
-Select the **ODMR**, **Rabi**, or **T1** tab, fill in microwave / laser timing parameters, hit **Start**. Real-time plots update after every sweep point, and raw data/parameters can be saved or exported afterwards. Use the **Device Settings** tab to configure/verify Pulse Streamer and Rigol IP addresses.
+Edit the active call inside `run_example_experiments()` (timing, frequencies, repetitions, `live_plot=True`). The sweep updates a live contrast plot after each point, then `plot_results(...)` saves the final PDFs. Data CSVs land under `data/mmddyy/<ExperimentType>/`. See [PulseBlaster/README.md](PulseBlaster/README.md) for API details.
 
 ### 3. Spectrometer Control
 ```bash
@@ -132,7 +133,7 @@ Basic operation:
 - Connect the camera and start live imaging.
 - Adjust the ROI (manually or via the visual selector) to capture the spectral line.
 - Configure exposure and gain settings.
-- Capture dark/reference frames if needed, then apply wavelength calibration.
+- Capture dark/reference frames if needed, then apply wavelength calibration (a recent preset is in [`Camera/072926SpectrometerCal02OK.json`](Camera/072926SpectrometerCal02OK.json)).
 - Record and export spectral data to CSV.
 
 ---
@@ -162,14 +163,16 @@ To modify these parameters:
 2. Update the desired constant value (re-measure `MICRONS_PER_VOLT` whenever the objective or optical path changes).
 3. Restart the application for changes to take effect.
 
-**ODMR / Pulse Streamer defaults** live in [PulseBlaster/swabian_pulse_streamer.py](PulseBlaster/swabian_pulse_streamer.py) (`default_params`, 8 ns timing resolution) and can also be overridden per-measurement from the ODMR Control Center GUI.
+**ODMR / Pulse Streamer defaults** live in [PulseBlaster/swabian_pulse_streamer.py](PulseBlaster/swabian_pulse_streamer.py) (`default_params`, 8 ns timing resolution) and can also be overridden per-measurement when calling methods on `ODMRExperiments`.
 
 ---
 ## 📂 Data layout
 
+All experiment outputs are written under [`data/`](data/) (override with env var `NV_EXPERIMENT_DATA`). The folder is gitignored so you can delete dated subfolders anytime without affecting the code.
+
 Confocal scans (via [data_manager.py](data_manager.py)), in a daily `mmddyy` folder with a shared, collision-free sequence number `mmddyy###`:
 ```
-072226/
+data/072226/
  └─ 072226001.csv     # photon counts + metadata header (2D modes: XY / XZ / YZ)
  └─ 072226001.npz     # image/volume + per-axis µm metadata (all modes, incl. XYZ)
  └─ 072226001.tiff    # ImageJ/Fiji-compatible, scale-calibrated (2D modes)
@@ -177,15 +180,15 @@ Confocal scans (via [data_manager.py](data_manager.py)), in a daily `mmddyy` fol
 ```
 3D (XYZ) scans write only the `.npz` (image/volume + metadata); 2D modes (XY/XZ/YZ) additionally write `.csv`, `.tiff`, and `.png`.
 
-ODMR-family experiments (via [odmr_data_manager.py](odmr_data_manager.py)), one dated subfolder per experiment type (`odmr_contrast`, `rabi_contrast`, `t1_contrast`):
+ODMR-family experiments (via [odmr_data_manager.py](odmr_data_manager.py)), one dated subfolder per experiment type:
 ```
-YYYYMMDD/
- └─ odmr/
-     └─ odmr_134501.csv   # frequency, contrast, signal/reference columns + parameter header
- └─ rabi/
-     └─ rabi_134501.csv
- └─ t1/
-     └─ t1_134501.csv
+data/072226/
+ └─ ODMR_Contrast/
+     └─ 072226001_ODMR_Contrast.csv
+ └─ Rabi_Contrast/
+     └─ 072226001_Rabi_Contrast.csv
+ └─ T1_Contrast/
+     └─ 072226001_T1_Contrast.csv
 ```
 
 Each measurement is automatically placed in a date folder by the corresponding `DataManager` class.
@@ -196,8 +199,8 @@ Each measurement is automatically placed in a date folder by the corresponding `
 ```
 Single_NV_Scannig_Microscopy/
 ├─ confocal_main_control.py     # Entry point: napari GUI for confocal galvo scanning
-├─ odmr_gui_qt.py                # Entry point: Qt (PySide6/qtpy) GUI for ODMR / Rabi / T1 experiments
 ├─ spectrometer_app.py           # Entry point: Qt (PySide6/qtpy) GUI for POA-camera spectrometer
+├─ data/                         # Experiment outputs (mmddyy/...); gitignored, clean manually
 │
 ├─ data_manager.py               # DataManager: saves confocal scan CSVs with metadata
 ├─ odmr_data_manager.py          # ODMRDataManager: saves ODMR/Rabi/T1 CSVs per experiment type
@@ -208,7 +211,7 @@ Single_NV_Scannig_Microscopy/
 ├─ raster_engine.py              # Generic N-axis raster (µm): waveform build, run, 2D/3D reconstruct
 ├─ plot_scan_results.py          # Thread-safe PNG heatmap export after each confocal scan
 ├─ thread_safe_bridge.py         # GUIBridge: marshal background-thread updates onto the Qt/napari main thread
-├─ utils.py                      # Calibration constants + ImageJ-compatible TIFF export
+├─ utils.py                      # Calibration constants, experiment_data_root(), TIFF export
 │
 ├─ widgets/                      # Re-usable magicgui/Qt (qtpy) widgets for the confocal napari GUI
 │   ├─ scan_controls.py          #   New Scan / Stop / Reset Zoom / Scan Parameters panel
@@ -218,10 +221,8 @@ Single_NV_Scannig_Microscopy/
 │   ├─ file_operations.py        #   Load a saved .npz scan back into napari
 │   └─ axis_controls.py          #   Manual X/Y/Z position widget (galvo + DAQZController)
 │
-├─ plot_widgets/                 # Matplotlib plot widgets shared across apps
-│   ├─ single_axis_plot.py       #   Dark-themed 1D plot (single-axis line scans)
-│   ├─ live_plot_napari_widget.py#   pyqtgraph live count-rate plot with controls (napari dock)
-│   └─ pulse_pattern_visualizer.py# Pulse-timing diagram for ODMR/Rabi/T1 tabs
+├─ plot_widgets/                 # Plot widgets shared across apps
+│   └─ live_plot_napari_widget.py#   pyqtgraph live count-rate plot with controls (napari dock)
 │
 ├─ PulseBlaster/                 # Pulse Streamer & Rigol drivers + experiment logic
 │   ├─ swabian_pulse_streamer.py #   SwabianPulseController: pulse sequence generation (ODMR/Rabi/T1)
@@ -232,7 +233,8 @@ Single_NV_Scannig_Microscopy/
 │   ├─ camera_video_mode.py      #   POACameraController
 │   ├─ pyPOACamera.py            #   Low-level POA SDK ctypes bindings
 │   ├─ zwo_camera.py / zwo_camera_controller.py  # ZWO ASI camera backend
-│   └─ usb_webcam_controller.py  #   Generic OpenCV USB webcam backend
+│   ├─ usb_webcam_controller.py  #   Generic OpenCV USB webcam backend
+│   └─ 072926SpectrometerCal02OK.json  # Latest spectrometer wavelength/ROI calibration
 │
 ├─ TimeTagger/                   # TimeTagger helpers and virtual-device replay data
 │   ├─ time_tags_test.ttbin      #   Recorded photon-tag stream used as a virtual TimeTagger fallback
@@ -258,12 +260,11 @@ flowchart TD
         LivePlot["plot_widgets.live_plot_napari_widget"]
     end
 
-    subgraph odmrApp [odmr_gui_qt.py]
+    subgraph odmrApp [PulseBlaster/odmr_experiments.py]
         ODMRDataManager[odmr_data_manager]
-        PulseVisualizer["plot_widgets.pulse_pattern_visualizer"]
         PulseStreamer["PulseBlaster.swabian_pulse_streamer"]
         Rigol["PulseBlaster.rigol_dsg836"]
-        Experiments["PulseBlaster.odmr_experiments"]
+        Experiments["ODMRExperiments"]
     end
 
     subgraph spectrometerApp [spectrometer_app.py]
@@ -275,6 +276,8 @@ flowchart TD
     Experiments --> ODMRDataManager
     Experiments --> TimeTagger
     confocalApp --> TimeTagger
+    DataManager --> DataDir["data/"]
+    ODMRDataManager --> DataDir
 ```
 
 ---

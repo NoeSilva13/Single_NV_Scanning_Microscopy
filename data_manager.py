@@ -1,6 +1,7 @@
 import os
 import time
 import pandas as pd
+from utils import experiment_data_root
 
 class DataManager:
     def __init__(self):
@@ -17,8 +18,9 @@ class DataManager:
         write only .npz) share a single, collision-free counter.
         """
         bases = set()
+        day = os.path.basename(daily_folder)
         for f in os.listdir(daily_folder):
-            if f.startswith(daily_folder) and (f.endswith('.csv') or f.endswith('.npz')):
+            if f.startswith(day) and (f.endswith('.csv') or f.endswith('.npz')):
                 bases.add(os.path.splitext(f)[0])
         return len(bases) + 1
 
@@ -29,11 +31,12 @@ class DataManager:
             ext: Optional extension (e.g. ``'.npz'``). If empty, returns the
                 base path without extension.
         """
-        daily_folder = time.strftime("%m%d%y")
+        day = time.strftime("%m%d%y")
+        daily_folder = os.path.join(experiment_data_root(), day)
         if not os.path.exists(daily_folder):
             os.makedirs(daily_folder)
         seq_str = f"{self._next_index(daily_folder):03d}"
-        base = os.path.join(daily_folder, f"{daily_folder}{seq_str}")
+        base = os.path.join(daily_folder, f"{day}{seq_str}")
         return base + ext if ext else base
 
     def save_scan_data(self, scan_data, scan_params):

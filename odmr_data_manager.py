@@ -3,6 +3,7 @@ import time
 import json
 import pandas as pd
 import numpy as np
+from utils import experiment_data_root
 
 class ODMRDataManager:
     """Data manager for ODMR-related experiments."""
@@ -92,8 +93,9 @@ class ODMRDataManager:
         
         config = self.EXPERIMENT_CONFIGS[experiment_type]
         
-        # Create daily folder for data
-        daily_folder = time.strftime("%m%d%y")
+        # Create daily folder under data/ (or NV_EXPERIMENT_DATA override)
+        day = time.strftime("%m%d%y")
+        daily_folder = os.path.join(experiment_data_root(), day)
         if not os.path.exists(daily_folder):
             os.makedirs(daily_folder)
         
@@ -104,14 +106,14 @@ class ODMRDataManager:
         
         # Get list of existing .csv files in the experiment folder
         existing_files = [f for f in os.listdir(exp_folder) 
-                        if f.startswith(daily_folder) and f.endswith('.csv')]
+                        if f.startswith(day) and f.endswith('.csv')]
         
         # Determine the next sequence number (001, 002, etc.)
         seq_num = len(existing_files) + 1
         seq_str = f"{seq_num:03d}"
         
         # Create filename
-        filename = os.path.join(exp_folder, f"{daily_folder}{seq_str}{config['file_suffix']}.csv")
+        filename = os.path.join(exp_folder, f"{day}{seq_str}{config['file_suffix']}.csv")
 
         # Create DataFrame with the data
         data_dict = {config['x_column']: x_data}
