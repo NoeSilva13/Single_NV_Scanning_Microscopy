@@ -112,9 +112,9 @@ Actions inside the napari window:
 - "🔬 New Scan" ⇒ run full raster scan at the current parameters.
 - **Drag a rectangle** on the image ⇒ zoom into that region (up to 9 nested levels).
 - "🔄 Reset Zoom" ⇒ return to the original field of view.
-- "🎯 Set to Zero" ⇒ return galvos to (0, 0) V.
+- "🎯 Set to Zero" ⇒ return galvos to (0, 0) µm.
 - "🛑 Stop Scan" ⇒ abort a running scan safely.
-- "Scan Parameters" dock ⇒ adjust XY voltage range / resolution / dwell and Z min/max/resolution/dwell on-the-fly.
+- "Scan Parameters" dock ⇒ adjust XY range / resolution / dwell and Z min/max/resolution/dwell on-the-fly.
 - "Camera Control" dock ⇒ switch between POA/ZWO/USB cameras, live view and single-shot capture.
 - "Single Axis Scan" dock ⇒ 1D line scans along X, Y, or Z (tabs) at the current position; left-click a point on an X/Y plot to move there.
 - "Axis Control" dock ⇒ manual X/Y/Z positioning (slider + spinbox) that mirrors the scanner's current position.
@@ -191,7 +191,7 @@ data/072226/
      └─ 072226001_T1_Contrast.csv
 ```
 
-Each measurement is automatically placed in a date folder by the corresponding `DataManager` class.
+Each measurement is automatically placed in a date folder by the corresponding `DataManager` class. You can delete old `data/mmddyy/` folders anytime to free disk space; they are not tracked by git.
 
 ---
 ## 🏗️ Repository overview
@@ -240,7 +240,6 @@ Single_NV_Scannig_Microscopy/
 │   ├─ time_tags_test.ttbin      #   Recorded photon-tag stream used as a virtual TimeTagger fallback
 │   └─ CountRateLive.py          #   Standalone live count-rate widget (standalone detector health check)
 │
-├─ pulse_sequence_diagrams/      # SVG parameter-guide diagrams for ODMR/Rabi/T1 sequences
 ├─ requirements.txt              # Python dependencies (see file for vendor SDK notes)
 └─ CHANGELOG.md
 ```

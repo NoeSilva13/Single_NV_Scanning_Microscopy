@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) guidelines.
 
+## [Unreleased] - 2026-09-08
+### Added
+- Live matplotlib contrast plot during ODMR/Rabi/T1 sweeps (`live_plot=True` in `PulseBlaster/odmr_experiments.py`), with final multi-panel PDFs still produced by `plot_results()`.
+- Repo-local experiment output root [`data/`](data/) via `utils.experiment_data_root()` (override with env var `NV_EXPERIMENT_DATA`). Dated `mmddyy` folders for confocal and ODMR live under `data/` and are gitignored.
+
+### Changed
+- ODMR workflow is **script-only**: run `python PulseBlaster/odmr_experiments.py` and edit `run_example_experiments()`. Documentation and `requirements.txt` no longer describe a Qt ODMR GUI.
+- Spectrometer wavelength/ROI calibration kept as [`Camera/072926SpectrometerCal02OK.json`](Camera/072926SpectrometerCal02OK.json) (load via the spectrometer app file dialog).
+
+### Removed
+- Deleted the obsolete Qt ODMR GUI (`odmr_gui_qt.py`) and its docs (`PulseBlaster/README_ODMR_GUI.md`); the GUI called removed APIs (`odmr`, `rabi_oscillation`, `t1_decay`) and was out of sync with the contrast methods.
+- Deleted unused plot widgets `plot_widgets/pulse_pattern_visualizer.py` and `plot_widgets/single_axis_plot.py` (only the GUI / superseded by pyqtgraph confocal widgets).
+- Removed older duplicate spectrometer calibration JSONs from the repo root.
+- Deleted unused `pulse_sequence_diagrams/` (SVG guides not referenced by any code).
+
+### Documentation
+- Updated main `README.md`, `PulseBlaster/README.md`, and `requirements.txt` for the script-driven ODMR flow and `data/` layout.
+
 ## [Unreleased] - 2026-07-21
 ### Added
 - **Multi-dimensional scanning (XY / XZ / YZ / XYZ)** via a **Scan Mode** selector in the Scan Parameters panel that drives the **New Scan** button. XZ/YZ produce a 2D image in a dedicated napari layer; XYZ produces a 3D volume layer with per-axis `scale`/`units`. Axes not part of the selected mode are held at their current position (galvo held via the persistent AO task, piezo pre-moved and settled).

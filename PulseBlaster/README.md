@@ -27,7 +27,15 @@ RIGOL DSG836 Signal Generator controller providing:
 - Error handling and status monitoring
 
 ### `odmr_experiments.py`
-Integrated experiment implementations (all using the interleaved signal/reference **contrast** method for common-mode noise rejection). Run via `python PulseBlaster/odmr_experiments.py` or import `ODMRExperiments` from your own script:
+Integrated experiment implementations (all using the interleaved signal/reference **contrast** method for common-mode noise rejection).
+
+**Run from the repository root:**
+```bash
+python PulseBlaster/odmr_experiments.py
+```
+Edit the active call inside `run_example_experiments()` (comment/uncomment ODMR, pulsed ODMR, Rabi, T1, or readout transient). Or import `ODMRExperiments` from your own script.
+
+Methods:
 - `odmr_contrast()` - Continuous-wave frequency sweep with interleaved MW-off/MW-on measurement per point
 - `pulsed_odmr_contrast()` - Frequency sweep using the pulsed Rabi sequence (init → MW in the dark → readout) with the MW duration held fixed; avoids power broadening from optical pumping, so linewidths are limited by `T2*` rather than laser power
 - `rabi_oscillation_contrast()` - Microwave-duration sweep at fixed frequency to observe Rabi oscillations
@@ -35,7 +43,9 @@ Integrated experiment implementations (all using the interleaved signal/referenc
 - `readout_transient()` - Time-resolved histogram of photon arrival during the readout pulse, taken with MW off and MW on, used to calibrate `detection_delay` and `detection_duration` for the pulsed experiments; reports the laser turn-on latency, the optical repolarisation time `tau_pol` and the window that maximises the shot-noise-limited contrast SNR
 - `plot_results()` - Generates and saves PDF summary plots for any of the five experiment types
 
-> Note: Ramsey and spin-echo sequences are not currently implemented; only ODMR (CW and pulsed), Rabi, and T1 are available.
+CSV data and PDF figures are written under `data/mmddyy/<ExperimentType>/` (see main README). Optional live updates: `live_plot=True` refreshes a single-panel matplotlib window after each sweep point.
+
+> Note: Ramsey and spin-echo sequences are not currently implemented.
 
 ## Installation
 
@@ -95,10 +105,11 @@ results = experiments.odmr_contrast(
     laser_duration=2000,
     mw_duration=2000,
     detection_duration=1000,
-    repetitions=100
+    repetitions=100,
+    live_plot=True,
 )
 
-# Plot + save summary figures
+# Plot + save summary figures (PDFs next to the CSV under data/)
 experiments.plot_results('odmr_contrast')
 
 # Clean up
@@ -135,7 +146,11 @@ controller.run_sequence(odmr_seq, n_runs=1000)
 - Detection delay: 200 ns
 - Sequence interval: 10000 ns (10 µs)
 
-These are only starting points; `odmr_experiments.py` methods accept explicit overrides for every parameter per-measurement. With `live_plot=True` (default when no GUI `progress_callback` is passed), a matplotlib window refreshes after each sweep point.
+These are only starting points; `odmr_experiments.py` methods accept explicit overrides for every parameter per-measurement. With `live_plot=True` (default when no `progress_callback` is passed), a matplotlib window refreshes after each sweep point.
+
+## Data output
+
+Confocal and ODMR managers write under the repo [`data/`](../data/) folder (`utils.experiment_data_root()`). Override the root with the `NV_EXPERIMENT_DATA` environment variable if you need another disk path. Contents of `data/` are gitignored so dated folders can be deleted manually.
 
 ## Hardware Requirements
 
