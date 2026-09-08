@@ -29,11 +29,13 @@ RIGOL DSG836 Signal Generator controller providing:
 ### `odmr_experiments.py`
 Integrated experiment implementations (all using the interleaved signal/reference **contrast** method for common-mode noise rejection), consumed directly by `odmr_gui_qt.py`:
 - `odmr_contrast()` - Continuous-wave frequency sweep with interleaved MW-off/MW-on measurement per point
+- `pulsed_odmr_contrast()` - Frequency sweep using the pulsed Rabi sequence (init → MW in the dark → readout) with the MW duration held fixed; avoids power broadening from optical pumping, so linewidths are limited by `T2*` rather than laser power
 - `rabi_oscillation_contrast()` - Microwave-duration sweep at fixed frequency to observe Rabi oscillations
 - `t1_decay_contrast()` - Dark-time delay sweep between init/readout laser pulses to measure T1, with automatic stretched-exponential curve fitting (`scipy.optimize.curve_fit`)
-- `plot_results()` - Generates and saves PDF summary plots for any of the three experiment types
+- `readout_transient()` - Time-resolved histogram of photon arrival during the readout pulse, taken with MW off and MW on, used to calibrate `detection_delay` and `detection_duration` for the pulsed experiments; reports the laser turn-on latency, the optical repolarisation time `tau_pol` and the window that maximises the shot-noise-limited contrast SNR
+- `plot_results()` - Generates and saves PDF summary plots for any of the five experiment types
 
-> Note: Ramsey and spin-echo sequences are not currently implemented; only ODMR, Rabi, and T1 are available.
+> Note: Ramsey and spin-echo sequences are not currently implemented; only ODMR (CW and pulsed), Rabi, and T1 are available.
 
 ## Installation
 

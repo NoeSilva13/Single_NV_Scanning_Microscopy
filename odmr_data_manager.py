@@ -31,6 +31,28 @@ class ODMRDataManager:
             'x_unit': 'Hz',
             'x_range_format': lambda min_x, max_x: f"{min_x:.1f} Hz ({min_x/1e9:.6f} to {max_x/1e9:.6f} GHz)"
         },
+        'pulsed_odmr_contrast': {
+            'folder_name': 'Pulsed_ODMR_Contrast',
+            'file_suffix': '_Pulsed_ODMR_Contrast',
+            'x_column': 'Frequency_Hz',
+            'x_columns_converted': [],
+            'data_key': 'mw_frequencies',
+            'x_label': 'Frequency',
+            'x_unit': 'Hz',
+            'x_range_format': lambda min_x, max_x: f"{min_x:.1f} Hz ({min_x/1e9:.6f} to {max_x/1e9:.6f} GHz)"
+        },
+        'readout_transient': {
+            'folder_name': 'Readout_Transient',
+            'file_suffix': '_Readout_Transient',
+            'x_column': 'Time_ns',
+            'x_columns_converted': [
+                ('Time_s', 1e-9),
+            ],
+            'data_key': 'times',
+            'x_label': 'Time since readout edge',
+            'x_unit': 'ns',
+            'x_range_format': lambda min_x, max_x: f"{min_x} to {max_x} ns ({min_x*1e-9:.9f} to {max_x*1e-9:.9f} s)"
+        },
         't1_contrast': {
             'folder_name': 'T1_Contrast',
             'file_suffix': '_T1_Contrast',
