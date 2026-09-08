@@ -294,7 +294,8 @@ try:
     print("✅ TimeTagger server started")
 except Exception as e:
     show_info("⚠️ Real TimeTagger not detected, using virtual device")
-    tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+    from common.utils import timetagger_virtual_path
+    tagger = TimeTagger.createTimeTaggerVirtual(timetagger_virtual_path())
     tagger.run()
     print("✅ Virtual TimeTagger started")
 

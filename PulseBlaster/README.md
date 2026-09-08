@@ -54,9 +54,11 @@ CSV data and PDF figures are written under `data/mmddyy/<ExperimentType>/` via `
 pip install pulsestreamer
 ```
 
-2. Ensure your instruments are connected and accessible:
-   - Pulse Streamer 8/2 at IP address `192.168.0.203` (`SwabianPulseController` default)
-   - RIGOL DSG836 Signal Generator at IP address `192.168.0.223` (example used in `run_example_experiments`; confirm the address for your setup — the `RigolDSG836Controller` class default may differ)
+2. Ensure your instruments are connected and accessible. Addresses live in
+   [`common/utils.py`](../common/utils.py):
+   - Pulse Streamer 8/2 (`PULSE_STREAMER_IP`)
+   - RIGOL DSG836 (`RIGOL_IP`)
+   - TimeTagger network host (`TIMETAGGER_NETWORK_HOST`, or `None` to skip)
 
 ## Quick Start
 
@@ -65,7 +67,7 @@ pip install pulsestreamer
 from PulseBlaster.swabian_pulse_streamer import SwabianPulseController
 
 # Initialize controller (connects automatically on construction)
-controller = SwabianPulseController("192.168.0.203")
+controller = SwabianPulseController()
 
 # Create a laser-only pulse sequence for a T1 measurement
 sequence, duration_ns = controller._create_t1_sequence_contrast(
@@ -90,9 +92,9 @@ controller.disconnect()
 from PulseBlaster import SwabianPulseController, RigolDSG836Controller, ODMRExperiments
 import numpy as np
 
-# Initialize instruments (SwabianPulseController connects automatically)
-pulse_controller = SwabianPulseController("192.168.0.203")
-rigol = RigolDSG836Controller("192.168.0.223")
+# Initialize instruments (IPs from common.utils)
+pulse_controller = SwabianPulseController()
+rigol = RigolDSG836Controller()
 rigol.connect()
 
 # Initialize experiments (also connects to TimeTagger: real -> network -> virtual fallback)

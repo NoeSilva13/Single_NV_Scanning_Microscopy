@@ -42,6 +42,28 @@ Z_UM_PER_VOLT = 45.0            # Calibration factor (micrometers per volt)
 Z_MAX_TRAVEL_UM = 450.0        # Full travel of the piezo stage in micrometers
 Z_VOLTAGE_RANGE = (0.0, 10.0)  # Allowed EXT IN voltage range for closed-loop control
 
+# --- Lab instrument addresses / DAQ channels (edit here when hardware moves) ---
+PULSE_STREAMER_IP = "192.168.0.203"
+RIGOL_IP = "192.168.0.222"
+TIMETAGGER_NETWORK_HOST = "192.168.0.10"  # set to None to skip network TimeTagger
+TIMETAGGER_VIRTUAL_FILE = "TimeTagger/time_tags_test.ttbin"
+
+DAQ_GALVO_X = "Dev1/ao0"
+DAQ_GALVO_Y = "Dev1/ao1"
+DAQ_PIEZO_Z = "Dev1/ao2"
+DAQ_SPD_COUNTER = "Dev1/ctr0"
+DAQ_CLOCK_EXPORT = "/Dev1/PFI8"
+DAQ_XOUT_VOLTAGE = "Dev1/ai14"
+DAQ_YOUT_VOLTAGE = "Dev1/ai15"
+
+
+def timetagger_virtual_path() -> str:
+    """Absolute path to the virtual TimeTagger replay file."""
+    if os.path.isabs(TIMETAGGER_VIRTUAL_FILE):
+        return TIMETAGGER_VIRTUAL_FILE
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(repo_root, TIMETAGGER_VIRTUAL_FILE)
+
 
 def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):
     """

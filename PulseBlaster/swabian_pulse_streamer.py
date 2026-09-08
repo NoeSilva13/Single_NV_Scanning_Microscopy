@@ -50,13 +50,16 @@ class SwabianPulseController:
         """
         return ((duration_ns + 7) // 8) * 8
     
-    def __init__(self, ip_address: str = "192.168.0.203"):
+    def __init__(self, ip_address: Optional[str] = None):
         """
         Initialize the Pulse Streamer controller.
         
         Args:
-            ip_address: IP address of the Pulse Streamer device
+            ip_address: Pulse Streamer IP. Defaults to ``common.utils.PULSE_STREAMER_IP``.
         """
+        if ip_address is None:
+            from common.utils import PULSE_STREAMER_IP
+            ip_address = PULSE_STREAMER_IP
         self.ip_address = ip_address
         self.pulse_streamer = None
         self.is_connected = False

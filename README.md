@@ -52,7 +52,7 @@ Each entry point can be run independently and only requires the hardware/drivers
 
 ### Common infrastructure
 - Confocal hardware stack in [`confocal/`](confocal/): [galvo_controller.py](confocal/galvo_controller.py), [daq_z_controller.py](confocal/daq_z_controller.py), [daq_axis.py](confocal/daq_axis.py), [scanning_core.py](confocal/scanning_core.py), [raster_engine.py](confocal/raster_engine.py), [data_manager.py](confocal/data_manager.py), [plot_scan_results.py](confocal/plot_scan_results.py), [thread_safe_bridge.py](confocal/thread_safe_bridge.py).
-- Shared helpers in [`common/`](common/): [utils.py](common/utils.py) (calibration constants, `experiment_data_root()`, TIFF export) and [odmr_data_manager.py](common/odmr_data_manager.py).
+- Shared helpers in [`common/`](common/): [utils.py](common/utils.py) (calibration, instrument IPs / DAQ channels, `experiment_data_root()`, TIFF export) and [odmr_data_manager.py](common/odmr_data_manager.py).
 - Pulse / MW drivers: [PulseBlaster/swabian_pulse_streamer.py](PulseBlaster/swabian_pulse_streamer.py), [PulseBlaster/rigol_dsg836.py](PulseBlaster/rigol_dsg836.py).
 - Reusable **napari/magicgui widgets** ([widgets/](widgets/)) and the live count plot ([plot_widgets/](plot_widgets/)).
 - Tested on Python 3.8-3.12, Windows 10/11.
@@ -68,10 +68,10 @@ Mandatory for confocal scans (`confocal_main_control.py`)
 - Optional: Thorlabs **piezo Z-stage** (initialized in closed loop by Thorlabs software; position commanded via DAQ `ao2` → EXT IN) for Scan Z; POA/ZWO/USB camera for live preview
 
 Additional for ODMR / advanced timing (`run_odmr_experiments.py`)
-- **Swabian Pulse Streamer 8/2** (default IP `192.168.0.203`)
-- **Rigol DSG836** microwave source, Ethernet/VISA (default IP `192.168.0.223`)
+- **Swabian Pulse Streamer 8/2** (IP in [`common/utils.py`](common/utils.py))
+- **Rigol DSG836** microwave source, Ethernet/VISA (IP in the same module)
 - **Acousto-Optic Modulator** (AOM) for laser gating
-- **Swabian TimeTagger** (real, network, or virtual/replay fallback)
+- **Swabian TimeTagger** (real, network host from `utils`, or virtual/replay fallback)
 
 Additional for Spectrometer (`spectrometer_app.py`)
 - **POA camera** (Player One Astronomy) with USB3 connection, run in a 6252x480 line-scan configuration
@@ -167,6 +167,8 @@ To modify these parameters:
 
 **ODMR / Pulse Streamer defaults** live in [PulseBlaster/swabian_pulse_streamer.py](PulseBlaster/swabian_pulse_streamer.py) (`default_params`, 8 ns timing resolution) and can also be overridden per-measurement when calling methods on `ODMRExperiments`.
 
+**Instrument IPs and DAQ channels** live in [`common/utils.py`](common/utils.py) next to the optical calibration constants. Change an address there instead of editing constructors across the codebase.
+
 ---
 ## 📂 Data layout
 
@@ -206,7 +208,7 @@ Single_NV_Scannig_Microscopy/
 ├─ data/                         # Experiment outputs (mmddyy/...); gitignored
 │
 ├─ common/                       # Shared helpers
-│   ├─ utils.py                  #   Calibration + experiment_data_root() + TIFF export
+│   ├─ utils.py                  #   Calibration, IPs/DAQ channels, experiment_data_root(), TIFF
 │   └─ odmr_data_manager.py      #   ODMR/Rabi/T1 CSV writer
 │
 ├─ confocal/                     # Confocal scanning engine

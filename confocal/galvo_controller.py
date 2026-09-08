@@ -19,19 +19,23 @@ class GalvoScannerController:
     - Buffered scanning for improved performance
     """
     def __init__(self):
-        """Initialize the controller with default DAQ channels and ranges."""
+        """Initialize the controller with DAQ channels from common.utils."""
+        from common.utils import (
+            DAQ_GALVO_X, DAQ_GALVO_Y, DAQ_SPD_COUNTER,
+            DAQ_XOUT_VOLTAGE, DAQ_YOUT_VOLTAGE,
+        )
         try:
             # Test DAQ connection
             with nidaqmx.Task() as test_task:
-                test_task.ao_channels.add_ao_voltage_chan("Dev1/ao0")
+                test_task.ao_channels.add_ao_voltage_chan(DAQ_GALVO_X)
             
             # DAQ channel configuration
-            self.spd_counter = "Dev1/ctr0"
-            #self.spd_edge_source = "/Dev1/PFI8"
-            self.xin_control = "Dev1/ao0"
-            self.yin_control = "Dev1/ao1"
-            self.xout_voltage = "Dev1/ai14"
-            self.yout_voltage = "Dev1/ai15"
+            self.spd_counter = DAQ_SPD_COUNTER
+            #self.spd_edge_source = DAQ_CLOCK_EXPORT
+            self.xin_control = DAQ_GALVO_X
+            self.yin_control = DAQ_GALVO_Y
+            self.xout_voltage = DAQ_XOUT_VOLTAGE
+            self.yout_voltage = DAQ_YOUT_VOLTAGE
 
             # Voltage ranges
             self.control_range = (-10.0, 10.0)      # Output voltage range

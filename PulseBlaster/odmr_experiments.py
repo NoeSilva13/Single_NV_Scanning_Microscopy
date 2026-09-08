@@ -107,12 +107,16 @@ class ODMRExperiments:
         self.data_manager = ODMRDataManager()
         
         # Initialize TimeTagger for real data acquisition
-        try:
-            self.tagger = TimeTagger.createTimeTaggerNetwork("192.168.0.10")
-            print("✅ Connected to Network TimeTagger device")
-        except Exception as e:
-            print(f"⚠️ Network TimeTagger not detected: {str(e)}")
-            self.tagger = None
+        from common.utils import TIMETAGGER_NETWORK_HOST, timetagger_virtual_path
+
+        self.tagger = None
+        if TIMETAGGER_NETWORK_HOST:
+            try:
+                self.tagger = TimeTagger.createTimeTaggerNetwork(TIMETAGGER_NETWORK_HOST)
+                print(f"✅ Connected to Network TimeTagger at {TIMETAGGER_NETWORK_HOST}")
+            except Exception as e:
+                print(f"⚠️ Network TimeTagger not detected: {str(e)}")
+                self.tagger = None
 
         if self.tagger is None:
             try:
@@ -121,7 +125,7 @@ class ODMRExperiments:
                 print("✅ Connected to real TimeTagger device")
             except Exception as e:
                 print(f"⚠️ Real TimeTagger not detected: {str(e)}")
-                self.tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+                self.tagger = TimeTagger.createTimeTaggerVirtual(timetagger_virtual_path())
                 self.tagger.run()
                 print("✅ Virtual TimeTagger started")
     
@@ -1489,9 +1493,9 @@ def run_example_experiments():
         print("❌ Pulse controller not connected. Running in simulation mode.")
         return
     
-    # Initialize RIGOL signal generator
+    # Initialize RIGOL signal generator (IP from common.utils.RIGOL_IP)
     try:
-        rigol = RigolDSG836Controller("192.168.0.222")
+        rigol = RigolDSG836Controller()
         if rigol.connect():
             print("✅ RIGOL DSG836 connected successfully")
         else:
