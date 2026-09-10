@@ -33,7 +33,7 @@ Integrated experiment implementations (all using the interleaved signal/referenc
 ```bash
 python run_odmr_experiments.py
 ```
-(or `python PulseBlaster/odmr_experiments.py`). Edit the active call inside `run_example_experiments()` (comment/uncomment ODMR, pulsed ODMR, Rabi, T1, or readout transient). Or import `ODMRExperiments` from your own script.
+Edit the active experiment block in that file (comment/uncomment ODMR, pulsed ODMR, Rabi, T1, or readout transient). Or import `ODMRExperiments` from your own script.
 
 Methods:
 - `odmr_contrast()` - Continuous-wave frequency sweep with interleaved MW-off/MW-on measurement per point

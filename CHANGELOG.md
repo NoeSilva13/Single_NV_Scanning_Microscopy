@@ -10,10 +10,11 @@ All notable changes to this project will be documented in this file following [K
 - Instrument IPs and DAQ channel defaults live in [`common/utils.py`](common/utils.py) alongside optical calibration constants.
 
 ### Changed
-- ODMR workflow is **script-only**: run `python run_odmr_experiments.py` (or `python PulseBlaster/odmr_experiments.py`) and edit `run_example_experiments()`. Documentation and `requirements.txt` no longer describe a Qt ODMR GUI.
+- ODMR workflow is **script-only**: edit and run [`run_odmr_experiments.py`](run_odmr_experiments.py). Documentation and `requirements.txt` no longer describe a Qt ODMR GUI.
 - Spectrometer wavelength/ROI calibration kept as [`Camera/072926SpectrometerCal02OK.json`](Camera/072926SpectrometerCal02OK.json) (load via the spectrometer app file dialog).
 - **Repository layout**: confocal engine modules live under [`confocal/`](confocal/); shared helpers under [`common/`](common/); spectrometer guide moved to [`docs/spectrometer.md`](docs/spectrometer.md). Root keeps only app entry points plus docs/meta.
-- Device IPs and DAQ channel names no longer hard-coded in multiple modules; constructors default to values from `common.utils` (Rigol unified to the lab address previously used in `run_example_experiments`).
+- Device IPs and DAQ channel names no longer hard-coded in multiple modules; constructors default to values from `common.utils` (Rigol unified to the lab address previously used in the ODMR runner).
+- ODMR day-to-day parameters live in [`run_odmr_experiments.py`](run_odmr_experiments.py); [`PulseBlaster/odmr_experiments.py`](PulseBlaster/odmr_experiments.py) is the measurement library only.
 
 ### Removed
 - Deleted the obsolete Qt ODMR GUI (`odmr_gui_qt.py`) and its docs (`PulseBlaster/README_ODMR_GUI.md`); the GUI called removed APIs (`odmr`, `rabi_oscillation`, `t1_decay`) and was out of sync with the contrast methods.

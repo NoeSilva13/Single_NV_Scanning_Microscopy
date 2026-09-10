@@ -38,7 +38,7 @@ Each entry point can be run independently and only requires the hardware/drivers
 - Optional **live matplotlib plot** (`live_plot=True`) that refreshes after every sweep point; final multi-panel figures are still saved as PDF via `plot_results()`.
 - Ethernet control of a **Rigol DSG836** and a **Swabian Pulse Streamer 8/2** (laser/MW/SPD gate timing, 8 ns resolution).
 - Automatic CSV saving via `ODMRDataManager` into dated, per-experiment-type folders under [`data/`](data/).
-- Edit timing/frequency parameters in `run_example_experiments()` inside [PulseBlaster/odmr_experiments.py](PulseBlaster/odmr_experiments.py) (or call the methods from your own script).
+- Edit timing/frequency parameters in [run_odmr_experiments.py](run_odmr_experiments.py) (uncomment the experiment you want), then run that script.
 
 ### Spectrometer Control (`spectrometer_app.py`)
 - Real-time **spectral analysis** using a POA camera configured in a **6252x480** line-scan mode.
@@ -124,7 +124,7 @@ Actions inside the napari window:
 ```bash
 python run_odmr_experiments.py
 ```
-Edit the active call inside `run_example_experiments()` in [PulseBlaster/odmr_experiments.py](PulseBlaster/odmr_experiments.py) (timing, frequencies, repetitions, `live_plot=True`). The sweep updates a live contrast plot after each point, then `plot_results(...)` saves the final PDFs. Data CSVs land under `data/mmddyy/<ExperimentType>/`. See [PulseBlaster/README.md](PulseBlaster/README.md) for API details.
+Edit the active experiment block in [run_odmr_experiments.py](run_odmr_experiments.py) (timing, frequencies, repetitions, `live_plot=True`). The sweep updates a live contrast plot after each point, then `plot_results(...)` saves the final PDFs. Data CSVs land under `data/mmddyy/<ExperimentType>/`. See [PulseBlaster/README.md](PulseBlaster/README.md) for API details.
 
 ### 3. Spectrometer Control
 ```bash
