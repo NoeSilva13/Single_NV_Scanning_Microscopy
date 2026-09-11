@@ -138,7 +138,7 @@ CSV files contain:
 - Use known spectral lines for calibration verification
 - Check that ROI encompasses the entire spectral line
 - Verify spectrometer wavelength range matches settings
-- A recent lab preset is available at [`Camera/072926SpectrometerCal02OK.json`](Camera/072926SpectrometerCal02OK.json) (Load Calibration in the app)
+- A recent lab preset is available at [`Camera/072926SpectrometerCal02OK.json`](../Camera/072926SpectrometerCal02OK.json) (Load Calibration in the app)
 
 ## Application Structure
 

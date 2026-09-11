@@ -2,8 +2,8 @@
 DAQ-based Z-axis (piezo objective) controller.
 -------------------------------------------------
 Controls the objective piezo Z position by writing an analog voltage on a DAQ
-analog-output channel (default ``Dev1/ao2``) wired to the piezo controller's
-EXT IN BNC.
+analog-output channel (default ``common.utils.DAQ_PIEZO_Z``, typically
+``Dev1/ao2``) wired to the piezo controller's EXT IN BNC.
 
 The piezo controller itself is initialized and kept in closed loop by the
 external Thorlabs software. In closed loop the EXT IN voltage commands the
@@ -14,18 +14,23 @@ This is a thin specialization of :class:`daq_axis.DAQAxis`: it shares the
 Z-specific defaults (channel, travel 0-450 µm, closed-loop voltage range).
 """
 
-from daq_axis import DAQAxis
-from utils import Z_UM_PER_VOLT, Z_MAX_TRAVEL_UM, Z_VOLTAGE_RANGE
+from typing import Optional
+
+from .daq_axis import DAQAxis
+from common.utils import Z_UM_PER_VOLT, Z_MAX_TRAVEL_UM, Z_VOLTAGE_RANGE
 
 
 class DAQZController(DAQAxis):
     """Command the objective piezo Z position through a DAQ analog output."""
 
     def __init__(self,
-                 ao_channel: str = "Dev1/ao2",
+                 ao_channel: Optional[str] = None,
                  um_per_volt: float = Z_UM_PER_VOLT,
                  max_travel_um: float = Z_MAX_TRAVEL_UM,
                  voltage_range=Z_VOLTAGE_RANGE):
+        if ao_channel is None:
+            from common.utils import DAQ_PIEZO_Z
+            ao_channel = DAQ_PIEZO_Z
         super().__init__(
             name="z",
             ao_channel=ao_channel,

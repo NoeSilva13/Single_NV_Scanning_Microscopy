@@ -31,9 +31,9 @@ Integrated experiment implementations (all using the interleaved signal/referenc
 
 **Run from the repository root:**
 ```bash
-python PulseBlaster/odmr_experiments.py
+python run_odmr_experiments.py
 ```
-Edit the active call inside `run_example_experiments()` (comment/uncomment ODMR, pulsed ODMR, Rabi, T1, or readout transient). Or import `ODMRExperiments` from your own script.
+Edit the active experiment block in that file (comment/uncomment ODMR, pulsed ODMR, Rabi, T1, or readout transient). Or import `ODMRExperiments` from your own script.
 
 Methods:
 - `odmr_contrast()` - Continuous-wave frequency sweep with interleaved MW-off/MW-on measurement per point
@@ -43,7 +43,7 @@ Methods:
 - `readout_transient()` - Time-resolved histogram of photon arrival during the readout pulse, taken with MW off and MW on, used to calibrate `detection_delay` and `detection_duration` for the pulsed experiments; reports the laser turn-on latency, the optical repolarisation time `tau_pol` and the window that maximises the shot-noise-limited contrast SNR
 - `plot_results()` - Generates and saves PDF summary plots for any of the five experiment types
 
-CSV data and PDF figures are written under `data/mmddyy/<ExperimentType>/` (see main README). Optional live updates: `live_plot=True` refreshes a single-panel matplotlib window after each sweep point.
+CSV data and PDF figures are written under `data/mmddyy/<ExperimentType>/` via `common.odmr_data_manager` (see main README). Optional live updates: `live_plot=True` refreshes a single-panel matplotlib window after each sweep point.
 
 > Note: Ramsey and spin-echo sequences are not currently implemented.
 
@@ -54,9 +54,11 @@ CSV data and PDF figures are written under `data/mmddyy/<ExperimentType>/` (see 
 pip install pulsestreamer
 ```
 
-2. Ensure your instruments are connected and accessible:
-   - Pulse Streamer 8/2 at IP address `192.168.0.203` (`SwabianPulseController` default)
-   - RIGOL DSG836 Signal Generator at IP address `192.168.0.223` (example used in `run_example_experiments`; confirm the address for your setup — the `RigolDSG836Controller` class default may differ)
+2. Ensure your instruments are connected and accessible. Addresses live in
+   [`common/utils.py`](../common/utils.py):
+   - Pulse Streamer 8/2 (`PULSE_STREAMER_IP`)
+   - RIGOL DSG836 (`RIGOL_IP`)
+   - TimeTagger network host (`TIMETAGGER_NETWORK_HOST`, or `None` to skip)
 
 ## Quick Start
 
@@ -65,7 +67,7 @@ pip install pulsestreamer
 from PulseBlaster.swabian_pulse_streamer import SwabianPulseController
 
 # Initialize controller (connects automatically on construction)
-controller = SwabianPulseController("192.168.0.203")
+controller = SwabianPulseController()
 
 # Create a laser-only pulse sequence for a T1 measurement
 sequence, duration_ns = controller._create_t1_sequence_contrast(
@@ -90,9 +92,9 @@ controller.disconnect()
 from PulseBlaster import SwabianPulseController, RigolDSG836Controller, ODMRExperiments
 import numpy as np
 
-# Initialize instruments (SwabianPulseController connects automatically)
-pulse_controller = SwabianPulseController("192.168.0.203")
-rigol = RigolDSG836Controller("192.168.0.223")
+# Initialize instruments (IPs from common.utils)
+pulse_controller = SwabianPulseController()
+rigol = RigolDSG836Controller()
 rigol.connect()
 
 # Initialize experiments (also connects to TimeTagger: real -> network -> virtual fallback)
@@ -150,7 +152,7 @@ These are only starting points; `odmr_experiments.py` methods accept explicit ov
 
 ## Data output
 
-Confocal and ODMR managers write under the repo [`data/`](../data/) folder (`utils.experiment_data_root()`). Override the root with the `NV_EXPERIMENT_DATA` environment variable if you need another disk path. Contents of `data/` are gitignored so dated folders can be deleted manually.
+Confocal and ODMR managers write under the repo [`data/`](../data/) folder (`common.utils.experiment_data_root()`). Override the root with the `NV_EXPERIMENT_DATA` environment variable if you need another disk path. Contents of `data/` are gitignored so dated folders can be deleted manually.
 
 ## Hardware Requirements
 

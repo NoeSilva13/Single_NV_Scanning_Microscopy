@@ -28,7 +28,7 @@ except ImportError:
     from rigol_dsg836 import RigolDSG836Controller
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from odmr_data_manager import ODMRDataManager
+from common.odmr_data_manager import ODMRDataManager
 
 # TimeTagger imports for real data acquisition
 import TimeTagger
@@ -107,12 +107,16 @@ class ODMRExperiments:
         self.data_manager = ODMRDataManager()
         
         # Initialize TimeTagger for real data acquisition
-        try:
-            self.tagger = TimeTagger.createTimeTaggerNetwork("192.168.0.10")
-            print("✅ Connected to Network TimeTagger device")
-        except Exception as e:
-            print(f"⚠️ Network TimeTagger not detected: {str(e)}")
-            self.tagger = None
+        from common.utils import TIMETAGGER_NETWORK_HOST, timetagger_virtual_path
+
+        self.tagger = None
+        if TIMETAGGER_NETWORK_HOST:
+            try:
+                self.tagger = TimeTagger.createTimeTaggerNetwork(TIMETAGGER_NETWORK_HOST)
+                print(f"✅ Connected to Network TimeTagger at {TIMETAGGER_NETWORK_HOST}")
+            except Exception as e:
+                print(f"⚠️ Network TimeTagger not detected: {str(e)}")
+                self.tagger = None
 
         if self.tagger is None:
             try:
@@ -121,7 +125,7 @@ class ODMRExperiments:
                 print("✅ Connected to real TimeTagger device")
             except Exception as e:
                 print(f"⚠️ Real TimeTagger not detected: {str(e)}")
-                self.tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+                self.tagger = TimeTagger.createTimeTaggerVirtual(timetagger_virtual_path())
                 self.tagger.run()
                 print("✅ Virtual TimeTagger started")
     
@@ -1478,143 +1482,7 @@ class ODMRExperiments:
         plt.show()
 
 
-def run_example_experiments():
-    """Run example ODMR experiments with RIGOL integration"""
-    print("🚀 Starting ODMR Experiment Examples with RIGOL DSG836...")
-    
-    # Initialize pulse controller
-    controller = SwabianPulseController()
-    
-    if not controller.is_connected:
-        print("❌ Pulse controller not connected. Running in simulation mode.")
-        return
-    
-    # Initialize RIGOL signal generator
-    try:
-        rigol = RigolDSG836Controller("192.168.0.222")
-        if rigol.connect():
-            print("✅ RIGOL DSG836 connected successfully")
-        else:
-            print("⚠️  RIGOL DSG836 not connected. Running without MW control.")
-            rigol = None
-    except Exception as e:
-        print(f"⚠️  RIGOL DSG836 connection failed: {e}. Running without MW control.")
-        rigol = None
-    
-    # Initialize experiments with both controllers
-    experiments = ODMRExperiments(controller, rigol)
-    
-    try:
-        # 1. ODMR Contrast
-        # print("\n" + "="*50)
-        # frequencies = np.linspace(2.8e9, 2.95e9, 50)
-        # odmr_contrast_result = experiments.odmr_contrast(
-        #     mw_frequencies=frequencies,
-        #     laser_duration=100000,
-        #     mw_duration=100000,
-        #     detection_duration=100000,
-        #     laser_delay=0,
-        #     mw_delay=0,
-        #     detection_delay=1500,
-        #     sequence_interval=2000,
-        #     repetitions=5000,
-        #     plot_sequence=False,
-        #     live_plot=True
-        # )
-        # experiments.plot_results('odmr_contrast')
-
-        # 2. Readout transient — calibrates detection_delay and detection_duration
-        #   Run this once after the CW ODMR, before Rabi, and feed the printed
-        #   detection_delay / detection_duration into the experiments below.
-        # print("\n" + "="*50)
-        # transient_result = experiments.readout_transient(
-        #     mw_frequency=2.846e9,          # use your NV ODMR resonance frequency
-        #     mw_duration=1000,              # long saturating pulse, no calibration needed
-        #     init_laser_duration=3000,
-        #     readout_laser_duration=3000,   # long enough to contain the full transient
-        #     init_laser_delay=0,
-        #     mw_gap=500,
-        #     readout_gap=500,
-        #     pre_readout=200,               # dark bins before the laser edge
-        #     sequence_interval=2000,
-        #     repetitions=200000,
-        #     binwidth_ns=4,
-        #     plot_sequence=False
-        # )
-        # experiments.plot_results('readout_transient')
-
-        # 3. Pulsed ODMR with contrast (same sequence as Rabi, MW duration fixed)
-        # print("\n" + "="*50)
-        # frequencies = np.linspace(2.8e9, 2.95e9, 80)   # 0.5 MHz steps around the CW dip
-        # pulsed_odmr_result = experiments.pulsed_odmr_contrast(
-        #     mw_frequencies=frequencies,
-        #     mw_duration=1000,              # fixed; use the pi-pulse duration once known
-        #     init_laser_duration=3000,
-        #     readout_laser_duration=1000,
-        #     detection_duration=300,
-        #     init_laser_delay=0,
-        #     mw_gap=500,
-        #     readout_gap=500,
-        #     detection_delay=100,
-        #     sequence_interval=2000,
-        #     repetitions=400000,
-        #     plot_sequence=False,
-        #     live_plot=True
-        # )
-        # experiments.plot_results('pulsed_odmr_contrast')
-
-        # 4. Rabi oscillation with contrast (signal/reference normalisation)
-        print("\n" + "="*50)
-        mw_durations = np.linspace(0, 1008, 128)   # 0–504 ns, exact 8 ns steps
-        rabi_contrast_result = experiments.rabi_oscillation_contrast(
-            mw_durations=mw_durations,
-            mw_frequency=2.846e9,          # use your NV ODMR resonance frequency
-            init_laser_duration=3000,
-            readout_laser_duration=1000,
-            detection_duration=300,        # short gate: spin contrast lives in the first ~300 ns
-            init_laser_delay=0,
-            mw_gap=500,
-            readout_gap=500,
-            detection_delay=100,             # calibrate by sweeping it at fixed mw_duration
-            sequence_interval=2000,
-            repetitions=400000,
-            plot_sequence=False,
-            live_plot=True
-        )
-        experiments.plot_results('rabi_contrast')
-
-        # 5. T1 decay with contrast (signal/reference normalisation)
-        # print("\n" + "="*50)
-        # delay_times = np.linspace(0, 30e6, 50)  # 0-10 µs in 50 steps
-        # #delay_times = np.logspace(np.log10(0.5e3), np.log10(5e6), 50)
-        # t1_contrast_result = experiments.t1_decay_contrast(
-        #     delay_times=delay_times,
-        #     init_laser_duration=50000,
-        #     readout_laser_duration=50000,
-        #     detection_duration=3000,
-        #     init_laser_delay=0,
-        #     detection_delay=1500,
-        #     sequence_interval=2000,
-        #     repetitions=3000,
-        #     plot_sequence=False,
-        #     live_plot=True
-        # )
-        # experiments.plot_results('t1_contrast')
-        
-        
-        print("\n✅ All example experiments completed!")
-        
-    except Exception as e:
-        print(f"❌ Error during experiments: {e}")
-    
-    finally:
-        # Clean up connections
-        #experiments.cleanup()  # Clean up TimeTagger resources
-        if rigol:
-            rigol.set_rf_output(False)  # Safety: turn off RF output
-            rigol.disconnect()
-        controller.disconnect()
-
 
 if __name__ == "__main__":
-    run_example_experiments() 
+    print("Edit and run the root entry point instead:")
+    print("  python run_odmr_experiments.py")

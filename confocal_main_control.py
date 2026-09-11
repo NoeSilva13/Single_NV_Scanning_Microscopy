@@ -27,14 +27,14 @@ import TimeTagger
 from magicgui import magicgui
 
 # Local imports
-from galvo_controller import GalvoScannerController
-from data_manager import DataManager
-from daq_z_controller import DAQZController
-from daq_axis import DAQAxis
-import raster_engine
+from confocal.galvo_controller import GalvoScannerController
+from confocal.data_manager import DataManager
+from confocal.daq_z_controller import DAQZController
+from confocal.daq_axis import DAQAxis
+from confocal import raster_engine
 from plot_widgets.live_plot_napari_widget import live_plot
-from plot_scan_results import plot_scan_results
-from utils import (
+from confocal.plot_scan_results import plot_scan_results
+from common.utils import (
     um_scale,
     MAX_ZOOM_LEVEL, 
     BINWIDTH,
@@ -42,7 +42,7 @@ from utils import (
     save_tiff_with_imagej_metadata
 )
 from qtpy.QtWidgets import QWidget, QGridLayout
-from thread_safe_bridge import GUIBridge
+from confocal.thread_safe_bridge import GUIBridge
 
 # Import extracted widgets
 from widgets.scan_controls import (
@@ -294,7 +294,8 @@ try:
     print("✅ TimeTagger server started")
 except Exception as e:
     show_info("⚠️ Real TimeTagger not detected, using virtual device")
-    tagger = TimeTagger.createTimeTaggerVirtual("TimeTagger/time_tags_test.ttbin")
+    from common.utils import timetagger_virtual_path
+    tagger = TimeTagger.createTimeTaggerVirtual(timetagger_virtual_path())
     tagger.run()
     print("✅ Virtual TimeTagger started")
 

@@ -35,16 +35,20 @@ class RigolDSG836Controller:
     over Ethernet using SCPI commands for ODMR experiments.
     """
     
-    def __init__(self, ip_address: str = "192.168.0.224", timeout: float = 10.0):
+    def __init__(self, ip_address: Optional[str] = None, timeout: float = 10.0):
         """
         Initialize the RIGOL DSG836 controller.
         
         Args:
-            ip_address: IP address of the signal generator
+            ip_address: Generator IP. Defaults to ``common.utils.RIGOL_IP``.
             timeout: Connection timeout in seconds
         """
         if not PYVISA_AVAILABLE:
             raise ImportError("PyVISA is required for RIGOL DSG836 control. Install with: pip install pyvisa")
+
+        if ip_address is None:
+            from common.utils import RIGOL_IP
+            ip_address = RIGOL_IP
         
         self.ip_address = ip_address
         self.timeout = timeout
@@ -403,8 +407,8 @@ class RigolDSG836Controller:
 
 # Example usage
 if __name__ == "__main__":
-    # Test the RIGOL DSG836 controller
-    rigol = RigolDSG836Controller("192.168.0.222")
+    # Test the RIGOL DSG836 controller (IP from common.utils.RIGOL_IP)
+    rigol = RigolDSG836Controller()
     
     try:
         # Connect to instrument

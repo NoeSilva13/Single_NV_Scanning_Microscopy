@@ -15,7 +15,7 @@ from qtpy.QtCore import Qt, Signal as pyqtSignal
 from qtpy.QtWidgets import QWidget, QVBoxLayout, QPushButton
 from napari.utils.notifications import show_info
 
-from scanning_core import run_hardware_timed_sweep, counts_to_rate
+from confocal.scanning_core import run_hardware_timed_sweep, counts_to_rate
 
 
 def _sweep_phase(tagger, z_controller, positions, rate, stage,

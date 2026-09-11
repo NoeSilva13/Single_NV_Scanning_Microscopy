@@ -12,8 +12,8 @@ from nidaqmx.constants import TaskMode
 from qtpy.QtWidgets import QWidget, QPushButton, QVBoxLayout, QTabWidget
 from qtpy.QtCore import Qt, Signal as pyqtSignal
 from napari.utils.notifications import show_info
-from scanning_core import run_hardware_timed_sweep, counts_to_rate
-from utils import MICRONS_PER_VOLT
+from confocal.scanning_core import run_hardware_timed_sweep, counts_to_rate
+from common.utils import MICRONS_PER_VOLT
 
 
 def _um_to_volt(um):

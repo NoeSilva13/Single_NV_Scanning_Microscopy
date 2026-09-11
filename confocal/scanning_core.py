@@ -70,7 +70,7 @@ def run_hardware_timed_sweep(
     click_channel=1,
     begin_channel=3,
     end_channel=-3,
-    clock_export_term="/Dev1/PFI8",
+    clock_export_term=None,
     extra_clock_samples=1,
     cbm_settle_s=1.0,
     poll_interval_s=0.2,
@@ -96,8 +96,9 @@ def run_hardware_timed_sweep(
         integration time.
     click_channel, begin_channel, end_channel : int
         Time Tagger channels for photon clicks and the DAQ clock markers.
-    clock_export_term : str
+    clock_export_term : str or None
         PFI terminal the AO sample clock is exported to (wired to the tagger).
+        Defaults to ``common.utils.DAQ_CLOCK_EXPORT`` (``/Dev1/PFI8``).
     extra_clock_samples : int
         Extra clock samples beyond ``n_points`` (preserves the ``+1`` used by
         the original raster scan so ``n_points`` intervals are produced).
@@ -120,6 +121,10 @@ def run_hardware_timed_sweep(
     Tuple[np.ndarray, np.ndarray]
         ``(counts, bin_widths_ps)`` with ``n_points`` entries each.
     """
+    if clock_export_term is None:
+        from common.utils import DAQ_CLOCK_EXPORT
+        clock_export_term = DAQ_CLOCK_EXPORT
+
     waveform = np.asarray(waveform, dtype=float)
     if waveform.ndim == 1:
         waveform = waveform[np.newaxis, :]

@@ -1,7 +1,7 @@
 import os
 import time
 import pandas as pd
-from utils import experiment_data_root
+from common.utils import experiment_data_root
 
 class DataManager:
     def __init__(self):
