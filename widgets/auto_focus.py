@@ -18,13 +18,13 @@ from napari.utils.notifications import show_info
 from confocal.scanning_core import run_hardware_timed_sweep, counts_to_rate
 
 
-def _sweep_phase(tagger, z_controller, positions, rate, stage,
-                 plot_callback, stop_check, task_ref, cbm_ref, lock):
+def _sweep_phase(session, z_controller, positions, rate, stage,
+                 plot_callback, stop_check, task_ref, acquisition_ref, lock):
     """Run one hardware-timed Z sweep over ``positions`` and return count rates.
 
     The positions (micrometers) are converted to EXT IN voltages and clocked
-    out on the piezo analog-output channel; CountBetweenMarkers counts photons
-    between clock edges (one value per position). ``plot_callback`` is called
+    out on the piezo analog-output channel by RFSoC PMOD edges. The RFSoC edge
+    counter integrates photons at each position. ``plot_callback`` is called
     during the sweep with the accumulated ``(stage, positions, rates)`` so the
     caller can plot the data in real time.
     """
@@ -40,34 +40,34 @@ def _sweep_phase(tagger, z_controller, positions, rate, stage,
             plot_callback(stage, list(positions[:done]), list(rates[:done]))
 
     counts, bin_widths = run_hardware_timed_sweep(
-        tagger,
+        session,
         [z_controller.ao_channel],
         voltages,
         rate,
         on_progress=_on_progress,
         stop_check=stop_check,
         task_ref=task_ref,
-        cbm_ref=cbm_ref,
+        acquisition_ref=acquisition_ref,
         lock=lock,
     )
     return counts_to_rate(counts, bin_widths)
 
 
-def run_z_sweep(tagger,
+def run_z_sweep(session,
                 z_controller,
                 positions,
                 dwell_time,
                 plot_callback=None,
                 stop_check=None,
                 task_ref=None,
-                cbm_ref=None,
+                acquisition_ref=None,
                 lock=None):
     """Run a single hardware-timed linear Z sweep.
 
     Parameters
     ----------
-    tagger : TimeTagger.TimeTagger
-        Time Tagger instance.
+    session : rfsoc.client.RFSoCSession
+        RFSoC client session.
     z_controller : DAQZController
         Controller exposing ``position_to_voltage``, ``set_position(um)``,
         ``max_travel`` and ``ao_channel``.
@@ -80,7 +80,7 @@ def run_z_sweep(tagger,
         so far, for real-time plotting.
     stop_check : Optional[Callable[[], bool]]
         Returns True to abort the sweep early.
-    task_ref, cbm_ref, lock :
+    task_ref, acquisition_ref, lock :
         Passed through to ``run_hardware_timed_sweep`` for Stop integration.
 
     Returns
@@ -95,8 +95,8 @@ def run_z_sweep(tagger,
     rate = 1.0 / dwell_time
     print(f"Starting Z scan ({len(positions)} points, dwell={dwell_time*1e3:.1f} ms)...")
     rates = _sweep_phase(
-        tagger, z_controller, positions, rate, "Z Scan",
-        plot_callback, stop_check, task_ref, cbm_ref, lock
+        session, z_controller, positions, rate, "Z Scan",
+        plot_callback, stop_check, task_ref, acquisition_ref, lock
     )
     print("Z scan complete.")
     return positions, list(rates)
@@ -118,19 +118,19 @@ class AutoFocusWidget(QWidget):
     _zupdate_signal = pyqtSignal()
     _finished_signal = pyqtSignal()
 
-    def __init__(self, tagger, z_controller, scan_params_manager,
+    def __init__(self, session, z_controller, scan_params_manager,
                  scan_lock, scan_in_progress, stop_scan_requested,
-                 scan_task_ref, cbm_ref,
+                 scan_task_ref, acquisition_ref,
                  bg_color='#262930', parent=None):
         super().__init__(parent)
-        self.tagger = tagger
+        self.session = session
         self.z_controller = z_controller
         self.scan_params_manager = scan_params_manager
         self.scan_lock = scan_lock
         self.scan_in_progress = scan_in_progress
         self.stop_scan_requested = stop_scan_requested
         self.scan_task_ref = scan_task_ref
-        self.cbm_ref = cbm_ref
+        self.acquisition_ref = acquisition_ref
         # Optional piezo control widget refreshed after a successful scan.
         self.z_control_widget = None
         # Optional callback invoked after a click-to-move on the Z plot so the
@@ -211,7 +211,7 @@ class AutoFocusWidget(QWidget):
         threading.Thread(target=self._run, daemon=True).start()
 
     def _run(self):
-        # Acquire exclusive access to the DAQ AO engine / Time Tagger clock.
+        # Acquire exclusive access to the DAQ AO engine / RFSoC timing path.
         with self.scan_lock:
             if self.scan_in_progress[0]:
                 self._notify_signal.emit('⚠️ A scan is already in progress')
@@ -250,14 +250,14 @@ class AutoFocusWidget(QWidget):
                 self._live_signal.emit(stage, pos, rates)
 
             positions, rates = run_z_sweep(
-                self.tagger,
+                self.session,
                 self.z_controller,
                 positions,
                 dwell_time,
                 plot_callback=plot_callback,
                 stop_check=lambda: self.stop_scan_requested[0],
                 task_ref=self.scan_task_ref,
-                cbm_ref=self.cbm_ref,
+                acquisition_ref=self.acquisition_ref,
                 lock=self.scan_lock,
             )
 

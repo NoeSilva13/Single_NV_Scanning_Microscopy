@@ -385,12 +385,13 @@ def update_scan_parameters_widget(widget_instance, scan_params_manager, bridge=N
     return _update_widget
 
 
-def stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref=None, cbm_ref=None, scan_lock=None):
+def stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref=None,
+              acquisition_ref=None, scan_lock=None):
     """Factory function to create stop_scan widget with dependencies.
 
     Args:
         scan_task_ref: Mutable list holding the hardware-timed DAQ task (or None).
-        cbm_ref: Mutable list holding the CountBetweenMarkers measurement (or None).
+        acquisition_ref: Mutable list holding the RFSoC acquisition handle.
         scan_lock: threading.Lock protecting shared scan state.
     """
     
@@ -405,7 +406,9 @@ def stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref=None, cbm_ref
                 return
             stop_scan_requested[0] = True
             task = scan_task_ref[0] if scan_task_ref is not None else None
-            cbm = cbm_ref[0] if cbm_ref is not None else None
+            acquisition = (
+                acquisition_ref[0] if acquisition_ref is not None else None
+            )
         finally:
             if scan_lock:
                 scan_lock.release()
@@ -415,9 +418,9 @@ def stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref=None, cbm_ref
                 task.stop()
             except Exception:
                 pass
-        if cbm is not None:
+        if acquisition is not None:
             try:
-                cbm.stop()
+                acquisition.stop()
             except Exception:
                 pass
         show_info("🛑 Stopping scan... Please wait.")

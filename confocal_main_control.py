@@ -23,7 +23,6 @@ from napari._qt.dialogs.qt_notification import NapariQtNotification
 NapariQtNotification.DISMISS_AFTER = 1000
 from qtpy.QtGui import QGuiApplication
 from qtpy.QtCore import Qt
-import TimeTagger
 from magicgui import magicgui
 
 # Local imports
@@ -43,6 +42,8 @@ from common.utils import (
 )
 from qtpy.QtWidgets import QWidget, QGridLayout
 from confocal.thread_safe_bridge import GUIBridge
+from rfsoc.client import RFSoCSession
+from rfsoc.confocal_backend import RFSoCConfocalBackend
 
 # Import extracted widgets
 from widgets.scan_controls import (
@@ -218,7 +219,7 @@ single_axis_widget_ref = None  # Reference to be set later
 scan_in_progress = [False]  # Flag to track if scan is running (mutable)
 stop_scan_requested = [False]  # Flag to request scan stop (mutable)
 scan_task_ref = [None]  # Reference to hardware-timed DAQ scan task (mutable for stop access)
-cbm_ref = [None]  # Reference to CountBetweenMarkers measurement (mutable for stop access)
+acquisition_ref = [None]  # Active RFSoC/NI line handle for Stop access
 
 # Initialize DAQ output task for galvo control
 output_task = nidaqmx.Task()
@@ -283,28 +284,18 @@ layer.scale = (scale_um_per_px_y, scale_um_per_px_x)
 layer.units = ('µm', 'µm')
 shapes.units = ('µm', 'µm')
 
-# --------------------- TIMETAGGER SETUP ---------------------
+# --------------------- RFSOC4X2 SETUP ---------------------
+rfsoc_session = RFSoCSession()
 try:
-    tagger = TimeTagger.createTimeTagger()
-    tagger.reset()
-    print("✅ Connected to real TimeTagger device")
-    tagger.startServer(access_mode = TimeTagger.AccessMode.Control,port=41101) 
-    # Start the Server. TimeTagger.AccessMode sets the access rights for clients. Port defines the network port to be used
-    # The server keeps running until the command tagger.stopServer() is called or until the program is terminated
-    print("✅ TimeTagger server started")
-except Exception as e:
-    show_info("⚠️ Real TimeTagger not detected, using virtual device")
-    from common.utils import timetagger_virtual_path
-    tagger = TimeTagger.createTimeTaggerVirtual(timetagger_virtual_path())
-    tagger.run()
-    print("✅ Virtual TimeTagger started")
+    rfsoc_session.connect()
+    print("✅ Connected to RFSoC4x2 through QICK-DAWG")
+except Exception as exc:
+    raise RuntimeError(f"RFSoC4x2 initialization failed: {exc}") from exc
+rfsoc_confocal = RFSoCConfocalBackend(rfsoc_session)
 
-# Free-running counter used ONLY by the live signal plot. All DAQ-driven
-# acquisitions (2D raster, auto-focus, single-axis) instead count with
-# CountBetweenMarkers clocked by the DAQ (see scanning_core.py).
+# Live PL uses short QICK PLIntensity acquisitions and pauses while a scan owns
+# the process-wide RFSoC acquisition lock.
 binwidth = BINWIDTH
-n_values = 1
-counter = TimeTagger.Counter(tagger, [1], binwidth, n_values)
 
 # --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
 def on_mouse_click(layer, event):
@@ -400,18 +391,13 @@ def on_scan_click(clicked_layer, event):
 # --------------------- LIVE SIGNAL PLOT WIDGET (pyqtgraph) ---------------------
 # Function to get count rate and check for overflow
 def get_count_with_overflow():
-    data = counter.getData()
-    count_rate = data[0][0]/(binwidth/1e12)
-    # Check if any bins are in overflow mode
-    counter_data = counter.getDataObject()
-    overflow = counter_data.overflow  # Access as attribute, not as a method
-    return count_rate, overflow
+    count_rate, overflow = rfsoc_confocal.live_count_rate(binwidth / 1e12)
+    return (np.nan if count_rate is None else count_rate), overflow
 
 def set_live_binwidth(binwidth_ps):
-    """Rebuild the live-signal counter with a new integration window (ps)."""
-    global binwidth, counter
+    """Set the requested QICK live-PL integration window (ps)."""
+    global binwidth
     binwidth = int(binwidth_ps)
-    counter = TimeTagger.Counter(tagger, [1], binwidth, n_values)
 
 # Add a live plot widget to display count rate with overflow detection
 signal_plot_widget = live_plot(
@@ -677,10 +663,12 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
             bridge.run_on_main(_upd)
 
         counts, bins, _sh, _st, _w = raster_engine.run_raster(
-            tagger, axes_list, points_list, dwell, n_flyback,
+            rfsoc_session, axes_list, points_list, dwell, n_flyback,
             on_progress=_on_progress,
             stop_check=lambda: stop_scan_requested[0],
-            task_ref=scan_task_ref, cbm_ref=cbm_ref, lock=scan_lock,
+            task_ref=scan_task_ref,
+            acquisition_ref=acquisition_ref,
+            lock=scan_lock,
         )
 
         if stop_scan_requested[0]:
@@ -854,7 +842,10 @@ update_widget_func = create_update_scan_parameters_widget(update_scan_parameters
 scan_points_manager._update_points_from_params()
 
 # Create stop scan widget
-stop_scan_widget = create_stop_scan(scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref, scan_lock)
+stop_scan_widget = create_stop_scan(
+    scan_in_progress, stop_scan_requested, scan_task_ref,
+    acquisition_ref, scan_lock
+)
 stop_scan_widget.native.setFixedSize(150, 50)
 
 reset_zoom_widget = create_reset_zoom(
@@ -872,14 +863,16 @@ camera_control_widget = create_camera_control_widget(viewer)
 
 # Create Scan Z widget (button + pyqtgraph plot; Z params from Scan Parameters)
 auto_focus_widget = AutoFocusWidget(
-    tagger, z_controller, scan_params_manager,
-    scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref
+    rfsoc_session, z_controller, scan_params_manager,
+    scan_lock, scan_in_progress, stop_scan_requested,
+    scan_task_ref, acquisition_ref
 )
 
 # Create single axis scan widget
 single_axis_scan_widget = SingleAxisScanWidget(
-    scan_params_manager, layer, output_task, tagger, galvo_controller,
-    scan_lock, scan_in_progress, stop_scan_requested, scan_task_ref, cbm_ref
+    scan_params_manager, layer, output_task, rfsoc_session, galvo_controller,
+    scan_lock, scan_in_progress, stop_scan_requested,
+    scan_task_ref, acquisition_ref
 )
 
 # Set the global reference for position tracking
@@ -1080,6 +1073,8 @@ def _on_close():
         if z_controller:
             z_controller.close()
             print("✓ Z controller released")
+        rfsoc_session.close()
+        print("✓ RFSoC client released")
     except Exception as e:
         print(f"❌ Error during app closure: {str(e)}")
 

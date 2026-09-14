@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) guidelines.
 
+## [RFSoC4x2] - 2026-09-14
+### Added
+- Dedicated `rfsoc4x2` hardware branch using QICK-DAWG/QICK 0.2.302.
+- RFSoC client singleton, validated hardware configuration, bring-up diagnostics,
+  native experiment results, and host-only tests.
+- `ConfocalLine`, with RFSoC edge counting, PMOD pixel clock, multi-window
+  dwell integration, and uncounted flyback clocks.
+- FPGA-swept CW ODMR, pulsed ODMR, Rabi, and T1 APIs.
+
+### Changed
+- RFSoC is the confocal timing master; NI AO is armed from an external PFI
+  sample clock one line at a time.
+- The ODMR runner now performs one QICK acquire per complete experiment.
+
+### Removed
+- TimeTagger, Pulse Streamer, Rigol drivers/configuration/dependencies, and
+  runtime backend selection from this branch. They remain supported on `main`.
+
 ## [Unreleased] - 2026-09-08
 ### Added
 - Live matplotlib contrast plot during ODMR/Rabi/T1 sweeps (`live_plot=True` in `PulseBlaster/odmr_experiments.py`), with final multi-panel PDFs still produced by `plot_results()`.

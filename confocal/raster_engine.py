@@ -20,7 +20,7 @@ import itertools
 
 import numpy as np
 
-from .scanning_core import run_hardware_timed_sweep, counts_to_rate
+from .scanning_core import run_hardware_timed_raster, counts_to_rate
 
 
 def build_raster_waveforms(axes_points, n_flyback=0):
@@ -98,7 +98,7 @@ def raster_geometry(axes_points, n_flyback=0):
 
 
 def reconstruct(counts, bin_widths_ps, shape, stride, width):
-    """Rebuild the 2D image / 3D volume (count rate, cps) from raw CBM output.
+    """Rebuild the image/volume from compact RFSoC imaging counts.
 
     Points not yet acquired (zero bin width) map to 0, so this is safe to call
     with partial data during live updates.
@@ -107,52 +107,54 @@ def reconstruct(counts, bin_widths_ps, shape, stride, width):
     bin_widths_ps = np.asarray(bin_widths_ps)
     n_lines = int(np.prod(shape[:-1])) if len(shape) > 1 else 1
 
-    lines = np.zeros((n_lines, width), dtype=np.float32)
-    for li in range(n_lines):
-        start = li * stride
-        end = start + width
-        if end <= len(bin_widths_ps):
-            lines[li] = counts_to_rate(counts[start:end], bin_widths_ps[start:end])
-    return lines.reshape(shape)
+    expected = n_lines * width
+    if len(counts) != expected or len(bin_widths_ps) != expected:
+        raise ValueError(
+            f"compact raster needs {expected} values, got "
+            f"{len(counts)} counts/{len(bin_widths_ps)} widths"
+        )
+    return counts_to_rate(counts, bin_widths_ps).astype(np.float32).reshape(shape)
 
 
-def run_raster(tagger, axes, axes_points, dwell_time, n_flyback=0, *,
+def run_raster(session, axes, axes_points, dwell_time, n_flyback=0, *,
                on_progress=None, stop_check=None,
-               task_ref=None, cbm_ref=None, lock=None):
+               task_ref=None, acquisition_ref=None, lock=None):
     """Run a hardware-timed N-axis raster and return raw counts + geometry.
 
     Args:
-        tagger: Time Tagger instance.
+        session: Connected :class:`rfsoc.client.RFSoCSession`.
         axes: List of :class:`daq_axis.DAQAxis`, fast..slow (parallel to
             ``axes_points``).
         axes_points: List of 1D µm arrays, fast..slow.
         dwell_time: Per-point integration time in seconds (1/rate).
         n_flyback: Retrace samples between fast lines.
         on_progress: Optional callback ``(partial_counts, partial_bins_ps)``.
-        stop_check, task_ref, cbm_ref, lock: Forwarded to
-            ``run_hardware_timed_sweep``.
+        stop_check, task_ref, acquisition_ref, lock: Forwarded to the RFSoC
+            line acquisition core.
 
     Returns:
         counts, bin_widths_ps, shape, stride, width
     """
-    waveforms_um, shape, stride, width, _n_lines = build_raster_waveforms(
+    waveforms_um, shape, stride, width, n_lines = build_raster_waveforms(
         axes_points, n_flyback
     )
     volt_waveform = np.array(
         [axis.to_voltage(wf) for axis, wf in zip(axes, waveforms_um)]
     )
     channels = [axis.ao_channel for axis in axes]
-    rate = 1.0 / dwell_time
-
-    counts, bin_widths_ps = run_hardware_timed_sweep(
-        tagger,
+    counts, bin_widths_ps = run_hardware_timed_raster(
+        session,
         channels,
         volt_waveform,
-        rate,
+        dwell_time,
+        width=width,
+        n_lines=n_lines,
+        stride=stride,
+        n_flyback=n_flyback,
         stop_check=stop_check,
         on_progress=on_progress,
         task_ref=task_ref,
-        cbm_ref=cbm_ref,
+        acquisition_ref=acquisition_ref,
         lock=lock,
     )
     return counts, bin_widths_ps, shape, stride, width

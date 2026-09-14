@@ -27,9 +27,9 @@ class SingleAxisScanWidget(QWidget):
     _plot_ready_signal = pyqtSignal(str, list, list)
     _finished_signal = pyqtSignal(str)
 
-    def __init__(self, scan_params_manager, layer, output_task, tagger,
+    def __init__(self, scan_params_manager, layer, output_task, session,
                  galvo_controller, scan_lock, scan_in_progress,
-                 stop_scan_requested, scan_task_ref, cbm_ref,
+                 stop_scan_requested, scan_task_ref, acquisition_ref,
                  bg_color='#262930', parent=None):
         super().__init__(parent)
         self._plot_ready_signal.connect(self._on_plot_ready)
@@ -37,13 +37,13 @@ class SingleAxisScanWidget(QWidget):
         self.scan_params_manager = scan_params_manager
         self.layer = layer
         self.output_task = output_task
-        self.tagger = tagger
+        self.session = session
         self.galvo_controller = galvo_controller
         self.scan_lock = scan_lock
         self.scan_in_progress = scan_in_progress
         self.stop_scan_requested = stop_scan_requested
         self.scan_task_ref = scan_task_ref
-        self.cbm_ref = cbm_ref
+        self.acquisition_ref = acquisition_ref
 
         # Optional callback invoked after a click-to-move so the rest of the app
         # (global position state + axis control widget) can stay in sync.
@@ -165,7 +165,7 @@ class SingleAxisScanWidget(QWidget):
     # Scan control
     # ------------------------------------------------------------------
     def start_scan(self, axis):
-        """Start a hardware-timed single axis scan using CountBetweenMarkers.
+        """Start a hardware-timed single-axis scan using RFSoC edge counting.
 
         Positions are handled in micrometers and converted to galvo volts only
         when building the DAQ waveform.
@@ -199,7 +199,7 @@ class SingleAxisScanWidget(QWidget):
         self.scan_btns[axis].setEnabled(False)
 
         def run_scan():
-            # Acquire exclusive access to the DAQ AO engine / Time Tagger clock.
+            # Acquire exclusive access to the DAQ AO engine / RFSoC timing path.
             with self.scan_lock:
                 if self.scan_in_progress[0]:
                     show_info('⚠️ A scan is already in progress')
@@ -214,14 +214,14 @@ class SingleAxisScanWidget(QWidget):
                 self.output_task.control(TaskMode.TASK_UNRESERVE)
 
                 counts, bin_widths = run_hardware_timed_sweep(
-                    self.tagger,
+                    self.session,
                     [self.galvo_controller.xin_control,
                      self.galvo_controller.yin_control],
                     np.array([x_waveform, y_waveform]),
                     1.0 / dwell_time,
                     stop_check=lambda: self.stop_scan_requested[0],
                     task_ref=self.scan_task_ref,
-                    cbm_ref=self.cbm_ref,
+                    acquisition_ref=self.acquisition_ref,
                     lock=self.scan_lock,
                 )
 

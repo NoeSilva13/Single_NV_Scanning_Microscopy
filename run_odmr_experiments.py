@@ -1,159 +1,59 @@
-"""
-ODMR experiment runner — edit parameters here, then run:
+"""RFSoC4x2 experiment runner.
 
-    python run_odmr_experiments.py
-
-Uncomment the experiment block you want. Instrument IPs live in common/utils.py.
-Experiment logic lives in PulseBlaster/odmr_experiments.py (ODMRExperiments).
+Edit/uncomment one block, then run ``python run_odmr_experiments.py``.
+Every experiment performs one QICK acquire for its complete FPGA sweep.
 """
 
 import numpy as np
 
-from PulseBlaster.swabian_pulse_streamer import SwabianPulseController
-from PulseBlaster.rigol_dsg836 import RigolDSG836Controller
-from PulseBlaster.odmr_experiments import ODMRExperiments
+from rfsoc.client import RFSoCSession
+from rfsoc.experiments import cw_odmr, pulsed_odmr, rabi, t1
+from rfsoc.experiments.io import plot_result, save_result
 
 
 def main():
-    print("🚀 Starting ODMR experiments...")
+    session = RFSoCSession().connect()
 
-    controller = SwabianPulseController()
-    if not controller.is_connected:
-        print("❌ Pulse controller not connected.")
-        return
+    # 1. CW ODMR
+    # result = cw_odmr(
+    #     session,
+    #     np.linspace(2.80e9, 2.95e9, 80),
+    #     readout_ns=100_000,
+    #     reps=5_000,
+    #     mw_gain=5_000,
+    # )
 
-    try:
-        rigol = RigolDSG836Controller()
-        if rigol.connect():
-            print("✅ RIGOL DSG836 connected")
-        else:
-            print("⚠️  RIGOL not connected — continuing without MW control")
-            rigol = None
-    except Exception as e:
-        print(f"⚠️  RIGOL connection failed: {e} — continuing without MW control")
-        rigol = None
+    # 2. Pulsed ODMR
+    # result = pulsed_odmr(
+    #     session,
+    #     np.linspace(2.80e9, 2.95e9, 80),
+    #     mw_duration_ns=1_000,
+    #     reps=100_000,
+    #     mw_gain=5_000,
+    # )
 
-    experiments = ODMRExperiments(controller, rigol)
+    # 3. Rabi (active)
+    result = rabi(
+        session,
+        np.linspace(0, 1_008, 128),
+        mw_frequency_hz=2.846e9,
+        reps=100_000,
+        mw_gain=5_000,
+    )
 
-    try:
-        # ------------------------------------------------------------------
-        # 1. CW ODMR contrast
-        # ------------------------------------------------------------------
-        # print("\n" + "=" * 50)
-        # frequencies = np.linspace(2.8e9, 2.95e9, 50)
-        # experiments.odmr_contrast(
-        #     mw_frequencies=frequencies,
-        #     laser_duration=100000,
-        #     mw_duration=100000,
-        #     detection_duration=100000,
-        #     laser_delay=0,
-        #     mw_delay=0,
-        #     detection_delay=1500,
-        #     sequence_interval=2000,
-        #     repetitions=5000,
-        #     plot_sequence=False,
-        #     live_plot=True,
-        # )
-        # experiments.plot_results('odmr_contrast')
+    # 4. T1
+    # result = t1(
+    #     session,
+    #     np.linspace(0, 30e6, 50),
+    #     scaling="linear",
+    #     mw_frequency_hz=2.846e9,
+    #     mw_pi_ns=1_000,
+    #     reps=3_000,
+    # )
 
-        # ------------------------------------------------------------------
-        # 2. Readout transient (calibrate detection_delay / detection_duration)
-        # ------------------------------------------------------------------
-        # print("\n" + "=" * 50)
-        # experiments.readout_transient(
-        #     mw_frequency=2.846e9,
-        #     mw_duration=1000,
-        #     init_laser_duration=3000,
-        #     readout_laser_duration=3000,
-        #     init_laser_delay=0,
-        #     mw_gap=500,
-        #     readout_gap=500,
-        #     pre_readout=200,
-        #     sequence_interval=2000,
-        #     repetitions=200000,
-        #     binwidth_ns=4,
-        #     plot_sequence=False,
-        # )
-        # experiments.plot_results('readout_transient')
-
-        # ------------------------------------------------------------------
-        # 3. Pulsed ODMR contrast
-        # ------------------------------------------------------------------
-        # print("\n" + "=" * 50)
-        # frequencies = np.linspace(2.8e9, 2.95e9, 80)
-        # experiments.pulsed_odmr_contrast(
-        #     mw_frequencies=frequencies,
-        #     mw_duration=1000,
-        #     init_laser_duration=3000,
-        #     readout_laser_duration=1000,
-        #     detection_duration=300,
-        #     init_laser_delay=0,
-        #     mw_gap=500,
-        #     readout_gap=500,
-        #     detection_delay=100,
-        #     sequence_interval=2000,
-        #     repetitions=400000,
-        #     plot_sequence=False,
-        #     live_plot=True,
-        # )
-        # experiments.plot_results('pulsed_odmr_contrast')
-
-        # ------------------------------------------------------------------
-        # 4. Rabi oscillation contrast  ← active
-        # ------------------------------------------------------------------
-        print("\n" + "=" * 50)
-        mw_durations = np.linspace(0, 1008, 128)
-        experiments.rabi_oscillation_contrast(
-            mw_durations=mw_durations,
-            mw_frequency=2.846e9,
-            init_laser_duration=3000,
-            readout_laser_duration=1000,
-            detection_duration=300,
-            init_laser_delay=0,
-            mw_gap=500,
-            readout_gap=500,
-            detection_delay=100,
-            sequence_interval=2000,
-            repetitions=400000,
-            plot_sequence=False,
-            live_plot=True,
-        )
-        experiments.plot_results('rabi_contrast')
-
-        # ------------------------------------------------------------------
-        # 5. T1 decay contrast
-        # ------------------------------------------------------------------
-        # print("\n" + "=" * 50)
-        # delay_times = np.linspace(0, 30e6, 50)
-        # # delay_times = np.logspace(np.log10(0.5e3), np.log10(5e6), 50)
-        # experiments.t1_decay_contrast(
-        #     delay_times=delay_times,
-        #     init_laser_duration=50000,
-        #     readout_laser_duration=50000,
-        #     detection_duration=3000,
-        #     init_laser_delay=0,
-        #     detection_delay=1500,
-        #     sequence_interval=2000,
-        #     repetitions=3000,
-        #     plot_sequence=False,
-        #     live_plot=True,
-        # )
-        # experiments.plot_results('t1_contrast')
-
-        print("\n✅ Experiment completed!")
-
-    except Exception as e:
-        print(f"❌ Error during experiments: {e}")
-        raise
-
-    finally:
-        if rigol:
-            try:
-                rigol.set_rf_output(False)
-            except Exception:
-                pass
-            rigol.disconnect()
-        controller.disconnect()
+    save_result(result)
+    plot_result(result)
+    print("Saved:", result.saved_files)
 
 
 if __name__ == "__main__":

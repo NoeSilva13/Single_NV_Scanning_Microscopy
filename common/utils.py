@@ -31,7 +31,7 @@ MICRONS_PER_VOLT = 24
 # Maximum zoom level allowed in the scanning interface
 MAX_ZOOM_LEVEL = 9
 
-# Default binwidth for TimeTagger counter in picoseconds (5e9 = 5 milliseconds)
+# Default RFSoC live-PL integration request in picoseconds (5 ms)
 BINWIDTH = int(5e9)
 
 # Z piezo analog control calibration (DAQ ao2 -> EXT IN of the piezo controller)
@@ -42,27 +42,31 @@ Z_UM_PER_VOLT = 45.0            # Calibration factor (micrometers per volt)
 Z_MAX_TRAVEL_UM = 450.0        # Full travel of the piezo stage in micrometers
 Z_VOLTAGE_RANGE = (0.0, 10.0)  # Allowed EXT IN voltage range for closed-loop control
 
-# --- Lab instrument addresses / DAQ channels (edit here when hardware moves) ---
-PULSE_STREAMER_IP = "192.168.0.203"
-RIGOL_IP = "192.168.0.222"
-TIMETAGGER_NETWORK_HOST = "192.168.0.10"  # set to None to skip network TimeTagger
-TIMETAGGER_VIRTUAL_FILE = "TimeTagger/time_tags_test.ttbin"
+# --- RFSoC4x2 / DAQ configuration (edit here when hardware moves) ------------
+# The RFSoC is the timing master on the rfsoc4x2 branch.  Pin/channel defaults
+# must be checked against the QickConfig printed by the bitfile before use.
+RFSOC_IP = os.environ.get("NV_RFSOC_IP", "192.168.3.1")
+RFSOC_SERVER_NAME = os.environ.get("NV_RFSOC_SERVER_NAME", "myqick")
+RFSOC_FIRMWARE = os.environ.get("NV_RFSOC_FIRMWARE", "photon_counting")
+RFSOC_ADC_CHANNEL = 0
+RFSOC_MW_CHANNEL = 0
+RFSOC_MW_NQZ = 2
+RFSOC_AOM_PMOD = 0
+RFSOC_PIXEL_CLOCK_PMOD = 1
+RFSOC_EDGE_HIGH_THRESHOLD = 8000
+RFSOC_EDGE_LOW_THRESHOLD = 500
+RFSOC_PIXEL_CLOCK_WIDTH_NS = 100
+RFSOC_CONFOCAL_SETTLE_US = 5.0
+RFSOC_MAX_READOUT_SAMPLES = (2 ** 16) - 1
 
 DAQ_GALVO_X = "Dev1/ao0"
 DAQ_GALVO_Y = "Dev1/ao1"
 DAQ_PIEZO_Z = "Dev1/ao2"
 DAQ_SPD_COUNTER = "Dev1/ctr0"
-DAQ_CLOCK_EXPORT = "/Dev1/PFI8"
+# Buffered PMOD pixel-clock output -> NI PFI input.
+DAQ_RFSOC_CLOCK_INPUT = "/Dev1/PFI8"
 DAQ_XOUT_VOLTAGE = "Dev1/ai14"
 DAQ_YOUT_VOLTAGE = "Dev1/ai15"
-
-
-def timetagger_virtual_path() -> str:
-    """Absolute path to the virtual TimeTagger replay file."""
-    if os.path.isabs(TIMETAGGER_VIRTUAL_FILE):
-        return TIMETAGGER_VIRTUAL_FILE
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(repo_root, TIMETAGGER_VIRTUAL_FILE)
 
 
 def calculate_scale(V1, V2, image_width_px, microns_per_volt=MICRONS_PER_VOLT):

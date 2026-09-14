@@ -1,27 +1,12 @@
-"""
-Shared hardware-timed scanning core.
--------------------------------------------------
-Provides the reusable AO + CountBetweenMarkers (CBM) primitive used by every
-DAQ-driven acquisition in the confocal application:
-
-- 2D raster scan (galvo XY on ao0/ao1)
-- Auto-focus Z sweep (piezo on ao2)
-- Single-axis line scan (galvo X or Y)
-
-The pattern is identical in all cases: a finite, hardware-timed analog-output
-task clocks out a pre-computed voltage waveform; that same sample clock is
-exported to a PFI terminal wired to the Time Tagger, where CountBetweenMarkers
-counts APD photons between successive clock edges (one value per point). The
-integration time of each point is therefore defined by the DAQ clock, not by a
-free-running Counter binwidth.
-"""
-
-import time
+"""RFSoC-mastered photon counting with externally clocked NI analog output."""
 
 import numpy as np
-import nidaqmx
-from nidaqmx.constants import AcquisitionType
-import TimeTagger
+
+from rfsoc.confocal_backend import (
+    AcquisitionHandle,
+    RFSoCConfocalBackend,
+    run_lines,
+)
 
 
 def _register_ref(ref, value, lock):
@@ -35,25 +20,12 @@ def _register_ref(ref, value, lock):
         ref[0] = value
 
 
-def _cleanup(task, cbm, task_ref, cbm_ref, lock):
-    """Stop/close the AO task and stop the CBM, clearing shared references."""
+def _clear_refs(task_ref, acquisition_ref, lock):
     def _do():
-        if task is not None:
-            try:
-                task.stop()
-                task.close()
-            except Exception:
-                pass
         if task_ref is not None:
             task_ref[0] = None
-        if cbm is not None:
-            try:
-                cbm.stop()
-            except Exception:
-                pass
-        if cbm_ref is not None:
-            cbm_ref[0] = None
-
+        if acquisition_ref is not None:
+            acquisition_ref[0] = None
     if lock is not None:
         with lock:
             _do()
@@ -62,120 +34,76 @@ def _cleanup(task, cbm, task_ref, cbm_ref, lock):
 
 
 def run_hardware_timed_sweep(
-    tagger,
+    session,
     ao_channels,
     waveform,
     rate,
     *,
-    click_channel=1,
-    begin_channel=3,
-    end_channel=-3,
-    clock_export_term=None,
-    extra_clock_samples=1,
-    cbm_settle_s=1.0,
-    poll_interval_s=0.2,
     stop_check=None,
     on_progress=None,
     task_ref=None,
-    cbm_ref=None,
+    acquisition_ref=None,
     lock=None,
 ):
-    """Run a finite hardware-timed AO sweep and count photons per point via CBM.
-
-    Parameters
-    ----------
-    tagger : TimeTagger.TimeTagger
-        The Time Tagger instance.
-    ao_channels : list[str]
-        Analog-output channel names, e.g. ``["Dev1/ao0", "Dev1/ao1"]``.
-    waveform : np.ndarray
-        Voltage samples. Shape ``(len(ao_channels), n_points)`` (a 1D array is
-        accepted for a single channel).
-    rate : float
-        Sample-clock rate in Hz (``1 / dwell_time``). Defines each point's
-        integration time.
-    click_channel, begin_channel, end_channel : int
-        Time Tagger channels for photon clicks and the DAQ clock markers.
-    clock_export_term : str or None
-        PFI terminal the AO sample clock is exported to (wired to the tagger).
-        Defaults to ``common.utils.DAQ_CLOCK_EXPORT`` (``/Dev1/PFI8``).
-    extra_clock_samples : int
-        Extra clock samples beyond ``n_points`` (preserves the ``+1`` used by
-        the original raster scan so ``n_points`` intervals are produced).
-    cbm_settle_s : float
-        Seconds to wait after starting the CBM before starting the AO task.
-    poll_interval_s : float
-        Polling period while waiting for the sweep to finish.
-    stop_check : Optional[Callable[[], bool]]
-        Returns True to abort the sweep early.
-    on_progress : Optional[Callable[[np.ndarray, np.ndarray], None]]
-        Called during polling with ``(partial_counts, partial_bin_widths_ps)``.
-    task_ref, cbm_ref : Optional[list]
-        Single-element mutable lists that receive the live task/CBM so an
-        external Stop control can terminate them.
-    lock : Optional[threading.Lock]
-        Guards writes to ``task_ref``/``cbm_ref``.
-
-    Returns
-    -------
-    Tuple[np.ndarray, np.ndarray]
-        ``(counts, bin_widths_ps)`` with ``n_points`` entries each.
-    """
-    if clock_export_term is None:
-        from common.utils import DAQ_CLOCK_EXPORT
-        clock_export_term = DAQ_CLOCK_EXPORT
-
+    """Acquire one one-dimensional sweep with RFSoC as timing master."""
     waveform = np.asarray(waveform, dtype=float)
     if waveform.ndim == 1:
         waveform = waveform[np.newaxis, :]
-    n_channels, n_points = waveform.shape
-
-    task = None
-    cbm = None
+    n_points = waveform.shape[1]
+    handle = AcquisitionHandle()
+    _register_ref(acquisition_ref, handle, lock)
     try:
-        task = nidaqmx.Task()
-        _register_ref(task_ref, task, lock)
-
-        for chan in ao_channels:
-            task.ao_channels.add_ao_voltage_chan(chan)
-
-        task.timing.cfg_samp_clk_timing(
-            rate=rate,
-            sample_mode=AcquisitionType.FINITE,
-            samps_per_chan=n_points + extra_clock_samples,
+        counts, widths = RFSoCConfocalBackend(session).acquire_line(
+            ao_channels,
+            waveform,
+            1.0 / float(rate),
+            n_imaging_points=n_points,
+            handle=handle,
         )
-        task.export_signals.samp_clk_output_term = clock_export_term
-
-        # nidaqmx expects a 1D array for a single channel, 2D otherwise.
-        write_data = waveform[0] if n_channels == 1 else waveform
-        task.write(write_data, auto_start=False)
-
-        cbm = TimeTagger.CountBetweenMarkers(
-            tagger=tagger,
-            click_channel=click_channel,
-            begin_channel=begin_channel,
-            end_channel=end_channel,
-            n_values=n_points,
-        )
-        _register_ref(cbm_ref, cbm, lock)
-
-        cbm.start()
-        time.sleep(cbm_settle_s)
-        task.start()
-
-        while not cbm.ready():
-            if stop_check is not None and stop_check():
-                break
-            time.sleep(poll_interval_s)
-            if on_progress is not None:
-                on_progress(cbm.getData(), cbm.getBinWidths())
-
-        counts = np.asarray(cbm.getData())
-        bin_widths_ps = np.asarray(cbm.getBinWidths())
-        return counts, bin_widths_ps
-
+        if stop_check is not None and stop_check():
+            raise InterruptedError("scan stopped")
+        if on_progress is not None:
+            on_progress(counts, widths)
+        return counts, widths
     finally:
-        _cleanup(task, cbm, task_ref, cbm_ref, lock)
+        _clear_refs(task_ref, acquisition_ref, lock)
+
+
+def run_hardware_timed_raster(
+    session,
+    ao_channels,
+    waveform,
+    dwell_time,
+    *,
+    width,
+    n_lines,
+    stride,
+    n_flyback,
+    stop_check=None,
+    on_progress=None,
+    task_ref=None,
+    acquisition_ref=None,
+    lock=None,
+):
+    """Acquire a complete raster using one RFSoC/Pyro call per line."""
+    handle = AcquisitionHandle()
+    _register_ref(acquisition_ref, handle, lock)
+    try:
+        return run_lines(
+            RFSoCConfocalBackend(session),
+            ao_channels,
+            waveform,
+            width=width,
+            n_lines=n_lines,
+            stride=stride,
+            dwell_seconds=dwell_time,
+            n_flyback=n_flyback,
+            on_line=on_progress,
+            stop_check=stop_check,
+            handle=handle,
+        )
+    finally:
+        _clear_refs(task_ref, acquisition_ref, lock)
 
 
 def counts_to_rate(counts, bin_widths_ps):

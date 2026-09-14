@@ -31,7 +31,6 @@ class GalvoScannerController:
             
             # DAQ channel configuration
             self.spd_counter = DAQ_SPD_COUNTER
-            #self.spd_edge_source = DAQ_CLOCK_EXPORT
             self.xin_control = DAQ_GALVO_X
             self.yin_control = DAQ_GALVO_Y
             self.xout_voltage = DAQ_XOUT_VOLTAGE
