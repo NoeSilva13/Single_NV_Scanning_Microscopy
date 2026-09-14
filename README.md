@@ -8,7 +8,7 @@ A Python toolkit developed at the **[Burke Lab](https://www.burkelab.com/)** for
 It bundles two graphical applications plus a script-driven ODMR experiment suite that share common infrastructure (data management, calibration constants, reusable Qt/napari widgets):
 
 1. **Confocal Scan GUI** ([confocal_main_control.py](confocal_main_control.py)) - real-time galvo raster scanning, live photon counting, click-to-move positioning, region zoom, auto-focus and single-axis line scans, built on a [napari](https://napari.org/) viewer.
-2. **ODMR experiments** ([run_odmr_experiments.py](run_odmr_experiments.py) → [PulseBlaster/odmr_experiments.py](PulseBlaster/odmr_experiments.py)) - script-driven continuous-wave **ODMR**, **pulsed ODMR**, **Rabi**, **T1**, and **readout transient** measurements with live matplotlib updates and PDF/CSV export.
+2. **ODMR experiments** ([run_odmr_experiments.py](run_odmr_experiments.py) → [PulseBlaster/odmr_experiments.py](PulseBlaster/odmr_experiments.py)) - script-driven continuous-wave **ODMR**, **pulsed ODMR**, **Rabi**, **Ramsey**, **T1**, and **readout transient** measurements with live matplotlib updates and PDF/CSV export.
 3. **Spectrometer Control** ([spectrometer_app.py](spectrometer_app.py)) - real-time spectral analysis using a Player One Astronomy (POA) camera in line-scan mode, with wavelength calibration and data recording. Details: [docs/spectrometer.md](docs/spectrometer.md).
 
 Each entry point can be run independently and only requires the hardware/drivers relevant to it (see [Hardware requirements](#-hardware-requirements)).
@@ -33,6 +33,7 @@ Each entry point can be run independently and only requires the hardware/drivers
   - **`odmr_contrast`** - continuous-wave frequency sweep to locate the NV resonance.
   - **`pulsed_odmr_contrast`** - frequency sweep with a fixed MW pulse in the dark (narrower linewidths than CW).
   - **`rabi_oscillation_contrast`** - microwave-duration sweep to calibrate π/2 and π pulses.
+  - **`ramsey_contrast`** - π/2 – τ – π/2 free-evolution sweep to measure `T2*` (fringes if MW is detuned).
   - **`t1_decay_contrast`** - dark-time delay sweep with automatic stretched-exponential fit.
   - **`readout_transient`** - time-resolved readout histogram to choose `detection_delay` / `detection_duration`.
 - Optional **live matplotlib plot** (`live_plot=True`) that refreshes after every sweep point; final multi-panel figures are still saved as PDF via `plot_results()`.
@@ -120,7 +121,7 @@ Actions inside the napari window:
 - "Single Axis Scan" dock ⇒ 1D line scans along X, Y, or Z (tabs) at the current position; left-click a point on an X/Y plot to move there.
 - "Axis Control" dock ⇒ manual X/Y/Z positioning (slider + spinbox) that mirrors the scanner's current position.
 
-### 2. ODMR (CW, pulsed, Rabi, T1, readout transient)
+### 2. ODMR (CW, pulsed, Rabi, Ramsey, T1, readout transient)
 ```bash
 python run_odmr_experiments.py
 ```
@@ -203,7 +204,7 @@ Each measurement is automatically placed in a date folder by the corresponding `
 ```
 Single_NV_Scannig_Microscopy/
 ├─ confocal_main_control.py      # Entry: napari confocal GUI
-├─ run_odmr_experiments.py       # Entry: ODMR / Rabi / T1 / readout transient
+├─ run_odmr_experiments.py       # Entry: ODMR / Rabi / Ramsey / T1 / readout transient
 ├─ spectrometer_app.py           # Entry: POA spectrometer GUI
 ├─ data/                         # Experiment outputs (mmddyy/...); gitignored
 │

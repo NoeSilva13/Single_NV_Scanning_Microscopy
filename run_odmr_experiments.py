@@ -99,13 +99,38 @@ def main():
         # experiments.plot_results('pulsed_odmr_contrast')
 
         # ------------------------------------------------------------------
-        # 4. Rabi oscillation contrast  ← active
+        # 4. Rabi oscillation contrast
+        # ------------------------------------------------------------------
+        # print("\n" + "=" * 50)
+        # mw_durations = np.linspace(0, 1008, 128)
+        # experiments.rabi_oscillation_contrast(
+        #     mw_durations=mw_durations,
+        #     mw_frequency=2.846e9,
+        #     init_laser_duration=3000,
+        #     readout_laser_duration=1000,
+        #     detection_duration=300,
+        #     init_laser_delay=0,
+        #     mw_gap=500,
+        #     readout_gap=500,
+        #     detection_delay=100,
+        #     sequence_interval=2000,
+        #     repetitions=400000,
+        #     plot_sequence=False,
+        #     live_plot=True,
+        # )
+        # experiments.plot_results('rabi_contrast')
+
+        # ------------------------------------------------------------------
+        # 5. Ramsey contrast (π/2 – τ – π/2)  ← active
+        #    Set pi_half_duration from Rabi (≈ half of π, 8 ns aligned).
+        #    Detune mw_frequency a few MHz off the ODMR dip to see fringes.
         # ------------------------------------------------------------------
         print("\n" + "=" * 50)
-        mw_durations = np.linspace(0, 1008, 128)
-        experiments.rabi_oscillation_contrast(
-            mw_durations=mw_durations,
-            mw_frequency=2.846e9,
+        free_evolution_times = np.linspace(0, 2000, 51)  # 0–2 µs
+        experiments.ramsey_contrast(
+            free_evolution_times=free_evolution_times,
+            pi_half_duration=48,  # TODO: set from your Rabi π/2
+            mw_frequency=2.846e9,  # or e.g. 2.846e9 + 2e6 for fringes
             init_laser_duration=3000,
             readout_laser_duration=1000,
             detection_duration=300,
@@ -118,10 +143,10 @@ def main():
             plot_sequence=False,
             live_plot=True,
         )
-        experiments.plot_results('rabi_contrast')
+        experiments.plot_results('ramsey_contrast')
 
         # ------------------------------------------------------------------
-        # 5. T1 decay contrast
+        # 6. T1 decay contrast
         # ------------------------------------------------------------------
         # print("\n" + "=" * 50)
         # delay_times = np.linspace(0, 30e6, 50)
