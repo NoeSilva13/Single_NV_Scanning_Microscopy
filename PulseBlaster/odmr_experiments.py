@@ -146,6 +146,7 @@ class ODMRExperiments:
         'ramsey_contrast':      ('ramsey_contrast', 'delays'),
         'hahn_echo_contrast':   ('hahn_echo_contrast', 'delays'),
         't1_contrast':          ('t1_contrast', 'delays'),
+        't1_mw_contrast':       ('t1_mw_contrast', 'delays'),
         'readout_transient':    ('readout_transient', 'times'),
     }
 
@@ -166,7 +167,8 @@ class ODMRExperiments:
                     'Contrast': result['contrasts'],
                 }
                 count_rates = None
-            elif result_key in ('rabi_contrast', 'ramsey_contrast', 'hahn_echo_contrast', 't1_contrast'):
+            elif result_key in ('rabi_contrast', 'ramsey_contrast', 'hahn_echo_contrast',
+                                't1_contrast', 't1_mw_contrast'):
                 if result_key == 't1_contrast':
                     sig = np.array(result['sig_rates'])
                     ref = np.array(result['ref_rates'])
@@ -1421,8 +1423,9 @@ class ODMRExperiments:
                           live_plot: bool = True,
                           progress_callback: Optional[Callable] = None) -> Dict:
         """
-        Perform T1 decay measurement using the contrast method.
+        Perform optical T1 decay measurement (no MW) using the contrast method.
 
+        Polarises into ms=0 with the init laser, waits a dark delay τ, then reads out.
         Each sequence repetition contains a single pulse train with two SPD windows:
           - Reference (even bins): detection at the END of the init laser (NV fully polarised)
           - Signal   (odd  bins): detection at the START of the readout laser after delay τ
@@ -1433,9 +1436,7 @@ class ODMRExperiments:
 
         The contrast Signal/Reference starts near 1.0 for short delays and decays
         exponentially toward the thermal-equilibrium value as τ increases.
-        Normalising by the reference removes common-mode noise from laser power
-        drift, APD efficiency changes, etc. Using the init laser as the reference
-        halves the experimental time compared to running a separate reference sequence.
+        For spin T1 from ms=±1 (init → π → τ → readout), use t1_mw_contrast instead.
 
         Args:
             delay_times: List of delay times between init and readout in ns
@@ -1457,7 +1458,7 @@ class ODMRExperiments:
         Returns:
             Dictionary containing delays, contrasts, signal rates, and reference rates
         """
-        print("🔬 Starting T1 contrast measurement...")
+        print("🔬 Starting optical T1 contrast measurement (no MW)...")
 
         delays = []
         contrasts = []
@@ -1559,8 +1560,176 @@ class ODMRExperiments:
         self._save_results('t1_contrast', self.results['t1_contrast'])
         print(f"Contrasts: {contrasts}")
         print(f"Delays: {delays}")
-        print("✅ T1 contrast measurement completed")
+        print("✅ Optical T1 contrast measurement completed")
         return self.results['t1_contrast']
+
+    def t1_mw_contrast(self,
+                       delay_times: List[int],
+                       pi_duration: int,
+                       mw_frequency: float = 2.87e9,
+                       init_laser_duration: int = 3000,
+                       readout_laser_duration: int = 1000,
+                       detection_duration: int = 300,
+                       init_laser_delay: int = 0,
+                       mw_gap: int = 500,
+                       detection_delay: int = 100,
+                       sequence_interval: int = 2000,
+                       repetitions: int = 1000,
+                       plot_sequence: bool = False,
+                       live_plot: bool = True,
+                       progress_callback: Optional[Callable] = None) -> Dict:
+        """
+        Perform spin T1 measurement with MW π preparation using the contrast method.
+
+        For each dark delay τ after a π pulse, the sequence alternates between two
+        optically identical sub-sequences:
+
+          AOM: |── init ──| ← mw_gap → [π slot] ← delay τ → |── readout ──|
+          SPD:                                              |detect|
+
+          - Reference (even bins): MW off  → relaxation from ms=0 (bright)
+          - Signal   (odd  bins): π on    → relaxation from ms=±1 (starts dark, recovers)
+
+        Contrast (ref − sig) / ref is large at short τ and decays toward 0 as both
+        halves approach thermal equilibrium. That decay reports the spin T1 from ms=±1.
+        Set pi_duration from rabi_oscillation_contrast and mw_frequency to the ODMR dip.
+        For optical T1 without MW, use t1_decay_contrast.
+
+        Args:
+            delay_times: List of dark delays τ after the π slot, before readout, in ns
+            pi_duration: Duration of the π MW pulse in ns
+            mw_frequency: MW frequency in Hz (ODMR resonance)
+            init_laser_duration: Initialization laser pulse duration in ns
+            readout_laser_duration: Readout laser pulse duration in ns
+            detection_duration: Detection window duration in ns
+            init_laser_delay: Delay before initialization laser in ns
+            mw_gap: Dark time between init laser and π pulse in ns
+            detection_delay: SPD gate offset relative to readout edge (AOM compensation) in ns
+            sequence_interval: Interval between sub-sequences in ns
+            repetitions: Number of repetitions per delay point
+            plot_sequence: If True, call sequence.plot() at each sweep point (blocks until closed)
+            live_plot: If True, show a contrast plot that refreshes after each delay point
+            progress_callback: Optional callback(delays, contrasts) for live updates
+
+        Returns:
+            Dictionary containing delays, contrasts, mw_off_rates, and mw_on_rates
+        """
+        print("🔬 Starting T1-MW contrast measurement (π preparation)...")
+
+        delays = []
+        contrasts = []
+        mw_off_rates = []
+        mw_on_rates = []
+
+        live = None
+        if live_plot and progress_callback is None:
+            live = _LiveContrastPlot(xlabel='Delay τ (µs)', ylabel='Contrast (%)',
+                                     title='T1-MW Contrast (live)', x_scale=1e3)
+
+        self.counter = TimeTagger.CountBetweenMarkers(
+            tagger=self.tagger,
+            click_channel=1,
+            begin_channel=2,
+            end_channel=-2,
+            n_values=repetitions * 2
+        )
+
+        if self.mw_generator:
+            self.mw_generator.set_odmr_frequency(mw_frequency / 1e9)
+            self.mw_generator.prepare_for_odmr(mw_frequency / 1e9, -10.0)
+
+        for delay_time in delay_times:
+            print(f"⏱️ Delay τ: {delay_time} ns")
+
+            sequence, total_duration = self.pulse_controller.create_t1_mw_sequence_contrast(
+                init_laser_duration=init_laser_duration,
+                readout_laser_duration=readout_laser_duration,
+                pi_duration=int(pi_duration),
+                delay_time=int(delay_time),
+                detection_duration=detection_duration,
+                init_laser_delay=init_laser_delay,
+                mw_gap=mw_gap,
+                detection_delay=detection_delay,
+                sequence_interval=sequence_interval
+            )
+            if plot_sequence and sequence:
+                sequence.plot()
+            time.sleep(0.2)
+            if sequence:
+                if self.mw_generator:
+                    self.mw_generator.set_rf_output(True)
+                time.sleep(0.2)
+                self.counter.start()
+                ready = False
+                self.pulse_controller.run_sequence(sequence, repetitions)
+
+                while ready is False:
+                    time.sleep(0.2)
+                    ready = self.counter.ready()
+                    information = self.counter.getBinWidths()
+                    print(f"Information: {information}")
+                    print(f"Ready: {ready}")
+                    counts = self.counter.getData()
+                    print(f"Counts: {counts}")
+
+                self.counter.clear()
+
+                counts_arr = np.array(counts)
+                info_arr = np.array(information)
+
+                counts_off = counts_arr[0::2]
+                counts_on  = counts_arr[1::2]
+                info_off   = info_arr[0::2]
+                info_on    = info_arr[1::2]
+
+                rate_off = np.mean(counts_off) / (np.mean(info_off) * 1e-12)
+                rate_on  = np.mean(counts_on)  / (np.mean(info_on)  * 1e-12)
+                contrast = (rate_off - rate_on) / rate_off if rate_off > 0 else 0.0
+
+                print(f"MW off: {rate_off:.2f} Hz | MW on: {rate_on:.2f} Hz | Contrast: {contrast:.4f}")
+
+                delays.append(delay_time)
+                contrasts.append(contrast)
+                mw_off_rates.append(rate_off)
+                mw_on_rates.append(rate_on)
+
+                if progress_callback:
+                    progress_callback(delays.copy(), contrasts.copy())
+                if live:
+                    live.update(delays, np.array(contrasts) * 100)
+
+                if self.mw_generator:
+                    self.mw_generator.set_rf_output(False)
+
+                time.sleep(0.05)
+
+        if live:
+            live.close()
+
+        self.results['t1_mw_contrast'] = {
+            'delays': delays,
+            'contrasts': contrasts,
+            'mw_off_rates': mw_off_rates,
+            'mw_on_rates': mw_on_rates,
+            'parameters': {
+                'mw_frequency': mw_frequency,
+                'pi_duration': pi_duration,
+                'init_laser_duration': init_laser_duration,
+                'readout_laser_duration': readout_laser_duration,
+                'detection_duration': detection_duration,
+                'init_laser_delay': init_laser_delay,
+                'mw_gap': mw_gap,
+                'detection_delay': detection_delay,
+                'sequence_interval': sequence_interval,
+                'repetitions': repetitions
+            }
+        }
+
+        self._save_results('t1_mw_contrast', self.results['t1_mw_contrast'])
+        print(f"Contrasts: {contrasts}")
+        print(f"Delays: {delays}")
+        print("✅ T1-MW contrast measurement completed")
+        return self.results['t1_mw_contrast']
 
     def plot_results(self, experiment_type: str):
         """Plot the results of a specific experiment"""
@@ -1966,13 +2135,13 @@ class ODMRExperiments:
             plt.close(fig)
             fig, axes = plt.subplots(3, 1, figsize=(10, 14), sharex=True)
 
-            getattr(axes[0], plot_fn_name)(delays_us, ref, 'bo-', label='Reference (τ = 0)')
+            getattr(axes[0], plot_fn_name)(delays_us, ref, 'bo-', label='Reference (end of init)')
             axes[0].set_ylabel('Count Rate (cps)')
-            axes[0].set_title('T1 Contrast')
+            axes[0].set_title('Optical T1 Contrast (no MW)')
             axes[0].legend()
             axes[0].grid(True, alpha=0.3, which=grid_which)
 
-            getattr(axes[1], plot_fn_name)(delays_us, sig, 'ro-', label='Signal (τ = delay)')
+            getattr(axes[1], plot_fn_name)(delays_us, sig, 'ro-', label='Signal (after delay τ)')
             axes[1].set_ylabel('Count Rate (cps)')
             axes[1].legend()
             axes[1].grid(True, alpha=0.3, which=grid_which)
@@ -1993,10 +2162,10 @@ class ODMRExperiments:
                     fit_t = np.linspace(delays_us[0], delays_us[-1], 500)
                 fit_label = f'Fit: T1 = {popt[1]:.2f} ± {perr[1]:.2f} µs'
                 axes[2].plot(fit_t, stretched_exp(fit_t, *popt), 'r-', linewidth=2, label=fit_label)
-                print(f"T1 stretched-exp fit: A={popt[0]:.4f}, T1={popt[1]:.2f} ± {perr[1]:.2f} µs, "
+                print(f"Optical T1 stretched-exp fit: A={popt[0]:.4f}, T1={popt[1]:.2f} ± {perr[1]:.2f} µs, "
                       f"n={popt[2]:.2f} ± {perr[2]:.2f}, C={popt[3]:.4f}, ⟨τ⟩={mean_t1:.2f} µs")
             except Exception as e:
-                print(f"Warning: T1 stretched-exponential fit failed: {e}")
+                print(f"Warning: Optical T1 stretched-exponential fit failed: {e}")
             axes[2].set_xlabel('Delay (µs)')
             axes[2].set_ylabel('Signal / Reference')
             axes[2].legend()
@@ -2014,7 +2183,7 @@ class ODMRExperiments:
                     pass
             ax_ratio.set_xlabel('Delay (µs)')
             ax_ratio.set_ylabel('Signal / Reference')
-            ax_ratio.set_title('T1 – Signal / Reference')
+            ax_ratio.set_title('Optical T1 – Signal / Reference')
             ax_ratio.legend()
             ax_ratio.grid(True, alpha=0.3, which=grid_which)
             fig_ratio.tight_layout()
@@ -2022,6 +2191,91 @@ class ODMRExperiments:
             if base_path:
                 fig.savefig(f"{base_path}.pdf", format='pdf', bbox_inches='tight')
                 fig_ratio.savefig(f"{base_path}_ratio.pdf", format='pdf', bbox_inches='tight')
+                print(f"Plots saved to: {base_path}*.pdf")
+
+            plt.show()
+            return
+
+        elif experiment_type == 't1_mw_contrast':
+            delays_us = np.array(data['delays']) / 1000  # ns -> µs
+            sig = np.array(data['mw_on_rates'])
+            ref = np.array(data['mw_off_rates'])
+            contrasts = np.array(data['contrasts'])
+            contrasts_pct = contrasts * 100
+
+            diffs = np.diff(delays_us)
+            use_log = len(delays_us) > 2 and delays_us[0] > 0 and (diffs.max() / diffs.min() > 5)
+            plot_fn_name = 'semilogx' if use_log else 'plot'
+            grid_which = 'both' if use_log else 'major'
+
+            fig, axes = plt.gcf(), None
+            plt.close(fig)
+            fig, axes = plt.subplots(3, 1, figsize=(10, 14), sharex=True)
+
+            getattr(axes[0], plot_fn_name)(delays_us, ref, 'bo-', label='Reference (MW off, ms=0)')
+            axes[0].set_ylabel('Count Rate (cps)')
+            axes[0].set_title('T1-MW Contrast (π preparation)')
+            axes[0].legend()
+            axes[0].grid(True, alpha=0.3, which=grid_which)
+
+            getattr(axes[1], plot_fn_name)(delays_us, sig, 'ro-', label='Signal (π on, ms=±1)')
+            axes[1].set_ylabel('Count Rate (cps)')
+            axes[1].legend()
+            axes[1].grid(True, alpha=0.3, which=grid_which)
+
+            getattr(axes[2], plot_fn_name)(delays_us, contrasts_pct, 'go',
+                                           label='Contrast = (ref − sig) / ref')
+            fit_t = None
+            fit_label = None
+            popt = None
+            try:
+                stretched_exp = lambda t, A, T1, n, C: A * np.exp(-(t / T1) ** n) + C
+                p0 = [contrasts_pct[0] - contrasts_pct[-1], max(delays_us[-1] / 3, 1e-3), 1.0,
+                      contrasts_pct[-1]]
+                bounds = ([-np.inf, 1e-6, 0.1, -np.inf], [np.inf, np.inf, 4.0, np.inf])
+                popt, pcov = curve_fit(stretched_exp, delays_us, contrasts_pct,
+                                       p0=p0, bounds=bounds, maxfev=10000)
+                perr = np.sqrt(np.diag(pcov))
+                mean_t1 = (popt[1] / popt[2]) * gamma_func(1.0 / popt[2])
+                if use_log and delays_us[0] > 0:
+                    fit_t = np.logspace(np.log10(delays_us[0]), np.log10(delays_us[-1]), 500)
+                else:
+                    fit_t = np.linspace(delays_us[0], delays_us[-1], 500)
+                fit_label = f'Fit: T1 = {popt[1]:.2f} ± {perr[1]:.2f} µs'
+                axes[2].plot(fit_t, stretched_exp(fit_t, *popt), 'k-', linewidth=2, label=fit_label)
+                print(f"T1-MW stretched-exp fit: A={popt[0]:.4f}, T1={popt[1]:.2f} ± {perr[1]:.2f} µs, "
+                      f"n={popt[2]:.2f} ± {perr[2]:.2f}, C={popt[3]:.4f}, ⟨τ⟩={mean_t1:.2f} µs")
+                data['fit'] = {
+                    'T1_us': float(popt[1]),
+                    'T1_err_us': float(perr[1]),
+                    'n': float(popt[2]),
+                    'n_err': float(perr[2]),
+                    'mean_T1_us': float(mean_t1),
+                }
+            except Exception as e:
+                print(f"Warning: T1-MW stretched-exponential fit failed: {e}")
+            axes[2].set_xlabel('Delay τ after π (µs)')
+            axes[2].set_ylabel('Contrast (%)')
+            axes[2].legend()
+            axes[2].grid(True, alpha=0.3, which=grid_which)
+
+            plt.tight_layout()
+
+            fig_con, ax_con = plt.subplots(figsize=(10, 6))
+            getattr(ax_con, plot_fn_name)(delays_us, contrasts_pct, 'go',
+                                          label='Contrast = (ref − sig) / ref')
+            if fit_t is not None and popt is not None and fit_label:
+                ax_con.plot(fit_t, stretched_exp(fit_t, *popt), 'k-', linewidth=2, label=fit_label)
+            ax_con.set_xlabel('Delay τ after π (µs)')
+            ax_con.set_ylabel('Contrast (%)')
+            ax_con.set_title('T1-MW – Contrast')
+            ax_con.legend()
+            ax_con.grid(True, alpha=0.3, which=grid_which)
+            fig_con.tight_layout()
+
+            if base_path:
+                fig.savefig(f"{base_path}.pdf", format='pdf', bbox_inches='tight')
+                fig_con.savefig(f"{base_path}_con.pdf", format='pdf', bbox_inches='tight')
                 print(f"Plots saved to: {base_path}*.pdf")
 
             plt.show()

@@ -146,32 +146,32 @@ def main():
         # experiments.plot_results('ramsey_contrast')
 
         # ------------------------------------------------------------------
-        # 6. Hahn echo contrast (π/2 – τ – π – τ – π/2)  ← active
+        # 6. Hahn echo contrast (π/2 – τ – π – τ – π/2)
         #    tau_times = half-evolution τ; plots/fits use total free evolution 2τ.
         # ------------------------------------------------------------------
-        print("\n" + "=" * 50)
-        tau_times = np.linspace(0, 10000, 41)  # τ = 0–10 µs → 2τ up to 20 µs
-        experiments.hahn_echo_contrast(
-            tau_times=tau_times,
-            pi_half_duration=48,  # TODO: set from your Rabi π/2
-            pi_duration=96,       # TODO: set from your Rabi π (or omit → 2×π/2)
-            mw_frequency=2.846e9,
-            init_laser_duration=3000,
-            readout_laser_duration=1000,
-            detection_duration=300,
-            init_laser_delay=0,
-            mw_gap=500,
-            readout_gap=500,
-            detection_delay=100,
-            sequence_interval=2000,
-            repetitions=400000,
-            plot_sequence=False,
-            live_plot=True,
-        )
-        experiments.plot_results('hahn_echo_contrast')
+        # print("\n" + "=" * 50)
+        # tau_times = np.linspace(0, 10000, 41)  # τ = 0–10 µs → 2τ up to 20 µs
+        # experiments.hahn_echo_contrast(
+        #     tau_times=tau_times,
+        #     pi_half_duration=48,  # TODO: set from your Rabi π/2
+        #     pi_duration=96,       # TODO: set from your Rabi π (or omit → 2×π/2)
+        #     mw_frequency=2.846e9,
+        #     init_laser_duration=3000,
+        #     readout_laser_duration=1000,
+        #     detection_duration=300,
+        #     init_laser_delay=0,
+        #     mw_gap=500,
+        #     readout_gap=500,
+        #     detection_delay=100,
+        #     sequence_interval=2000,
+        #     repetitions=400000,
+        #     plot_sequence=False,
+        #     live_plot=True,
+        # )
+        # experiments.plot_results('hahn_echo_contrast')
 
         # ------------------------------------------------------------------
-        # 7. T1 decay contrast
+        # 7. Optical T1 decay contrast (no MW)
         # ------------------------------------------------------------------
         # print("\n" + "=" * 50)
         # delay_times = np.linspace(0, 30e6, 50)
@@ -189,6 +189,29 @@ def main():
         #     live_plot=True,
         # )
         # experiments.plot_results('t1_contrast')
+
+        # ------------------------------------------------------------------
+        # 8. Spin T1 with MW π (init → π → τ → readout)  ← active
+        # ------------------------------------------------------------------
+        print("\n" + "=" * 50)
+        delay_times = np.linspace(0, 5e6, 40)  # 0–5 ms; adjust to your T1
+        # delay_times = np.logspace(np.log10(0.5e3), np.log10(5e6), 40)
+        experiments.t1_mw_contrast(
+            delay_times=delay_times,
+            pi_duration=96,  # TODO: set from your Rabi π
+            mw_frequency=2.846e9,
+            init_laser_duration=3000,
+            readout_laser_duration=1000,
+            detection_duration=300,
+            init_laser_delay=0,
+            mw_gap=500,
+            detection_delay=100,
+            sequence_interval=2000,
+            repetitions=400000,
+            plot_sequence=False,
+            live_plot=True,
+        )
+        experiments.plot_results('t1_mw_contrast')
 
         print("\n✅ Experiment completed!")
 

@@ -1095,6 +1095,158 @@ class SwabianPulseController:
             print(f"❌ Error creating T1 contrast sequence: {e}")
             return None
 
+    def create_t1_mw_sequence_contrast(self,
+                                       init_laser_duration: int,
+                                       readout_laser_duration: int,
+                                       pi_duration: int,
+                                       delay_time: int,
+                                       detection_duration: int,
+                                       init_laser_delay: int = 0,
+                                       mw_gap: int = 0,
+                                       detection_delay: int = 0,
+                                       sequence_interval: int = 10000) -> Optional[Tuple]:
+        """
+        Create a spin-T1 (init → π → τ → readout) contrast pulse sequence.
+
+        Each sequence run contains two identical sub-sequences back-to-back.
+        Only the MW channel differs (off in the reference half, on in the signal half).
+        Both halves use the same AOM and SPD timing so the detection windows are
+        optically equivalent — required for a meaningful interleaved contrast.
+
+          AOM: |── init ──| ← mw_gap → [π slot] ← delay τ → |── readout ──| interval |
+          MW:                        OFF / ON
+          SPD:                                              |detect|       interval |
+                                                            ↑ readout + detection_delay
+
+        Even bins (0, 2, 4, ...): reference — MW off; relaxation from ms=0 (bright)
+        Odd  bins (1, 3, 5, ...): signal    — π on; relaxation from ms=±1 (dark → recovers)
+
+        Contrast (ref − sig) / ref is large at short τ and decays toward 0 as both
+        halves approach thermal equilibrium (spin T1).
+
+        Args:
+            init_laser_duration: Duration of initialization laser pulse in ns
+            readout_laser_duration: Duration of readout laser pulse in ns.
+                                    Must be >= detection_duration + detection_delay.
+            pi_duration: Duration of the π MW pulse in ns (from Rabi calibration)
+            delay_time: Dark relaxation time τ after the π slot, before readout, in ns
+            detection_duration: Duration of the SPD detection window in ns
+            init_laser_delay: Delay before the initialization laser in ns
+            mw_gap: Dark time between end of init laser and start of π slot in ns
+            detection_delay: Offset of the SPD gate relative to the readout laser
+                             edge, to compensate for AOM turn-on delay in ns
+            sequence_interval: Idle time appended after each sub-sequence in ns
+
+        Returns:
+            Tuple (Sequence, total_duration_ns) or None if error
+        """
+        if not self.is_connected:
+            print("❌ Device not connected")
+            return None
+
+        try:
+            init_laser_duration    = self.align_timing(init_laser_duration)
+            readout_laser_duration = self.align_timing(readout_laser_duration)
+            pi_duration            = self.align_timing(pi_duration)
+            delay_time             = self.align_timing(delay_time)
+            detection_duration     = self.align_timing(detection_duration)
+            init_laser_delay       = self.align_timing(init_laser_delay)
+            mw_gap                 = self.align_timing(mw_gap)
+            detection_delay        = self.align_timing(detection_delay)
+            sequence_interval      = self.align_timing(sequence_interval)
+
+            if pi_duration <= 0:
+                print("❌ Error: pi_duration must be > 0 ns")
+                return None
+
+            if readout_laser_duration < detection_delay + detection_duration:
+                print(f"❌ Error: readout_laser_duration ({readout_laser_duration} ns) must be "
+                      f">= detection_delay + detection_duration "
+                      f"({detection_delay + detection_duration} ns) so the SPD window "
+                      f"fits inside the readout pulse.")
+                return None
+
+            init_end      = init_laser_delay + init_laser_duration
+            mw_start      = init_end + mw_gap
+            mw_end        = mw_start + pi_duration
+            readout_start = mw_end + delay_time
+            detect_start  = self.align_timing(readout_start + detection_delay)
+
+            single_seq_duration = self.align_timing(max(
+                readout_start + readout_laser_duration,
+                detect_start + detection_duration
+            ))
+
+            # AOM: init | mw_gap | (π slot, laser OFF) | delay τ | readout | fill | interval
+            aom_pattern = []
+            if init_laser_delay > 0:
+                aom_pattern.append((init_laser_delay, 0))
+            aom_pattern.append((init_laser_duration, 1))
+
+            if mw_gap > 0:
+                aom_pattern.append((mw_gap, 0))
+            if pi_duration > 0:
+                aom_pattern.append((pi_duration, 0))
+            if delay_time > 0:
+                aom_pattern.append((delay_time, 0))
+            aom_pattern.append((readout_laser_duration, 1))
+
+            used_aom = readout_start + readout_laser_duration
+            remaining_aom = single_seq_duration - used_aom
+            if remaining_aom > 0:
+                aom_pattern.append((remaining_aom, 0))
+            if sequence_interval > 0:
+                aom_pattern.append((sequence_interval, 0))
+
+            def _build_mw_pattern(mw_on: bool) -> List[Tuple[int, int]]:
+                pattern = []
+                if mw_start > 0:
+                    pattern.append((mw_start, 0))
+                pattern.append((pi_duration, 1 if mw_on else 0))
+                used_mw = mw_end
+                remaining_mw = single_seq_duration - used_mw
+                if remaining_mw > 0:
+                    pattern.append((remaining_mw, 0))
+                if sequence_interval > 0:
+                    pattern.append((sequence_interval, 0))
+                return pattern
+
+            mw_pattern_off = _build_mw_pattern(mw_on=False)
+            mw_pattern_on  = _build_mw_pattern(mw_on=True)
+
+            spd_pattern = []
+            if detect_start > 0:
+                spd_pattern.append((detect_start, 0))
+            spd_pattern.append((detection_duration, 1))
+
+            used_spd = detect_start + detection_duration
+            remaining_spd = single_seq_duration - used_spd
+            if remaining_spd > 0:
+                spd_pattern.append((remaining_spd, 0))
+            if sequence_interval > 0:
+                spd_pattern.append((sequence_interval, 0))
+
+            total_duration = sum(d for d, _ in aom_pattern)
+            if total_duration % 8 != 0:
+                print(f"❌ Error: Total sequence length ({total_duration} ns) not multiple of 8 ns")
+                return None
+
+            sequence = self.pulse_streamer.createSequence()
+            sequence.setDigital(self.CHANNEL_AOM, aom_pattern + aom_pattern)
+            sequence.setDigital(self.CHANNEL_MW, mw_pattern_off + mw_pattern_on)
+            sequence.setDigital(self.CHANNEL_SPD, spd_pattern + spd_pattern)
+
+            full_duration = total_duration * 2
+            print(f"✅ T1-MW contrast sequence created: π={pi_duration} ns, "
+                  f"τ={delay_time} ns, {full_duration} ns total "
+                  f"({total_duration} ns per sub-sequence, 8ns aligned)")
+
+            return sequence, full_duration
+
+        except Exception as e:
+            print(f"❌ Error creating T1-MW contrast sequence: {e}")
+            return None
+
     def get_device_info(self) -> Dict:
         """Get device information and status."""
         if not self.is_connected:
