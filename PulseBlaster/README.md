@@ -33,20 +33,19 @@ Integrated experiment implementations (all using the interleaved signal/referenc
 ```bash
 python run_odmr_experiments.py
 ```
-Edit the active experiment block in that file (comment/uncomment ODMR, pulsed ODMR, Rabi, Ramsey, T1, or readout transient). Or import `ODMRExperiments` from your own script.
+Edit the active experiment block in that file (comment/uncomment ODMR, pulsed ODMR, Rabi, Ramsey, Hahn echo, T1, or readout transient). Or import `ODMRExperiments` from your own script.
 
 Methods:
 - `odmr_contrast()` - Continuous-wave frequency sweep with interleaved MW-off/MW-on measurement per point
 - `pulsed_odmr_contrast()` - Frequency sweep using the pulsed Rabi sequence (init → MW in the dark → readout) with the MW duration held fixed; avoids power broadening from optical pumping, so linewidths are limited by `T2*` rather than laser power
 - `rabi_oscillation_contrast()` - Microwave-duration sweep at fixed frequency to observe Rabi oscillations
 - `ramsey_contrast()` - Free-evolution sweep with π/2 – τ – π/2 pulses to measure `T2*` (and Ramsey fringes if MW is detuned); set `pi_half_duration` from Rabi
+- `hahn_echo_contrast()` - Spin-echo sweep with π/2 – τ – π – τ – π/2 to measure `T2`; sweep half-time `tau_times`, plots/fits use total free evolution `2τ`
 - `t1_decay_contrast()` - Dark-time delay sweep between init/readout laser pulses to measure T1, with automatic stretched-exponential curve fitting (`scipy.optimize.curve_fit`)
 - `readout_transient()` - Time-resolved histogram of photon arrival during the readout pulse, taken with MW off and MW on, used to calibrate `detection_delay` and `detection_duration` for the pulsed experiments; reports the laser turn-on latency, the optical repolarisation time `tau_pol` and the window that maximises the shot-noise-limited contrast SNR
 - `plot_results()` - Generates and saves PDF summary plots for any of the experiment types
 
 CSV data and PDF figures are written under `data/mmddyy/<ExperimentType>/` via `common.odmr_data_manager` (see main README). Optional live updates: `live_plot=True` refreshes a single-panel matplotlib window after each sweep point.
-
-> Note: Spin-echo (Hahn) sequences are not currently implemented.
 
 ## Installation
 
