@@ -435,6 +435,168 @@ class SwabianPulseController:
             print(f"❌ Error creating Rabi contrast sequence: {e}")
             return None
 
+    def create_ramsey_sequence_contrast(self,
+                                        init_laser_duration: int,
+                                        readout_laser_duration: int,
+                                        pi_half_duration: int,
+                                        free_evolution: int,
+                                        detection_duration: int,
+                                        init_laser_delay: int = 0,
+                                        mw_gap: int = 0,
+                                        readout_gap: int = 0,
+                                        detection_delay: int = 0,
+                                        sequence_interval: int = 10000) -> Optional[Tuple]:
+        """
+        Create a Ramsey (π/2 – τ – π/2) contrast pulse sequence.
+
+        Each sequence run contains two identical sub-sequences back-to-back.
+        Only the MW channel differs (off in the reference half, on in the signal half).
+        Both halves use the same AOM and SPD timing so the detection windows are
+        optically equivalent — required for a meaningful interleaved contrast.
+
+          AOM: |── init ──| ← mw_gap → [π/2] ← τ → [π/2] ← readout_gap → |── readout ──|
+          MW:                        ON         OFF      ON
+          SPD:                                                              |detect|
+                                                                            ↑ readout + detection_delay
+
+        Even bins (0, 2, 4, ...): reference — MW off
+        Odd  bins (1, 3, 5, ...): signal    — both π/2 pulses on, free evolution τ between them
+
+        Args:
+            init_laser_duration: Duration of initialization laser pulse in ns
+            readout_laser_duration: Duration of readout laser pulse in ns.
+                                    Must be >= detection_duration + detection_delay
+                                    so the SPD window fits inside the readout pulse.
+            pi_half_duration: Duration of each π/2 MW pulse in ns (from Rabi calibration)
+            free_evolution: Dark free-evolution time τ between the two π/2 pulses in ns
+            detection_duration: Duration of the SPD detection window in ns
+            init_laser_delay: Delay before the initialization laser in ns
+            mw_gap: Dark time between end of init laser and first π/2 in ns
+            readout_gap: Dark time between end of second π/2 and start of readout in ns
+            detection_delay: Offset of the SPD gate relative to the readout laser
+                             edge, to compensate for AOM turn-on delay in ns
+            sequence_interval: Idle time appended after each sub-sequence in ns
+
+        Returns:
+            Tuple (Sequence, total_duration_ns) or None if error
+        """
+        if not self.is_connected:
+            print("❌ Device not connected")
+            return None
+
+        try:
+            init_laser_duration    = self.align_timing(init_laser_duration)
+            readout_laser_duration = self.align_timing(readout_laser_duration)
+            pi_half_duration       = self.align_timing(pi_half_duration)
+            free_evolution         = self.align_timing(free_evolution)
+            detection_duration     = self.align_timing(detection_duration)
+            init_laser_delay       = self.align_timing(init_laser_delay)
+            mw_gap                 = self.align_timing(mw_gap)
+            readout_gap            = self.align_timing(readout_gap)
+            detection_delay        = self.align_timing(detection_delay)
+            sequence_interval      = self.align_timing(sequence_interval)
+
+            if pi_half_duration <= 0:
+                print("❌ Error: pi_half_duration must be > 0 ns")
+                return None
+
+            if readout_laser_duration < detection_delay + detection_duration:
+                print(f"❌ Error: readout_laser_duration ({readout_laser_duration} ns) must be "
+                      f">= detection_delay + detection_duration "
+                      f"({detection_delay + detection_duration} ns) so the SPD window "
+                      f"fits inside the readout pulse.")
+                return None
+
+            init_end      = init_laser_delay + init_laser_duration
+            mw1_start     = init_end + mw_gap
+            mw1_end       = mw1_start + pi_half_duration
+            mw2_start     = mw1_end + free_evolution
+            mw2_end       = mw2_start + pi_half_duration
+            mw_block      = pi_half_duration + free_evolution + pi_half_duration
+            readout_start = mw2_end + readout_gap
+            detect_start  = self.align_timing(readout_start + detection_delay)
+
+            single_seq_duration = self.align_timing(max(
+                readout_start + readout_laser_duration,
+                detect_start + detection_duration
+            ))
+
+            # AOM: init | mw_gap | (MW block, laser OFF) | readout_gap | readout | fill | interval
+            aom_pattern = []
+            if init_laser_delay > 0:
+                aom_pattern.append((init_laser_delay, 0))
+            aom_pattern.append((init_laser_duration, 1))
+
+            if mw_gap > 0:
+                aom_pattern.append((mw_gap, 0))
+            if mw_block > 0:
+                aom_pattern.append((mw_block, 0))
+            if readout_gap > 0:
+                aom_pattern.append((readout_gap, 0))
+            aom_pattern.append((readout_laser_duration, 1))
+
+            used_aom = readout_start + readout_laser_duration
+            remaining_aom = single_seq_duration - used_aom
+            if remaining_aom > 0:
+                aom_pattern.append((remaining_aom, 0))
+            if sequence_interval > 0:
+                aom_pattern.append((sequence_interval, 0))
+
+            # MW: two π/2 pulses with free evolution between them (signal half only)
+            def _build_mw_pattern(mw_on: bool) -> List[Tuple[int, int]]:
+                level = 1 if mw_on else 0
+                pattern = []
+                if mw1_start > 0:
+                    pattern.append((mw1_start, 0))
+                pattern.append((pi_half_duration, level))
+                if free_evolution > 0:
+                    pattern.append((free_evolution, 0))
+                pattern.append((pi_half_duration, level))
+                used_mw = mw2_end
+                remaining_mw = single_seq_duration - used_mw
+                if remaining_mw > 0:
+                    pattern.append((remaining_mw, 0))
+                if sequence_interval > 0:
+                    pattern.append((sequence_interval, 0))
+                return pattern
+
+            mw_pattern_off = _build_mw_pattern(mw_on=False)
+            mw_pattern_on  = _build_mw_pattern(mw_on=True)
+
+            # SPD: same readout window in both halves (symmetric contrast)
+            spd_pattern = []
+            if detect_start > 0:
+                spd_pattern.append((detect_start, 0))
+            spd_pattern.append((detection_duration, 1))
+
+            used_spd = detect_start + detection_duration
+            remaining_spd = single_seq_duration - used_spd
+            if remaining_spd > 0:
+                spd_pattern.append((remaining_spd, 0))
+            if sequence_interval > 0:
+                spd_pattern.append((sequence_interval, 0))
+
+            total_duration = sum(d for d, _ in aom_pattern)
+            if total_duration % 8 != 0:
+                print(f"❌ Error: Total sequence length ({total_duration} ns) not multiple of 8 ns")
+                return None
+
+            sequence = self.pulse_streamer.createSequence()
+            sequence.setDigital(self.CHANNEL_AOM, aom_pattern + aom_pattern)
+            sequence.setDigital(self.CHANNEL_MW, mw_pattern_off + mw_pattern_on)
+            sequence.setDigital(self.CHANNEL_SPD, spd_pattern + spd_pattern)
+
+            full_duration = total_duration * 2
+            print(f"✅ Ramsey contrast sequence created: π/2={pi_half_duration} ns, "
+                  f"τ={free_evolution} ns, {full_duration} ns total "
+                  f"({total_duration} ns per sub-sequence, 8ns aligned)")
+
+            return sequence, full_duration
+
+        except Exception as e:
+            print(f"❌ Error creating Ramsey contrast sequence: {e}")
+            return None
+
     def create_readout_transient_sequence(self,
                                           init_laser_duration: int,
                                           readout_laser_duration: int,

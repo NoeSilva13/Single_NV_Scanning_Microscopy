@@ -143,6 +143,7 @@ class ODMRExperiments:
         'odmr_contrast':        ('odmr_contrast', 'frequencies'),
         'pulsed_odmr_contrast': ('pulsed_odmr_contrast', 'frequencies'),
         'rabi_contrast':        ('rabi_contrast', 'durations'),
+        'ramsey_contrast':      ('ramsey_contrast', 'delays'),
         't1_contrast':          ('t1_contrast', 'delays'),
         'readout_transient':    ('readout_transient', 'times'),
     }
@@ -164,9 +165,13 @@ class ODMRExperiments:
                     'Contrast': result['contrasts'],
                 }
                 count_rates = None
-            elif result_key in ('rabi_contrast', 't1_contrast'):
-                sig = np.array(result['mw_on_rates'] if result_key == 'rabi_contrast' else result['sig_rates'])
-                ref = np.array(result['mw_off_rates'] if result_key == 'rabi_contrast' else result['ref_rates'])
+            elif result_key in ('rabi_contrast', 'ramsey_contrast', 't1_contrast'):
+                if result_key == 't1_contrast':
+                    sig = np.array(result['sig_rates'])
+                    ref = np.array(result['ref_rates'])
+                else:
+                    sig = np.array(result['mw_on_rates'])
+                    ref = np.array(result['mw_off_rates'])
                 sig_over_ref = np.where(ref > 0, sig / ref, np.nan)
                 extra_columns = {
                     'Signal_cps': sig,
@@ -520,6 +525,181 @@ class ODMRExperiments:
         print(f"Durations: {durations}")
         print("✅ Rabi contrast measurement completed")
         return self.results['rabi_contrast']
+
+    def ramsey_contrast(self,
+                        free_evolution_times: List[int],
+                        pi_half_duration: int,
+                        mw_frequency: float = 2.87e9,
+                        init_laser_duration: int = 3000,
+                        readout_laser_duration: int = 3000,
+                        detection_duration: int = 1500,
+                        init_laser_delay: int = 0,
+                        mw_gap: int = 200,
+                        readout_gap: int = 200,
+                        detection_delay: int = 1500,
+                        sequence_interval: int = 5000,
+                        repetitions: int = 1000,
+                        plot_sequence: bool = False,
+                        live_plot: bool = True,
+                        progress_callback: Optional[Callable] = None) -> Dict:
+        """
+        Perform a Ramsey (π/2 – τ – π/2) measurement using the contrast method.
+
+        For each free-evolution time τ, the sequence alternates between two sub-sequences
+        that share identical optical and detection timing:
+
+          AOM: |── init ──| ← mw_gap → [π/2] ← τ → [π/2] ← readout_gap → |── readout ──|
+          SPD:                                                             |detect|
+
+          - Reference (even bins): MW off  → bright ms=0 PL at readout
+          - Signal   (odd  bins): both π/2 on with free evolution τ between them
+
+        The contrast (ref − sig) / ref oscillates at the detuning from resonance and
+        decays with the inhomogeneous dephasing time T2*. Set mw_frequency slightly off
+        the ODMR dip (a few MHz) to resolve Ramsey fringes; on resonance the fringe
+        frequency collapses and you mainly see the T2* envelope.
+
+        Use pi_half_duration ≈ half the π-pulse length from rabi_oscillation_contrast
+        (8 ns aligned). Optical timing should match your calibrated pulsed ODMR / Rabi.
+
+        Args:
+            free_evolution_times: List of free-evolution delays τ to sweep in ns
+            pi_half_duration: Duration of each π/2 MW pulse in ns
+            mw_frequency: MW frequency in Hz (resonance or small intentional detuning)
+            init_laser_duration: Initialization laser pulse duration in ns
+            readout_laser_duration: Readout laser pulse duration in ns
+            detection_duration: Detection window duration in ns
+            init_laser_delay: Delay before initialization laser in ns
+            mw_gap: Dark time between init laser and first π/2 in ns
+            readout_gap: Dark time between second π/2 and readout laser in ns
+            detection_delay: SPD gate offset relative to readout edge (AOM compensation) in ns
+            sequence_interval: Interval between sub-sequences in ns
+            repetitions: Number of repetitions per delay point
+            plot_sequence: If True, call sequence.plot() at each sweep point (blocks until closed)
+            live_plot: If True, show a contrast plot that refreshes after each delay point
+            progress_callback: Optional callback(delays, contrasts) for live updates
+
+        Returns:
+            Dictionary containing delays, contrasts, mw_off_rates, and mw_on_rates
+        """
+        print("🔬 Starting Ramsey contrast measurement...")
+
+        delays = []
+        contrasts = []
+        mw_off_rates = []
+        mw_on_rates = []
+
+        live = None
+        if live_plot and progress_callback is None:
+            live = _LiveContrastPlot(xlabel='Free evolution τ (µs)', ylabel='Contrast (%)',
+                                     title='Ramsey Contrast (live)', x_scale=1e3)
+
+        self.counter = TimeTagger.CountBetweenMarkers(
+            tagger=self.tagger,
+            click_channel=1,
+            begin_channel=2,
+            end_channel=-2,
+            n_values=repetitions * 2
+        )
+
+        if self.mw_generator:
+            self.mw_generator.set_odmr_frequency(mw_frequency / 1e9)
+            self.mw_generator.prepare_for_odmr(mw_frequency / 1e9, -10.0)
+
+        for free_evolution in free_evolution_times:
+            print(f"⏱️ Free evolution τ: {free_evolution} ns")
+
+            sequence, total_duration = self.pulse_controller.create_ramsey_sequence_contrast(
+                init_laser_duration=init_laser_duration,
+                readout_laser_duration=readout_laser_duration,
+                pi_half_duration=int(pi_half_duration),
+                free_evolution=int(free_evolution),
+                detection_duration=detection_duration,
+                init_laser_delay=init_laser_delay,
+                mw_gap=mw_gap,
+                readout_gap=readout_gap,
+                detection_delay=detection_delay,
+                sequence_interval=sequence_interval
+            )
+            if plot_sequence and sequence:
+                sequence.plot()
+            time.sleep(0.2)
+            if sequence:
+                if self.mw_generator:
+                    self.mw_generator.set_rf_output(True)
+                time.sleep(0.2)
+                self.counter.start()
+                ready = False
+                self.pulse_controller.run_sequence(sequence, repetitions)
+
+                while ready is False:
+                    time.sleep(0.2)
+                    ready = self.counter.ready()
+                    information = self.counter.getBinWidths()
+                    print(f"Information: {information}")
+                    print(f"Ready: {ready}")
+                    counts = self.counter.getData()
+                    print(f"Counts: {counts}")
+
+                self.counter.clear()
+
+                counts_arr = np.array(counts)
+                info_arr = np.array(information)
+
+                counts_off = counts_arr[0::2]
+                counts_on  = counts_arr[1::2]
+                info_off   = info_arr[0::2]
+                info_on    = info_arr[1::2]
+
+                rate_off = np.mean(counts_off) / (np.mean(info_off) * 1e-12)
+                rate_on  = np.mean(counts_on)  / (np.mean(info_on)  * 1e-12)
+                contrast = (rate_off - rate_on) / rate_off if rate_off > 0 else 0.0
+
+                print(f"MW off: {rate_off:.2f} Hz | MW on: {rate_on:.2f} Hz | Contrast: {contrast:.4f}")
+
+                delays.append(free_evolution)
+                contrasts.append(contrast)
+                mw_off_rates.append(rate_off)
+                mw_on_rates.append(rate_on)
+
+                if progress_callback:
+                    progress_callback(delays.copy(), contrasts.copy())
+                if live:
+                    live.update(delays, np.array(contrasts) * 100)
+
+                if self.mw_generator:
+                    self.mw_generator.set_rf_output(False)
+
+                time.sleep(0.05)
+
+        if live:
+            live.close()
+
+        self.results['ramsey_contrast'] = {
+            'delays': delays,
+            'contrasts': contrasts,
+            'mw_off_rates': mw_off_rates,
+            'mw_on_rates': mw_on_rates,
+            'parameters': {
+                'mw_frequency': mw_frequency,
+                'pi_half_duration': pi_half_duration,
+                'init_laser_duration': init_laser_duration,
+                'readout_laser_duration': readout_laser_duration,
+                'detection_duration': detection_duration,
+                'init_laser_delay': init_laser_delay,
+                'mw_gap': mw_gap,
+                'readout_gap': readout_gap,
+                'detection_delay': detection_delay,
+                'sequence_interval': sequence_interval,
+                'repetitions': repetitions
+            }
+        }
+
+        self._save_results('ramsey_contrast', self.results['ramsey_contrast'])
+        print(f"Contrasts: {contrasts}")
+        print(f"Delays: {delays}")
+        print("✅ Ramsey contrast measurement completed")
+        return self.results['ramsey_contrast']
 
     def pulsed_odmr_contrast(self,
                               mw_frequencies: List[float],
@@ -1303,6 +1483,105 @@ class ODMRExperiments:
             ax_con.set_xlabel('MW Duration (ns)')
             ax_con.set_ylabel('Contrast (%)')
             ax_con.set_title('Rabi – Contrast')
+            ax_con.legend()
+            ax_con.grid(True, alpha=0.3)
+            fig_con.tight_layout()
+
+            if base_path:
+                fig.savefig(f"{base_path}.pdf", format='pdf', bbox_inches='tight')
+                fig_con.savefig(f"{base_path}_con.pdf", format='pdf', bbox_inches='tight')
+                print(f"Plots saved to: {base_path}*.pdf")
+
+            plt.show()
+            return
+
+        elif experiment_type == 'ramsey_contrast':
+            delays = np.array(data['delays'])
+            delays_us = delays / 1e3
+            sig = np.array(data['mw_on_rates'])
+            ref = np.array(data['mw_off_rates'])
+            contrasts_pct = np.array(data['contrasts']) * 100
+
+            fig, axes = plt.gcf(), None
+            plt.close(fig)
+            fig, axes = plt.subplots(3, 1, figsize=(10, 14), sharex=True)
+
+            axes[0].plot(delays_us, ref, 'bo-', label='Reference (MW off)')
+            axes[0].set_ylabel('Count Rate (cps)')
+            axes[0].set_title('Ramsey Contrast')
+            axes[0].legend()
+            axes[0].grid(True, alpha=0.3)
+
+            axes[1].plot(delays_us, sig, 'ro-', label='Signal (MW on)')
+            axes[1].set_ylabel('Count Rate (cps)')
+            axes[1].legend()
+            axes[1].grid(True, alpha=0.3)
+
+            axes[2].plot(delays_us, contrasts_pct, 'go-', label='Contrast = (ref − sig) / ref')
+            axes[2].set_xlabel('Free evolution τ (µs)')
+            axes[2].set_ylabel('Contrast (%)')
+            axes[2].grid(True, alpha=0.3)
+
+            # Optional damped-cosine fit: A * exp(-(τ/T2*)^n) * cos(2π f τ + φ) + C
+            fit_label = None
+            popt = None
+            t_smooth = None
+            y_smooth = None
+            try:
+                from scipy.optimize import curve_fit
+                from scipy.special import gamma as gamma_func
+
+                def ramsey_model(t, A, T2s, n, f, phi, C):
+                    return A * np.exp(-(t / T2s) ** n) * np.cos(2 * np.pi * f * t + phi) + C
+
+                if len(delays_us) >= 8 and np.ptp(delays_us) > 0:
+                    y_dm = contrasts_pct - np.mean(contrasts_pct)
+                    dt = float(np.median(np.diff(delays_us)))
+                    freqs = np.fft.rfftfreq(len(y_dm), d=dt)
+                    spec = np.abs(np.fft.rfft(y_dm))
+                    f0 = float(freqs[np.argmax(spec[1:]) + 1]) if len(freqs) > 1 else 1.0
+                    if f0 <= 0:
+                        f0 = 1.0 / max(float(np.ptp(delays_us)), 1e-6)
+                    A0 = 0.5 * float(np.ptp(contrasts_pct)) if np.ptp(contrasts_pct) > 0 else 1.0
+                    p0 = [A0, max(float(np.ptp(delays_us)) / 3, dt), 1.0, f0, 0.0,
+                          float(np.mean(contrasts_pct))]
+                    bounds = (
+                        [-np.inf, 1e-6, 0.5, 0.0, -2 * np.pi, -np.inf],
+                        [np.inf, np.inf, 4.0, np.inf, 2 * np.pi, np.inf],
+                    )
+                    popt, pcov = curve_fit(
+                        ramsey_model, delays_us, contrasts_pct, p0=p0, bounds=bounds, maxfev=20000
+                    )
+                    perr = np.sqrt(np.diag(pcov))
+                    t_smooth = np.linspace(delays_us.min(), delays_us.max(), 400)
+                    y_smooth = ramsey_model(t_smooth, *popt)
+                    axes[2].plot(t_smooth, y_smooth, 'k-', linewidth=2, label='Damped-cosine fit')
+                    mean_t2 = (popt[1] / popt[2]) * gamma_func(1.0 / popt[2]) if popt[2] > 0 else popt[1]
+                    fit_label = (f"T2*={popt[1]:.3f}±{perr[1]:.3f} µs, n={popt[2]:.2f}±{perr[2]:.2f}, "
+                                 f"f={popt[3]:.3f}±{perr[3]:.3f} MHz, ⟨T2*⟩={mean_t2:.3f} µs")
+                    print(f"Ramsey fit: {fit_label}")
+                    data['fit'] = {
+                        'T2s_us': float(popt[1]),
+                        'T2s_err_us': float(perr[1]),
+                        'n': float(popt[2]),
+                        'n_err': float(perr[2]),
+                        'f_MHz': float(popt[3]),
+                        'f_err_MHz': float(perr[3]),
+                        'mean_T2s_us': float(mean_t2),
+                    }
+            except Exception as e:
+                print(f"Warning: Ramsey fit skipped: {e}")
+
+            axes[2].legend()
+            plt.tight_layout()
+
+            fig_con, ax_con = plt.subplots(figsize=(10, 6))
+            ax_con.plot(delays_us, contrasts_pct, 'go-', label='Contrast = (ref − sig) / ref')
+            if y_smooth is not None and fit_label:
+                ax_con.plot(t_smooth, y_smooth, 'k-', linewidth=2, label=fit_label)
+            ax_con.set_xlabel('Free evolution τ (µs)')
+            ax_con.set_ylabel('Contrast (%)')
+            ax_con.set_title('Ramsey – Contrast')
             ax_con.legend()
             ax_con.grid(True, alpha=0.3)
             fig_con.tight_layout()
