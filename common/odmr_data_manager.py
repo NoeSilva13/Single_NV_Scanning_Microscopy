@@ -79,6 +79,19 @@ class ODMRDataManager:
             'x_label': 'Free evolution',
             'x_unit': 'ns',
             'x_range_format': lambda min_x, max_x: f"{min_x} ns ({min_x*1e-9:.9f} to {max_x*1e-9:.9f} s)"
+        },
+        'hahn_echo_contrast': {
+            'folder_name': 'Hahn_Echo_Contrast',
+            'file_suffix': '_Hahn_Echo_Contrast',
+            'x_column': 'Delay_ns',
+            'x_columns_converted': [
+                ('Delay_s', 1e-9),
+                ('Delay_us', 1e-3),
+            ],
+            'data_key': 'tau_times',
+            'x_label': 'Total free evolution 2τ',
+            'x_unit': 'ns',
+            'x_range_format': lambda min_x, max_x: f"{min_x} ns ({min_x*1e-9:.9f} to {max_x*1e-9:.9f} s)"
         }
     }
     
