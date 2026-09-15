@@ -79,13 +79,14 @@ def run_hardware_timed_raster(
     n_lines,
     stride,
     n_flyback,
+    flyback_seconds=None,
     stop_check=None,
     on_progress=None,
     task_ref=None,
     acquisition_ref=None,
     lock=None,
 ):
-    """Acquire a complete raster using one RFSoC/Pyro call per line."""
+    """Acquire a complete raster using one compiled QICK program and one NI task."""
     handle = AcquisitionHandle()
     _register_ref(acquisition_ref, handle, lock)
     try:
@@ -98,6 +99,7 @@ def run_hardware_timed_raster(
             stride=stride,
             dwell_seconds=dwell_time,
             n_flyback=n_flyback,
+            flyback_seconds=flyback_seconds,
             on_line=on_progress,
             stop_check=stop_check,
             handle=handle,

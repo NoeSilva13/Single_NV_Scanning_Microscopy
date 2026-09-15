@@ -117,6 +117,7 @@ def reconstruct(counts, bin_widths_ps, shape, stride, width):
 
 
 def run_raster(session, axes, axes_points, dwell_time, n_flyback=0, *,
+               flyback_seconds=None,
                on_progress=None, stop_check=None,
                task_ref=None, acquisition_ref=None, lock=None):
     """Run a hardware-timed N-axis raster and return raw counts + geometry.
@@ -128,6 +129,8 @@ def run_raster(session, axes, axes_points, dwell_time, n_flyback=0, *,
         axes_points: List of 1D µm arrays, fast..slow.
         dwell_time: Per-point integration time in seconds (1/rate).
         n_flyback: Retrace samples between fast lines.
+        flyback_seconds: Total tProc retrace budget spread across *n_flyback*
+            clocks. Defaults to ``RFSOC_GALVO_FLYBACK_S``.
         on_progress: Optional callback ``(partial_counts, partial_bins_ps)``.
         stop_check, task_ref, acquisition_ref, lock: Forwarded to the RFSoC
             line acquisition core.
@@ -151,6 +154,7 @@ def run_raster(session, axes, axes_points, dwell_time, n_flyback=0, *,
         n_lines=n_lines,
         stride=stride,
         n_flyback=n_flyback,
+        flyback_seconds=flyback_seconds,
         stop_check=stop_check,
         on_progress=on_progress,
         task_ref=task_ref,

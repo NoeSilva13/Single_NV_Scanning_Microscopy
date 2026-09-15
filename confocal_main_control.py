@@ -38,6 +38,8 @@ from common.utils import (
     MAX_ZOOM_LEVEL, 
     BINWIDTH,
     MICRONS_PER_VOLT,
+    RFSOC_GALVO_FLYBACK_S,
+    SCAN_PREVIEW_EVERY_LINES,
     save_tiff_with_imagej_metadata
 )
 from qtpy.QtWidgets import QWidget, QGridLayout
@@ -424,7 +426,7 @@ def update_contrast_limits(layer, image):
         show_info(f'❌ Error setting contrast limits: {str(e)}')
 
 # --------------------- SCAN GEOMETRY / MODES ---------------------
-GALVO_FLYBACK_TIME = 0.002  # seconds of retrace budget between fast lines
+GALVO_FLYBACK_TIME = RFSOC_GALVO_FLYBACK_S  # seconds of retrace budget between fast lines
 
 # Fast..slow axis order for each scan mode. Z (piezo) is always the slowest
 # stepping axis, so it steps at most once per fast line and gets a flyback
@@ -614,6 +616,9 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
 
     try:
         n_flyback = _flyback_samples(dwell, z_dwell, scanned)
+        flyback_seconds = GALVO_FLYBACK_TIME
+        if 'z' in scanned:
+            flyback_seconds = max(flyback_seconds, z_dwell)
         shape, stride, width, n_lines = raster_engine.raster_geometry(points_list, n_flyback)
         result = np.zeros(shape, dtype=np.float32)
 
@@ -655,15 +660,27 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
         start_time = time.time()
 
         def _on_progress(counts, bins):
+            n_done = int(np.count_nonzero(bins) // width)
+            if (
+                n_done != 1
+                and n_done != n_lines
+                and n_done % SCAN_PREVIEW_EVERY_LINES != 0
+            ):
+                return
             arr = raster_engine.reconstruct(counts, bins, shape, stride, width)
+            acquired = np.asarray(bins).reshape(shape) > 0
+
             def _upd():
                 target_layer.data = arr
-                update_contrast_limits(target_layer, arr)
+                if np.any(acquired):
+                    update_contrast_limits(target_layer, arr[acquired])
                 target_layer.refresh()
+
             bridge.run_on_main(_upd)
 
         counts, bins, _sh, _st, _w = raster_engine.run_raster(
             rfsoc_session, axes_list, points_list, dwell, n_flyback,
+            flyback_seconds=flyback_seconds,
             on_progress=_on_progress,
             stop_check=lambda: stop_scan_requested[0],
             task_ref=scan_task_ref,

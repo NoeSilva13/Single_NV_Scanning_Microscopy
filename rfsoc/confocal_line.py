@@ -30,6 +30,7 @@ class ConfocalLine(NVAveragerProgram):
         "readout_window_tproc_treg",
         "windows_per_pixel",
         "n_flyback",
+        "flyback_period_treg",
         "relax_delay_treg",
         "reps",
     ]
@@ -90,9 +91,10 @@ class ConfocalLine(NVAveragerProgram):
     def end(self):
         # NVAveragerProgram.make_program calls end() after its reps loop.
         # Generate DAQ movement samples only: no readout triggers during flyback.
+        period = max(1, int(self.cfg.flyback_period_treg))
         for _ in range(int(self.cfg.n_flyback)):
             self._clock_pulse(0)
-            self.synci(self.pixel_period_treg)
+            self.synci(period)
         # Explicitly clear the full PMOD word before stopping the tProc.
         self.trigger(pins=[self.cfg.laser_gate_pmod], width=1, adc_trig_offset=0)
         self.synci(2)
