@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from common import utils
+
 try:
     from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
 except ImportError:  # Allows geometry/config tests without the hardware package.
@@ -13,8 +15,9 @@ except ImportError:  # Allows geometry/config tests without the hardware package
 
 
 class ConfocalLine(NVAveragerProgram):
-    """Advance NI AO once per pixel and edge-count K windows per pixel.
+    """Advance NI AO once per pixel and edge-count one ADC window per pixel.
 
+    Long dwells are split on the host into repeated one-window line passes.
     ``cfg.reps`` is the number of imaging pixels.  Flyback clocks are emitted
     after the repetitions loop by :meth:`end`, and therefore create no ADC
     readouts.
@@ -37,8 +40,16 @@ class ConfocalLine(NVAveragerProgram):
 
     def initialize(self):
         self.check_cfg()
-        if self.cfg.windows_per_pixel < 1:
-            raise ValueError("windows_per_pixel must be positive")
+        if int(self.cfg.windows_per_pixel) != 1:
+            raise ValueError(
+                "ConfocalLine counts one ADC window per pixel; "
+                "split longer dwells on the host"
+            )
+        if int(self.cfg.reps) > utils.RFSOC_MAX_ADC_READOUTS:
+            raise ValueError(
+                f"ConfocalLine requests {self.cfg.reps} ADC readouts; "
+                f"max is {utils.RFSOC_MAX_ADC_READOUTS}"
+            )
         self.setup_readout()
         pin_cfg = self.soccfg["tprocs"][0]["output_pins"]
         ports = {
@@ -68,8 +79,7 @@ class ConfocalLine(NVAveragerProgram):
     def pixel_period_treg(self):
         return (
             int(self.cfg.pixel_settle_treg)
-            + int(self.cfg.windows_per_pixel)
-            * int(self.cfg.readout_window_tproc_treg)
+            + int(self.cfg.readout_window_tproc_treg)
             + int(self.cfg.relax_delay_treg)
         )
 
@@ -81,10 +91,8 @@ class ConfocalLine(NVAveragerProgram):
         self._clock_pulse(0)
         t = int(self.cfg.pixel_settle_treg)
         window = int(self.cfg.readout_window_tproc_treg)
-        for _ in range(int(self.cfg.windows_per_pixel)):
-            self._masked_state(adc=True, t=t)
-            self._masked_state(t=t + window)
-            t += window
+        self._masked_state(adc=True, t=t)
+        self._masked_state(t=t + window)
         self.wait_all()
         self.sync_all(int(self.cfg.relax_delay_treg))
 
@@ -101,12 +109,12 @@ class ConfocalLine(NVAveragerProgram):
         self.append_instruction("end")
 
     def acquire(self, *args, **kwargs):
-        raw = super().acquire(
-            readouts_per_experiment=int(self.cfg.windows_per_pixel),
-            *args,
-            **kwargs,
-        )
-        data = np.asarray(raw, dtype=np.int64).reshape(
-            int(self.cfg.reps), int(self.cfg.windows_per_pixel)
-        )
-        return data.sum(axis=-1)
+        kwargs.setdefault("readouts_per_experiment", 1)
+        raw = super().acquire(*args, **kwargs)
+        n_pix = int(self.cfg.reps)
+        data = np.array(raw, dtype=np.int64, copy=True).reshape(-1)
+        if data.size < n_pix:
+            raise RuntimeError(
+                f"RFSoC returned {data.size} readouts, expected {n_pix}"
+            )
+        return data[:n_pix]

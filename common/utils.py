@@ -59,6 +59,10 @@ RFSOC_PIXEL_CLOCK_WIDTH_NS = 100
 RFSOC_CONFOCAL_SETTLE_US = 5.0
 RFSOC_GALVO_FLYBACK_S = 0.002
 RFSOC_MAX_READOUT_SAMPLES = (2 ** 16) - 1
+# Max one-window ADC shots per QICK acquire. Multi-window dwells retrace
+# the line once per legal window (~213 µs) and sum; each pass is one shot
+# per pixel. 128 is below the ~150 stale-tail seen with 5-window bodies.
+RFSOC_MAX_ADC_READOUTS = 128
 SCAN_PREVIEW_EVERY_LINES = 5
 
 DAQ_GALVO_X = "Dev1/ao0"

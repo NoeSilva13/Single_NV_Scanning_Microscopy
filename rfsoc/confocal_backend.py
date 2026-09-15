@@ -13,6 +13,49 @@ from .config import base_nv_config, readout_clock_hz, readout_plan
 from .confocal_line import ConfocalLine
 
 
+def max_pixels_per_acquire(
+    windows_per_pixel, max_readouts=utils.RFSOC_MAX_ADC_READOUTS
+):
+    """Largest imaging chunk whose ADC windows fit in one QICK acquire.
+
+    The dwell sets ``windows_per_pixel`` via :func:`readout_plan`.  One
+    acquire may request at most ``max_readouts`` ADC transfers, so
+    ``max_pixels = max_readouts // windows_per_pixel``.
+    """
+    windows = max(1, int(windows_per_pixel))
+    max_readouts = int(max_readouts)
+    if windows > max_readouts:
+        raise ValueError(
+            f"{windows} ADC windows per pixel exceed {max_readouts} "
+            "transfers per acquire; shorten the dwell"
+        )
+    return max_readouts // windows
+
+
+def iter_line_chunks(
+    n_imaging,
+    n_flyback,
+    windows_per_pixel,
+    max_readouts=utils.RFSOC_MAX_ADC_READOUTS,
+):
+    """Yield ``(start, n_pixels, n_flyback)`` acquires for one AO line.
+
+    Flyback clocks stay on the last chunk so one NI finite task can still
+    cover the whole line.
+    """
+    max_pixels = max_pixels_per_acquire(windows_per_pixel, max_readouts)
+    n_imaging = int(n_imaging)
+    n_flyback = int(n_flyback)
+    if n_imaging < 1:
+        raise ValueError("n_imaging must be positive")
+    start = 0
+    while start < n_imaging:
+        n_pix = min(max_pixels, n_imaging - start)
+        last = start + n_pix >= n_imaging
+        yield start, n_pix, (n_flyback if last else 0)
+        start += n_pix
+
+
 def analog_write_buffer(data):
     """Copy *data* into the C-contiguous layout nidaqmx.Task.write requires.
 
@@ -151,17 +194,59 @@ class RFSoCConfocalBackend:
             pass
         task.close()
 
-    def _clock_and_count(self, task, program, data, timeout):
+    def _compile_line_programs(
+        self, n_imaging, n_flyback, dwell_seconds, flyback_seconds=None
+    ):
+        """Compile one ConfocalLine per ADC-safe chunk of a host line."""
+        probe, plan = self._program_config(
+            int(n_imaging),
+            dwell_seconds,
+            int(n_flyback),
+            flyback_seconds=flyback_seconds,
+        )
+        programs = []
+        compiled = {}
+        for _start, n_pix, fb in iter_line_chunks(
+            n_imaging, n_flyback, plan.windows_per_pixel
+        ):
+            key = (n_pix, fb)
+            if key not in compiled:
+                if key == (int(n_imaging), int(n_flyback)):
+                    cfg = probe
+                else:
+                    cfg, _ = self._program_config(
+                        n_pix,
+                        dwell_seconds,
+                        fb,
+                        flyback_seconds=flyback_seconds,
+                    )
+                compiled[key] = ConfocalLine(cfg)
+            programs.append(compiled[key])
+        return programs, plan, probe
+
+    def _clock_and_count(self, task, programs, data, timeout):
         write_data = analog_write_buffer(data)
         task.write(write_data, auto_start=False)
         task.start()
-        counts = np.asarray(program.acquire(progress=False), dtype=np.int64)
+        parts = [
+            np.array(program.acquire(progress=False), dtype=np.int64, copy=True)
+            for program in programs
+        ]
+        counts = np.concatenate(parts) if len(parts) > 1 else parts[0]
         task.wait_until_done(timeout=timeout)
         try:
             task.stop()
         except Exception:
             pass
         return counts
+
+    def _sum_window_passes(self, task, programs, data, timeout, n_windows, n_pixels):
+        """Retrace the line once per legal ADC window and sum the counts."""
+        n_windows = int(n_windows)
+        total = np.zeros(int(n_pixels), dtype=np.int64)
+        for _ in range(n_windows):
+            total += self._clock_and_count(task, programs, data, timeout)
+        return total
 
     def acquire_line(
         self,
@@ -174,7 +259,7 @@ class RFSoCConfocalBackend:
         flyback_seconds=None,
         handle: AcquisitionHandle | None = None,
     ):
-        """Arm one NI line, then let one QICK acquire clock and count it."""
+        """Arm NI, then retrace the line once per ADC window and sum counts."""
         data = np.asarray(waveform, dtype=float)
         if data.ndim == 1:
             data = data[np.newaxis, :]
@@ -189,24 +274,34 @@ class RFSoCConfocalBackend:
             raise InterruptedError("scan stopped before line acquisition")
 
         with self.session.acquisition():
-            cfg, plan = self._program_config(
+            _, dwell_plan = self._program_config(
                 int(n_imaging_points),
                 dwell_seconds,
                 int(n_flyback),
                 flyback_seconds=flyback_seconds,
             )
-            program = ConfocalLine(cfg)
-            task = self._open_ao_task(ao_channels, expected, plan)
+            programs, window_plan, cfg = self._compile_line_programs(
+                int(n_imaging_points),
+                int(n_flyback),
+                dwell_plan.window_seconds,
+                flyback_seconds=flyback_seconds,
+            )
+            task = self._open_ao_task(ao_channels, expected, window_plan)
             handle.task = task
             try:
-                counts = self._clock_and_count(
-                    task, program, data, self._line_timeout(plan, n_imaging_points, cfg)
+                counts = self._sum_window_passes(
+                    task,
+                    programs,
+                    data,
+                    self._line_timeout(window_plan, n_imaging_points, cfg),
+                    dwell_plan.windows_per_pixel,
+                    n_imaging_points,
                 )
             finally:
                 handle.task = None
                 self._close_ao_task(task)
 
-        return self._pack_line_result(counts, n_imaging_points, plan)
+        return self._pack_line_result(counts, n_imaging_points, dwell_plan)
 
     def acquire_raster(
         self,
@@ -223,7 +318,7 @@ class RFSoCConfocalBackend:
         on_line: Callable | None = None,
         stop_check: Callable[[], bool] | None = None,
     ):
-        """Acquire every raster line with one compiled program and one NI task."""
+        """Acquire every raster line by summing one-window retraces."""
         handle = handle or AcquisitionHandle()
         width = int(width)
         n_flyback = int(n_flyback)
@@ -232,14 +327,19 @@ class RFSoCConfocalBackend:
         widths = np.zeros(int(n_lines) * width, dtype=np.int64)
 
         with self.session.acquisition():
-            cfg, plan = self._program_config(
+            _, dwell_plan = self._program_config(
                 width, dwell_seconds, n_flyback, flyback_seconds=flyback_seconds
             )
-            program = ConfocalLine(cfg)
-            task = self._open_ao_task(ao_channels, expected, plan)
+            programs, window_plan, cfg = self._compile_line_programs(
+                width,
+                n_flyback,
+                dwell_plan.window_seconds,
+                flyback_seconds=flyback_seconds,
+            )
+            task = self._open_ao_task(ao_channels, expected, window_plan)
             handle.task = task
-            timeout = self._line_timeout(plan, width, cfg)
-            widths_ps = int(round(plan.effective_seconds * 1e12))
+            timeout = self._line_timeout(window_plan, width, cfg)
+            widths_ps = int(round(dwell_plan.effective_seconds * 1e12))
             try:
                 for line_index, line_waveform, flyback in iter_raster_lines(
                     waveform, width, n_lines, stride, n_flyback
@@ -251,8 +351,13 @@ class RFSoCConfocalBackend:
                             f"line waveform shape {line_waveform.shape}, expected "
                             f"({len(ao_channels)}, {expected})"
                         )
-                    line_counts = self._clock_and_count(
-                        task, program, line_waveform, timeout
+                    line_counts = self._sum_window_passes(
+                        task,
+                        programs,
+                        line_waveform,
+                        timeout,
+                        dwell_plan.windows_per_pixel,
+                        width,
                     )
                     if line_counts.shape != (width,):
                         raise RuntimeError(
