@@ -45,7 +45,7 @@ Z_VOLTAGE_RANGE = (0.0, 10.0)  # Allowed EXT IN voltage range for closed-loop co
 # --- RFSoC4x2 / DAQ configuration (edit here when hardware moves) ------------
 # The RFSoC is the timing master on the rfsoc4x2 branch.  Pin/channel defaults
 # must be checked against the QickConfig printed by the bitfile before use.
-RFSOC_IP = os.environ.get("NV_RFSOC_IP", "192.168.3.1")
+RFSOC_IP = os.environ.get("NV_RFSOC_IP", "192.168.0.236")
 RFSOC_SERVER_NAME = os.environ.get("NV_RFSOC_SERVER_NAME", "myqick")
 RFSOC_FIRMWARE = os.environ.get("NV_RFSOC_FIRMWARE", "photon_counting")
 RFSOC_ADC_CHANNEL = 0

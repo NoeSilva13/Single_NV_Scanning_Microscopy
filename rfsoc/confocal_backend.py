@@ -13,6 +13,20 @@ from .config import base_nv_config, readout_clock_hz, readout_plan
 from .confocal_line import ConfocalLine
 
 
+def analog_write_buffer(data):
+    """Copy *data* into the C-contiguous layout nidaqmx.Task.write requires.
+
+    Raster lines are column slices of ``(n_channels, N)`` and are not
+    C-contiguous. A 1-channel array is flattened to 1-D, matching the
+    nidaqmx convention used by :meth:`RFSoCConfocalBackend.acquire_line`.
+    """
+    data = np.asarray(data, dtype=np.float64)
+    if data.ndim == 1:
+        return np.ascontiguousarray(data)
+    write_data = data[0] if data.shape[0] == 1 else data
+    return np.ascontiguousarray(write_data)
+
+
 @dataclass
 class AcquisitionHandle:
     stop_event: threading.Event = field(default_factory=threading.Event)
@@ -93,7 +107,7 @@ class RFSoCConfocalBackend:
                     sample_mode=AcquisitionType.FINITE,
                     samps_per_chan=expected,
                 )
-                write_data = data[0] if data.shape[0] == 1 else data
+                write_data = analog_write_buffer(data)
                 task.write(write_data, auto_start=False)
                 task.start()  # Armed and waiting for RFSoC PMOD edges.
                 counts = np.asarray(program.acquire(progress=False), dtype=np.int64)

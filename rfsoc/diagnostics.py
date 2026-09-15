@@ -47,8 +47,13 @@ def validate_mw_frequency(frequency_hz=2.87e9):
     }
 
 
-def edge_count_rate(integration_seconds=0.01, reps=10, session=None):
-    """Collect repeated PL edge counts for threshold/linearity bench tests."""
+def edge_count_rate(integration_seconds=None, reps=10, session=None):
+    """Collect repeated PL edge counts for threshold/linearity bench tests.
+
+    The edge counter uses a 16-bit window, so a single diagnostic acquire must
+    stay below ``RFSOC_MAX_READOUT_SAMPLES / readout_clock`` (~213 µs at
+    307.2 MHz). Defaults to 100 µs when *integration_seconds* is omitted.
+    """
     from .config import base_nv_config, readout_plan
 
     session = session or RFSoCSession()
@@ -56,10 +61,15 @@ def edge_count_rate(integration_seconds=0.01, reps=10, session=None):
     with session.acquisition():
         cfg = base_nv_config(session, reps=reps)
         clock = readout_clock_hz(session.soccfg, cfg.adc_channel)
+        max_seconds = utils.RFSOC_MAX_READOUT_SAMPLES / clock
+        if integration_seconds is None:
+            integration_seconds = min(100e-6, max_seconds)
         plan = readout_plan(integration_seconds, clock)
         if plan.windows_per_pixel != 1:
             raise ValueError(
-                "Diagnostic window exceeds one hardware window; reduce integration"
+                "Diagnostic window exceeds one hardware window "
+                f"(max {max_seconds * 1e6:.1f} µs at {clock / 1e6:.1f} MHz); "
+                "reduce integration"
             )
         cfg.readout_integration_treg = plan.samples_per_window
         cfg.relax_delay_treg = 1
