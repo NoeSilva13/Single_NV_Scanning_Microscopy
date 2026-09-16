@@ -10,19 +10,26 @@ All notable changes to this project will be documented in this file following [K
   tail of every line was read from the wrong buffer slots.
 
 ### Added
-- `ConfocalFrame`, a QICK program nesting the pixel loop inside a line loop so
-  one acquire covers a whole block of lines. `RFSOC_FRAME_BLOCK_SECONDS` caps
-  the wall time of a block; `NV_RFSOC_FRAME_ACQUIRE=0` restores per-line
-  acquires. A 100x100 scan at 1 ms went from 500 acquires to 6.
+- `ConfocalFrame`, a QICK program nesting the pixel loop inside a line loop, so
+  one acquire covers a whole image. A 100x100 scan at 1 ms dwell went from 500
+  acquires to one, and from about 100 s to a little over the 10 s it spends
+  counting.
+- `stream_counts()`, which drains the accumulated buffer a readout stride at a
+  time while the tProc keeps counting. The image and its contrast fill in line by
+  line (pixel by pixel once one pixel outlasts `RFSOC_STREAM_UPDATE_SECONDS`) at
+  no cost in scan time, and Stop now lands mid-frame.
 - `window_linearity()` and `acquire_overhead()` bench probes, measuring the
   longest linear edge-counting window and the fixed cost of an acquire.
 
 ### Changed
-- A dwell within `RFSOC_MAX_COUNTING_WINDOW_S` (2 ms, measured) is integrated in
-  one window, so each pixel holds the counter for its whole dwell instead of
-  being revisited once per window.
+- Dwell is configured freely up to `RFSOC_MAX_COUNTING_WINDOW_S` (5 s, measured
+  with that probe) and always counted in a single window, so a pixel holds the
+  counter for its whole dwell. A longer dwell is refused, naming the probe to
+  re-run, rather than being split behind the user's back.
 - Scan previews refresh on a wall-time interval (`SCAN_PREVIEW_MIN_SECONDS`)
   rather than every N lines, which no longer matches how progress arrives.
+- Single-axis and Z sweeps run the same program and streaming loop as a raster,
+  so their live plot advances during the sweep instead of appearing at the end.
 - `window_linearity()` sweeps up to 5 s, stepping through every power of two so a
   counter narrower than the value written would reveal itself by where it wraps.
   Shots per window follow a wall-time budget instead of a fixed count, and the
@@ -33,6 +40,10 @@ All notable changes to this project will be documented in this file following [K
 - The 65535-sample window cap and the 128-readouts-per-acquire cap. The first
   came from a QICK warning about summing analog samples in a 32-bit accumulator,
   which an edge count cannot overflow; the second had no hardware basis.
+- Per-line and per-block confocal acquisition: `ConfocalLine`, `acquire_raster`,
+  `run_lines`, the frame-block helpers, `NV_RFSOC_FRAME_ACQUIRE` and
+  `RFSOC_FRAME_BLOCK_SECONDS`. Splitting a dwell into K windows summed over K
+  passes of the image went with them.
 
 ## [RFSoC4x2] - 2026-09-14
 ### Added

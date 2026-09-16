@@ -3,7 +3,7 @@ Generic N-axis raster scan engine (canonical unit: micrometers).
 -------------------------------------------------
 Builds the multi-channel voltage waveform for a hardware-timed raster over an
 arbitrary set of DAQ axes (1..3 in practice: X, Y, Z), drives it through
-``scanning_core.run_hardware_timed_sweep``, and reconstructs the acquired count
+``scanning_core.run_hardware_timed_raster``, and reconstructs the acquired count
 rate into a 2D image or 3D volume.
 
 Axis ordering is *fast to slow*: ``axes[0]`` sweeps fastest (one full line per

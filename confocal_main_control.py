@@ -595,8 +595,8 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
     """Run a hardware-timed raster over the given axes (fast..slow), in µm.
 
     Builds the multi-channel waveform through ``raster_engine``, drives it with
-    ``scanning_core.run_hardware_timed_sweep`` (AO clock exported to the Time
-    Tagger for CountBetweenMarkers), and reconstructs a 2D image or 3D volume.
+    ``scanning_core.run_hardware_timed_raster`` (one RFSoC program clocking the
+    NI analog output pixel by pixel), and reconstructs a 2D image or 3D volume.
     """
     global image, last_scan_mode, last_scan_axes, last_scan_layer
 
@@ -662,9 +662,9 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
         last_preview = [0.0]
 
         def _on_progress(counts, bins):
-            # Progress arrives per line on the per-line path and per block/pass
-            # on the frame path, so throttle on time instead of line count. The
-            # update that completes the scan is never dropped.
+            # Counts arrive a raster line at a time (a pixel at long dwells), so
+            # throttle on wall time rather than trying to repaint every update.
+            # The update that completes the scan is never dropped.
             now = time.monotonic()
             complete = int(np.count_nonzero(bins)) == int(np.size(bins))
             if not complete and now - last_preview[0] < SCAN_PREVIEW_MIN_SECONDS:

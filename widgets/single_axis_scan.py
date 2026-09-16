@@ -234,6 +234,9 @@ class SingleAxisScanWidget(QWidget):
                     axis, list(scan_points), list(count_rates)
                 )
 
+            except InterruptedError:
+                # Stop now lands mid-sweep, between two readout strides.
+                show_info('🛑 Single-axis scan stopped by user')
             except Exception as e:
                 show_info(f'❌ Single-axis scan error: {str(e)}')
             finally:

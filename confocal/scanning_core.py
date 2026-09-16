@@ -2,11 +2,7 @@
 
 import numpy as np
 
-from rfsoc.confocal_backend import (
-    AcquisitionHandle,
-    RFSoCConfocalBackend,
-    run_lines,
-)
+from rfsoc.confocal_backend import AcquisitionHandle, RFSoCConfocalBackend
 
 
 def _register_ref(ref, value, lock):
@@ -45,7 +41,11 @@ def run_hardware_timed_sweep(
     acquisition_ref=None,
     lock=None,
 ):
-    """Acquire one one-dimensional sweep with RFSoC as timing master."""
+    """Acquire one one-dimensional sweep with RFSoC as timing master.
+
+    *on_progress* is called as the sweep advances, with a zero bin width on
+    every point that has not been counted yet.
+    """
     waveform = np.asarray(waveform, dtype=float)
     if waveform.ndim == 1:
         waveform = waveform[np.newaxis, :]
@@ -53,18 +53,15 @@ def run_hardware_timed_sweep(
     handle = AcquisitionHandle()
     _register_ref(acquisition_ref, handle, lock)
     try:
-        counts, widths = RFSoCConfocalBackend(session).acquire_line(
+        return RFSoCConfocalBackend(session).acquire_line(
             ao_channels,
             waveform,
             1.0 / float(rate),
             n_imaging_points=n_points,
             handle=handle,
+            on_progress=on_progress,
+            stop_check=stop_check,
         )
-        if stop_check is not None and stop_check():
-            raise InterruptedError("scan stopped")
-        if on_progress is not None:
-            on_progress(counts, widths)
-        return counts, widths
     finally:
         _clear_refs(task_ref, acquisition_ref, lock)
 
@@ -86,18 +83,21 @@ def run_hardware_timed_raster(
     acquisition_ref=None,
     lock=None,
 ):
-    """Acquire a complete raster using one compiled QICK program and one NI task."""
+    """Acquire a complete raster using one compiled QICK program and one NI task.
+
+    *on_progress* is called while the frame is still being counted, with a zero
+    bin width on every pixel the tProc has not reached yet.
+    """
     handle = AcquisitionHandle()
     _register_ref(acquisition_ref, handle, lock)
     try:
-        return run_lines(
-            RFSoCConfocalBackend(session),
+        return RFSoCConfocalBackend(session).acquire_frame(
             ao_channels,
             waveform,
+            dwell_time,
             width=width,
             n_lines=n_lines,
             stride=stride,
-            dwell_seconds=dwell_time,
             n_flyback=n_flyback,
             flyback_seconds=flyback_seconds,
             on_line=on_progress,

@@ -43,7 +43,7 @@ class LivePlotNapariWidget(QWidget):
         self.alarm_color = alarm_color
         self.overflow_detected = False
         self._dt_ms = int(dt)
-        # Optional live control of the Time Tagger counter integration window.
+        # Optional live control of the photon counter integration window.
         self._binwidth_callback = binwidth_callback
         self._binwidth_ps = int(binwidth_ps) if binwidth_ps else None
 
@@ -142,8 +142,8 @@ class LivePlotNapariWidget(QWidget):
         self.window_spin.valueChanged.connect(self._on_window_changed)
         controls.addWidget(self.window_spin)
 
-        # Binwidth control (Time Tagger counter integration window), only shown
-        # when a callback is provided to rebuild the counter.
+        # Binwidth control (counter integration window), only shown when a
+        # callback is provided to rebuild the counter.
         if self._binwidth_callback is not None and self._binwidth_ps is not None:
             bin_label = QLabel('bin (ms):')
             bin_label.setToolTip('Counter integration window (ms)')
@@ -195,7 +195,7 @@ class LivePlotNapariWidget(QWidget):
         self.y_data = deque(self.y_data, maxlen=self.histogram_range)
 
     def _on_binwidth_changed(self, value_ms):
-        """Rebuild the Time Tagger counter with a new integration window (ms)."""
+        """Rebuild the photon counter with a new integration window (ms)."""
         self._binwidth_ps = int(value_ms * 1e9)
         if self._binwidth_callback is not None:
             self._binwidth_callback(self._binwidth_ps)
@@ -291,7 +291,7 @@ def live_plot(
     alarm_color : str
         Color of the overflow alarm.
     binwidth_ps : int, optional
-        Initial Time Tagger counter integration window in picoseconds. When
+        Initial counter integration window in picoseconds. When
         given together with ``binwidth_callback``, a "bin (ms)" control is shown.
     binwidth_callback : callable, optional
         Called with the new binwidth in picoseconds when the user changes the

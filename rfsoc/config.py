@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
 from typing import Iterable
 
 import numpy as np
@@ -13,10 +12,8 @@ from common import utils
 
 @dataclass(frozen=True)
 class ReadoutPlan:
-    windows_per_pixel: int
-    window_seconds: float
-    effective_seconds: float
-    samples_per_window: int
+    seconds: float
+    samples: int
 
 
 def expected_nqz(firmware: str, frequency_hz: float) -> int:
@@ -45,33 +42,24 @@ def validate_hardware_settings(frequency_hz: float | None = None) -> None:
             )
 
 
-def readout_plan(
-    dwell_seconds: float,
-    readout_clock_hz: float,
-    max_samples: int | None = None,
-) -> ReadoutPlan:
-    """Split a requested dwell into equally sized, validated ADC windows.
+def readout_plan(dwell_seconds: float, readout_clock_hz: float) -> ReadoutPlan:
+    """Express a dwell as the single ADC window that will count it.
 
-    A dwell within ``RFSOC_MAX_COUNTING_WINDOW_S`` needs a single window, which
-    is what lets one pixel hold the counter for its whole dwell.
+    Every pixel holds the edge counter for its whole dwell.  A dwell past the
+    window measured on this board is refused rather than split: splitting one
+    dwell into several windows means either several readouts per pixel or
+    several passes over the image, and both cost more than they buy.
     """
     if dwell_seconds <= 0 or readout_clock_hz <= 0:
         raise ValueError("dwell and readout clock must be positive")
-    if max_samples is None:
-        max_samples = int(utils.RFSOC_MAX_COUNTING_WINDOW_S * readout_clock_hz)
-    max_samples = max(1, int(max_samples))
-    requested_samples = max(1, int(round(dwell_seconds * readout_clock_hz)))
-    windows = int(math.ceil(requested_samples / max_samples))
-    samples = int(math.ceil(requested_samples / windows))
-    if samples > max_samples:
-        raise AssertionError("readout window split exceeded the validated limit")
-    window_seconds = samples / readout_clock_hz
-    return ReadoutPlan(
-        windows_per_pixel=windows,
-        window_seconds=window_seconds,
-        effective_seconds=windows * window_seconds,
-        samples_per_window=samples,
-    )
+    if dwell_seconds > utils.RFSOC_MAX_COUNTING_WINDOW_S:
+        raise ValueError(
+            f"dwell {dwell_seconds:.6g} s is longer than the counting window "
+            f"measured on this board ({utils.RFSOC_MAX_COUNTING_WINDOW_S:.6g} s); "
+            "re-run rfsoc.diagnostics.window_linearity() to justify raising it"
+        )
+    samples = max(1, int(round(dwell_seconds * readout_clock_hz)))
+    return ReadoutPlan(seconds=samples / readout_clock_hz, samples=samples)
 
 
 def validate_linear_sweep(values: Iterable[float], name: str) -> np.ndarray:

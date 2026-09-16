@@ -72,24 +72,17 @@ def edge_count_rate(integration_seconds=None, reps=10, session=None):
     with session.acquisition():
         cfg = base_nv_config(session, reps=reps)
         clock = readout_clock_hz(session.soccfg, cfg.adc_channel)
-        max_seconds = utils.RFSOC_MAX_COUNTING_WINDOW_S
         if integration_seconds is None:
-            integration_seconds = min(100e-6, max_seconds)
+            integration_seconds = min(100e-6, utils.RFSOC_MAX_COUNTING_WINDOW_S)
         plan = readout_plan(integration_seconds, clock)
-        if plan.windows_per_pixel != 1:
-            raise ValueError(
-                "Diagnostic window exceeds one validated window "
-                f"(max {max_seconds * 1e6:.1f} µs); reduce integration or "
-                "re-run window_linearity() to justify a longer one"
-            )
-        cfg.readout_integration_treg = plan.samples_per_window
+        cfg.readout_integration_treg = plan.samples
         cfg.relax_delay_treg = 1
         total = int(session.qd.PLIntensity(cfg).acquire(progress=False))
     return {
         "total_counts": total,
         "reps": reps,
-        "integration_seconds": plan.effective_seconds,
-        "count_rate_cps": total / (reps * plan.effective_seconds),
+        "integration_seconds": plan.seconds,
+        "count_rate_cps": total / (reps * plan.seconds),
         "high_threshold": cfg.high_threshold,
         "low_threshold": cfg.low_threshold,
     }
@@ -191,8 +184,9 @@ def window_linearity(
     QICK warns above 2**16 samples about overflowing the sum buffer, but that
     warning is about accumulating 15-bit analog samples in a 32-bit word and
     does not apply to an edge count. A run against an 80 kHz source stayed
-    proportional from 13 µs to 2 ms, with no sign of the 16-bit truncation that
-    would have zeroed the 131072-sample point.
+    proportional from 13 µs to 5 s, with no sign of the 16-bit truncation that
+    would have zeroed the 131072-sample point; that measurement is what
+    ``RFSOC_MAX_COUNTING_WINDOW_S`` records.
 
     The ladder reaches *max_seconds*, 5 s by default, which is most of what a
     single shot can schedule: past roughly 7 s the window no longer fits the
@@ -252,9 +246,9 @@ def acquire_overhead(shot_counts=(1, 10, 100, 1000), integration_treg=4096,
                      session=None):
     """Split acquire wall time into fixed cost per call and cost per shot.
 
-    Confocal scan time is dominated by the number of ``acquire()`` calls, not by
-    integration. The fitted intercept is what a whole-frame program would pay
-    once instead of once per line and per dwell split.
+    Confocal scan time used to be dominated by the number of ``acquire()`` calls
+    rather than by integration. The fitted intercept is what the whole-frame
+    program now pays once per image instead of once per line.
     """
     import time
 

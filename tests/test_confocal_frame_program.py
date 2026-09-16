@@ -25,7 +25,6 @@ def frame_config(width=4, n_lines=3, n_flyback=2, n_lead=2):
     cfg.pixel_settle_treg = 2150
     cfg.readout_integration_treg = 61440
     cfg.readout_window_tproc_treg = 86016
-    cfg.windows_per_pixel = 1
     cfg.flyback_period_treg = 430080
     cfg.relax_delay_treg = 1
     cfg.reps = width

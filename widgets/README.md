@@ -9,6 +9,7 @@ Hardware-timed scans now receive an `RFSoCSession` and an
 - `stop_scan(..., scan_task_ref, acquisition_ref, scan_lock)`
 
 Manual X/Y/Z controls remain NI on-demand AO writes. Raster, single-axis, and
-Z sweeps arm finite NI AO tasks with an external RFSoC PMOD clock. Stop marks
-the acquisition and prevents the next line; the current RFSoC/NI line is
-allowed to finish.
+Z sweeps arm one finite NI AO task with an external RFSoC PMOD clock, and the
+counts stream back while it runs. Stop marks the acquisition and takes effect
+between two readout strides: within a line at ordinary dwells, within a pixel at
+long ones.

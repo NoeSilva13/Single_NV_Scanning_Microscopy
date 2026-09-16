@@ -55,32 +55,34 @@ that check does not replace a spectrum-analyzer measurement.
 The NI device remains responsible for `ao0`, `ao1`, and `ao2`, including all DC
 writes. During a scan:
 
-1. The host buffers a block of lines and arms a finite AO task using PFI8 as an
-   external rising-edge sample clock. `RFSOC_FRAME_BLOCK_SECONDS` sets how much
-   wall time one block is allowed to take.
-2. One `ConfocalFrame.acquire()` emits a PMOD edge for each sample in the block,
-   with the pixel loop nested inside a line loop.
+1. The host buffers the whole raster and arms one finite AO task using PFI8 as an
+   external rising-edge sample clock. The task is started after the program is
+   uploaded and before the readout job is queued, because QICK's streamer is
+   what starts the tProc.
+2. One `ConfocalFrame` emits a PMOD edge for each sample of the frame, with the
+   pixel loop nested inside a line loop.
 3. After every imaging edge the program waits for galvo/piezo settle, then
    integrates one edge-counting window.
-4. Lead-in clocks before the block and flyback clocks after each line carry no
-   ADC trigger, so the accumulated buffer holds exactly one readout per pixel.
-5. The host adds the block to napari and arms the next one.
+4. Lead-in clocks before the first line and flyback clocks after each line carry
+   no ADC trigger, so the accumulated buffer holds exactly one readout per pixel.
+5. `stream_counts()` drains that buffer while the tProc keeps running, a stride
+   at a time, and hands each stride to napari. `RFSOC_STREAM_UPDATE_SECONDS`
+   sets the stride: one raster line at ordinary dwells, single pixels once one
+   pixel outlasts an update. Only the *unread* backlog is bounded by
+   `avg_maxlen`, so a whole image is one acquire at any resolution.
 
 Edge counting has no 16-bit window limit. QICK warns above 65536 readout samples,
 but that warning is about summing 15-bit analog samples into a 32-bit
 accumulator, which a photon count cannot overflow. `window_linearity()` measured
-counts proportional to the window from 13 us to 2 ms, which is the value in
-`RFSOC_MAX_COUNTING_WINDOW_S`: any dwell within it is integrated in a single
-window, and only a longer dwell is divided into K windows and summed over K
-passes of the block. Count rates use the effective integrated duration,
-excluding settle and flyback.
+counts proportional to the window from 13 us to 5 s, which is the value in
+`RFSOC_MAX_COUNTING_WINDOW_S`. Every pixel integrates its whole dwell in one
+window: a dwell past that measurement is refused rather than split, and the next
+ceiling up is the 31-bit tProc immediate carrying the window, 6.99 s. Count
+rates use the integrated window only, excluding settle and flyback.
 
-Set `NV_RFSOC_FRAME_ACQUIRE=0` to fall back to one acquire per line, which is
-otherwise identical.
-
-Stop is deterministic between blocks. QICK 0.2.302 does not provide a safe
-cooperative cancellation of a blocked remote `acquire()`, so an RFSoC/NI block
-already in progress is allowed to finish before the next one is suppressed.
+Stop lands between two readout strides: within a line at ordinary dwells, within
+a pixel at long ones. It stops the tProc directly, and the next `start_readout`
+tears down the streamer, which is QICK's own cleanup path.
 
 ## Bench acceptance sequence
 

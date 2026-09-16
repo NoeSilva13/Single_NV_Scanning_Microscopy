@@ -18,19 +18,21 @@ The branches are separate hardware products; there is no runtime backend flag.
 
 ### Confocal
 
-RFSoC is the timing master. For each block of raster lines the PC:
+RFSoC is the timing master. For a whole raster the PC:
 
 1. buffers the existing µm-derived voltage waveform in the NI DAQ;
 2. arms NI AO from external sample clock `/Dev1/PFI8`;
-3. runs one `ConfocalFrame.acquire()`;
-4. receives one photon count per imaging pixel;
-5. updates napari and repeats for the next block.
+3. runs one `ConfocalFrame`, covering the entire image;
+4. receives the photon counts a stride at a time while the tProc keeps counting;
+5. redraws napari on every stride, so the image and its contrast fill in line by
+   line (pixel by pixel at long dwells).
 
 The program emits additional pixel-clock pulses during lead-in and flyback
-without triggering the ADC. Each pixel integrates its whole dwell in a single
-edge-count window; only a dwell beyond `RFSOC_MAX_COUNTING_WINDOW_S` is split
-into windows and summed. X/Y/Z DC writes, click-to-move, sliders, park,
-XY/XZ/YZ/XYZ geometry and canonical µm units remain on the NI path.
+without triggering the ADC. Every pixel integrates its whole dwell in a single
+edge-count window; a dwell beyond `RFSOC_MAX_COUNTING_WINDOW_S`, the longest
+window measured on the board, is refused rather than split. X/Y/Z DC writes,
+click-to-move, sliders, park, XY/XZ/YZ/XYZ geometry and canonical µm units
+remain on the NI path.
 
 ### Experiments
 
@@ -89,5 +91,5 @@ known cancellation limitations.
 
 ## Phase-1 exclusions
 
-Readout transient, g(2), Ramsey, Hahn echo, frame-level acquisition, removal of
-the NI DAQ, and point-by-point live experiment plotting are not implemented.
+Readout transient, g(2), Ramsey, Hahn echo, removal of the NI DAQ, and
+point-by-point live experiment plotting are not implemented.

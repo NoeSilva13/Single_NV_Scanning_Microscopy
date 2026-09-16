@@ -275,6 +275,9 @@ class AutoFocusWidget(QWidget):
             else:
                 self._notify_signal.emit('✅ Z scan done')
 
+        except InterruptedError:
+            # Stop now lands mid-sweep, between two readout strides.
+            self._notify_signal.emit('🛑 Z scan stopped by user')
         except Exception as e:
             self._notify_signal.emit(f'❌ Z scan error: {str(e)}')
         finally:
