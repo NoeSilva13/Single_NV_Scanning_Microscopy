@@ -30,6 +30,10 @@ All notable changes to this project will be documented in this file following [K
   rather than every N lines, which no longer matches how progress arrives.
 - Single-axis and Z sweeps run the same program and streaming loop as a raster,
   so their live plot advances during the sweep instead of appearing at the end.
+- QICK's analog sum-buffer warning is filtered while an edge-counting program is
+  compiled. It fires for every window past 2**16 samples, which every confocal
+  dwell and every live-count point now is, and the 32-bit overflow it warns about
+  cannot happen when the readout counts pulses instead of summing samples.
 - `window_linearity()` sweeps up to 5 s, stepping through every power of two so a
   counter narrower than the value written would reveal itself by where it wraps.
   Shots per window follow a wall-time budget instead of a fixed count, and the

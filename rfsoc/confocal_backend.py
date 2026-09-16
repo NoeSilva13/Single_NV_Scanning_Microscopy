@@ -9,7 +9,12 @@ from typing import Callable
 import numpy as np
 
 from common import utils
-from .config import base_nv_config, readout_clock_hz, readout_plan
+from .config import (
+    base_nv_config,
+    edge_counting_warnings_muted,
+    readout_clock_hz,
+    readout_plan,
+)
 from .confocal_frame import ConfocalFrame, stream_counts
 
 
@@ -237,7 +242,8 @@ class RFSoCConfocalBackend:
                 n_lines=n_lines,
                 n_lead=n_lead,
             )
-            program = ConfocalFrame(cfg)
+            with edge_counting_warnings_muted():
+                program = ConfocalFrame(cfg)
             frame = frame_waveform(waveform, width, n_lines, stride, n_flyback)
             parked = np.asarray(waveform, dtype=float)
             if parked.ndim == 1:
@@ -331,5 +337,7 @@ class RFSoCConfocalBackend:
             plan = readout_plan(integration_seconds, clock)
             cfg.readout_integration_treg = plan.samples
             cfg.relax_delay_treg = 1
-            counts = int(qd.PLIntensity(cfg).acquire(progress=False))
+            with edge_counting_warnings_muted():
+                program = qd.PLIntensity(cfg)
+            counts = int(program.acquire(progress=False))
             return counts / plan.seconds, False

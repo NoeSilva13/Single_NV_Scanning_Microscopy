@@ -1,7 +1,14 @@
+import logging
+
 import pytest
 
 from common.utils import RFSOC_MAX_COUNTING_WINDOW_S
-from rfsoc.config import expected_nqz, readout_plan, validate_linear_sweep
+from rfsoc.config import (
+    edge_counting_warnings_muted,
+    expected_nqz,
+    readout_plan,
+    validate_linear_sweep,
+)
 
 READOUT_CLOCK_HZ = 307.2e6
 
@@ -23,6 +30,23 @@ def test_any_dwell_up_to_the_measured_window_is_counted_in_one_go():
 def test_a_dwell_past_the_measured_window_is_refused_not_split():
     with pytest.raises(ValueError, match="window_linearity"):
         readout_plan(RFSOC_MAX_COUNTING_WINDOW_S * 1.01, READOUT_CLOCK_HZ)
+
+
+def test_only_the_analog_sum_buffer_warning_is_muted(caplog):
+    logger = logging.getLogger("qick.qick_asm")
+    with caplog.at_level(logging.WARNING, logger="qick.qick_asm"):
+        with edge_counting_warnings_muted():
+            logger.warning(
+                "With the given readout length there is a possibility that the "
+                "sum buffer will overflow giving invalid results."
+            )
+            logger.warning("some other readout warning")
+        logger.warning("the filter is gone once the program is built")
+
+    assert [record.getMessage() for record in caplog.records] == [
+        "some other readout warning",
+        "the filter is gone once the program is built",
+    ]
 
 
 def test_only_linear_hardware_sweeps_are_accepted():

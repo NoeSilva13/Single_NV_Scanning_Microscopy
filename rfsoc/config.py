@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
+import logging
 from typing import Iterable
 
 import numpy as np
@@ -79,6 +81,35 @@ def readout_clock_hz(soccfg, adc_channel: int = utils.RFSOC_ADC_CHANNEL) -> floa
         if key in cfg:
             return float(cfg[key]) * 1e6
     raise KeyError("QickConfig does not expose the readout clock")
+
+
+_SUM_BUFFER_WARNING = "sum buffer will overflow"
+
+
+class _SumBufferFilter(logging.Filter):
+    def filter(self, record):
+        return _SUM_BUFFER_WARNING not in record.getMessage()
+
+
+@contextmanager
+def edge_counting_warnings_muted():
+    """Drop QICK's sum-buffer warning while an edge-counting program compiles.
+
+    ``declare_readout`` warns for every window longer than 2**16 samples, since
+    summing 15-bit analog samples that long can overflow the 32-bit accumulator.
+    An edge count increments once per pulse instead of summing samples, so the
+    arithmetic behind the warning does not apply, and confocal dwells are past
+    that length by design: ``window_linearity()`` measured counts proportional to
+    the window up to ``RFSOC_MAX_COUNTING_WINDOW_S``.  Only this one message is
+    filtered, and only while the program is being built.
+    """
+    logger = logging.getLogger("qick.qick_asm")
+    sum_buffer_filter = _SumBufferFilter()
+    logger.addFilter(sum_buffer_filter)
+    try:
+        yield
+    finally:
+        logger.removeFilter(sum_buffer_filter)
 
 
 def base_nv_config(session, *, reps: int = 1):
