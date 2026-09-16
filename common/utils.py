@@ -58,12 +58,20 @@ RFSOC_EDGE_LOW_THRESHOLD = 500
 RFSOC_PIXEL_CLOCK_WIDTH_NS = 100
 RFSOC_CONFOCAL_SETTLE_US = 5.0
 RFSOC_GALVO_FLYBACK_S = 0.002
-RFSOC_MAX_READOUT_SAMPLES = (2 ** 16) - 1
-# Max one-window ADC shots per QICK acquire. Multi-window dwells retrace
-# the line once per legal window (~213 µs) and sum; each pass is one shot
-# per pixel. 128 is below the ~150 stale-tail seen with 5-window bodies.
-RFSOC_MAX_ADC_READOUTS = 128
-SCAN_PREVIEW_EVERY_LINES = 5
+# Longest single edge-counting window measured to stay linear on this board:
+# window_linearity() found counts proportional to the window from 13 us to 2 ms.
+# QICK warns above 2**16 readout samples, but that warning covers summing 15-bit
+# analog samples into a 32-bit accumulator, which an edge count cannot overflow.
+# Raise this only after re-running that probe at the longer window.
+RFSOC_MAX_COUNTING_WINDOW_S = 2e-3
+# Acquire a whole block of raster lines per QICK program instead of one line at
+# a time. Set NV_RFSOC_FRAME_ACQUIRE=0 to fall back to the per-line path.
+RFSOC_FRAME_ACQUIRE = os.environ.get("NV_RFSOC_FRAME_ACQUIRE", "1") != "0"
+# Target wall time of a single frame-block acquire: larger blocks amortise the
+# fixed cost per acquire, smaller ones refresh the preview more often.
+RFSOC_FRAME_BLOCK_SECONDS = 2.0
+# Minimum wall time between napari preview refreshes during a scan.
+SCAN_PREVIEW_MIN_SECONDS = 0.5
 
 DAQ_GALVO_X = "Dev1/ao0"
 DAQ_GALVO_Y = "Dev1/ao1"

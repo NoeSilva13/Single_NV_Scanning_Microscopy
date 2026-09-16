@@ -39,7 +39,7 @@ from common.utils import (
     BINWIDTH,
     MICRONS_PER_VOLT,
     RFSOC_GALVO_FLYBACK_S,
-    SCAN_PREVIEW_EVERY_LINES,
+    SCAN_PREVIEW_MIN_SECONDS,
     save_tiff_with_imagej_metadata
 )
 from qtpy.QtWidgets import QWidget, QGridLayout
@@ -659,14 +659,17 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
 
         start_time = time.time()
 
+        last_preview = [0.0]
+
         def _on_progress(counts, bins):
-            n_done = int(np.count_nonzero(bins) // width)
-            if (
-                n_done != 1
-                and n_done != n_lines
-                and n_done % SCAN_PREVIEW_EVERY_LINES != 0
-            ):
+            # Progress arrives per line on the per-line path and per block/pass
+            # on the frame path, so throttle on time instead of line count. The
+            # update that completes the scan is never dropped.
+            now = time.monotonic()
+            complete = int(np.count_nonzero(bins)) == int(np.size(bins))
+            if not complete and now - last_preview[0] < SCAN_PREVIEW_MIN_SECONDS:
                 return
+            last_preview[0] = now
             arr = raster_engine.reconstruct(counts, bins, shape, stride, width)
             acquired = np.asarray(bins).reshape(shape) > 0
 

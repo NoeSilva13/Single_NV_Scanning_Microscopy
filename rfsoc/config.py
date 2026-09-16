@@ -48,16 +48,23 @@ def validate_hardware_settings(frequency_hz: float | None = None) -> None:
 def readout_plan(
     dwell_seconds: float,
     readout_clock_hz: float,
-    max_samples: int = utils.RFSOC_MAX_READOUT_SAMPLES,
+    max_samples: int | None = None,
 ) -> ReadoutPlan:
-    """Split a requested dwell into legal, equally sized ADC windows."""
+    """Split a requested dwell into equally sized, validated ADC windows.
+
+    A dwell within ``RFSOC_MAX_COUNTING_WINDOW_S`` needs a single window, which
+    is what lets one pixel hold the counter for its whole dwell.
+    """
     if dwell_seconds <= 0 or readout_clock_hz <= 0:
         raise ValueError("dwell and readout clock must be positive")
+    if max_samples is None:
+        max_samples = int(utils.RFSOC_MAX_COUNTING_WINDOW_S * readout_clock_hz)
+    max_samples = max(1, int(max_samples))
     requested_samples = max(1, int(round(dwell_seconds * readout_clock_hz)))
     windows = int(math.ceil(requested_samples / max_samples))
     samples = int(math.ceil(requested_samples / windows))
     if samples > max_samples:
-        raise AssertionError("readout window split exceeded hardware limit")
+        raise AssertionError("readout window split exceeded the validated limit")
     window_seconds = samples / readout_clock_hz
     return ReadoutPlan(
         windows_per_pixel=windows,

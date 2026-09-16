@@ -13,49 +13,6 @@ from .config import base_nv_config, readout_clock_hz, readout_plan
 from .confocal_line import ConfocalLine
 
 
-def max_pixels_per_acquire(
-    windows_per_pixel, max_readouts=utils.RFSOC_MAX_ADC_READOUTS
-):
-    """Largest imaging chunk whose ADC windows fit in one QICK acquire.
-
-    The dwell sets ``windows_per_pixel`` via :func:`readout_plan`.  One
-    acquire may request at most ``max_readouts`` ADC transfers, so
-    ``max_pixels = max_readouts // windows_per_pixel``.
-    """
-    windows = max(1, int(windows_per_pixel))
-    max_readouts = int(max_readouts)
-    if windows > max_readouts:
-        raise ValueError(
-            f"{windows} ADC windows per pixel exceed {max_readouts} "
-            "transfers per acquire; shorten the dwell"
-        )
-    return max_readouts // windows
-
-
-def iter_line_chunks(
-    n_imaging,
-    n_flyback,
-    windows_per_pixel,
-    max_readouts=utils.RFSOC_MAX_ADC_READOUTS,
-):
-    """Yield ``(start, n_pixels, n_flyback)`` acquires for one AO line.
-
-    Flyback clocks stay on the last chunk so one NI finite task can still
-    cover the whole line.
-    """
-    max_pixels = max_pixels_per_acquire(windows_per_pixel, max_readouts)
-    n_imaging = int(n_imaging)
-    n_flyback = int(n_flyback)
-    if n_imaging < 1:
-        raise ValueError("n_imaging must be positive")
-    start = 0
-    while start < n_imaging:
-        n_pix = min(max_pixels, n_imaging - start)
-        last = start + n_pix >= n_imaging
-        yield start, n_pix, (n_flyback if last else 0)
-        start += n_pix
-
-
 def analog_write_buffer(data):
     """Copy *data* into the C-contiguous layout nidaqmx.Task.write requires.
 
@@ -70,8 +27,8 @@ def analog_write_buffer(data):
     return np.ascontiguousarray(write_data)
 
 
-def iter_raster_lines(waveform, width, n_lines, stride, n_flyback):
-    """Yield ``(line_index, line_waveform, n_flyback)`` for one raster.
+def raster_line(waveform, width, n_lines, stride, n_flyback, line_index):
+    """Return one ``width + n_flyback`` sample line of a flattened raster.
 
     The last host line has no trailing flyback samples in *waveform*.  Those
     samples are padded with the final imaging position so every line uses the
@@ -82,25 +39,83 @@ def iter_raster_lines(waveform, width, n_lines, stride, n_flyback):
         waveform = waveform[np.newaxis, :]
     width = int(width)
     n_flyback = int(n_flyback)
+    source_start = int(line_index) * int(stride)
+    trailing = n_flyback if int(line_index) < int(n_lines) - 1 else 0
+    line = waveform[:, source_start:source_start + width + trailing]
+    if n_flyback and line.shape[1] == width:
+        line = np.concatenate(
+            [line, np.repeat(line[:, -1:], n_flyback, axis=1)], axis=1
+        )
+    return line
+
+
+def iter_raster_lines(waveform, width, n_lines, stride, n_flyback):
+    """Yield ``(line_index, line_waveform, n_flyback)`` for one raster."""
     for line_index in range(int(n_lines)):
-        source_start = line_index * int(stride)
-        trailing = n_flyback if line_index < n_lines - 1 else 0
-        source_stop = source_start + width + trailing
-        line = waveform[:, source_start:source_stop]
-        if n_flyback and line.shape[1] == width:
-            line = np.concatenate(
-                [line, np.repeat(line[:, -1:], n_flyback, axis=1)],
-                axis=1,
-            )
-        yield line_index, line, n_flyback
+        line = raster_line(
+            waveform, width, n_lines, stride, n_flyback, line_index
+        )
+        yield line_index, line, int(n_flyback)
 
 
-def should_publish_scan_progress(line_index, n_lines, every=utils.SCAN_PREVIEW_EVERY_LINES):
-    """Return True for the first line, every *every* lines, and the last line."""
-    n_done = int(line_index) + 1
+def lines_per_block(
+    width, n_flyback, window_seconds, flyback_seconds=None, budget_seconds=None
+):
+    """How many lines to put in one acquire to spend about *budget_seconds*.
+
+    Larger blocks amortise the fixed cost of an acquire over more pixels;
+    smaller blocks keep the napari preview and the stop request responsive.
+    """
+    if budget_seconds is None:
+        budget_seconds = utils.RFSOC_FRAME_BLOCK_SECONDS
+    pixel = float(window_seconds) + utils.RFSOC_CONFOCAL_SETTLE_US * 1e-6
+    retrace = (
+        float(flyback_seconds)
+        if flyback_seconds is not None
+        else utils.RFSOC_GALVO_FLYBACK_S
+    )
+    line = int(width) * pixel + (retrace if int(n_flyback) > 0 else 0.0)
+    if line <= 0:
+        return 1
+    return max(1, int(float(budget_seconds) // line))
+
+
+def iter_frame_blocks(n_lines, block_lines):
+    """Yield ``(first_line, n_block_lines)`` acquires covering the raster."""
     n_lines = int(n_lines)
-    every = max(1, int(every))
-    return n_done == 1 or n_done == n_lines or n_done % every == 0
+    block_lines = max(1, int(block_lines))
+    if n_lines < 1:
+        raise ValueError("n_lines must be positive")
+    for first in range(0, n_lines, block_lines):
+        yield first, min(block_lines, n_lines - first)
+
+
+def block_waveform(
+    waveform, width, n_lines, stride, n_flyback, first_line, block_lines
+):
+    """Concatenate the flyback-padded lines of one acquisition block."""
+    lines = [
+        raster_line(waveform, width, n_lines, stride, n_flyback, line_index)
+        for line_index in range(int(first_line), int(first_line) + int(block_lines))
+    ]
+    return np.concatenate(lines, axis=1)
+
+
+def lead_in_waveform(parked, target, n_lead):
+    """Ramp the AO from its parked position to the first pixel of a block.
+
+    Every pass and every block starts the NI task at the first pixel of its
+    first line, which can be a full-field jump away from where the previous
+    task left the galvo.  These samples are clocked before the first ADC
+    window, so the jump gets the same retrace budget as a line flyback.
+    """
+    n_lead = int(n_lead)
+    parked = np.asarray(parked, dtype=float).reshape(-1, 1)
+    target = np.asarray(target, dtype=float).reshape(-1, 1)
+    if n_lead < 1:
+        return np.zeros((parked.shape[0], 0), dtype=float)
+    steps = np.linspace(0.0, 1.0, n_lead + 1)[1:]
+    return parked + (target - parked) * steps
 
 
 @dataclass
@@ -119,7 +134,13 @@ class RFSoCConfocalBackend:
         self.session = session
 
     def _program_config(
-        self, width, dwell_seconds, n_flyback, flyback_seconds=None
+        self,
+        width,
+        dwell_seconds,
+        n_flyback,
+        flyback_seconds=None,
+        n_lines=1,
+        n_lead=0,
     ):
         cfg = base_nv_config(self.session, reps=width)
         ro_clock = readout_clock_hz(self.session.soccfg, cfg.adc_channel)
@@ -136,14 +157,17 @@ class RFSoCConfocalBackend:
         )
         n_flyback = int(n_flyback)
         cfg.n_flyback = n_flyback
-        if n_flyback > 0:
+        cfg.n_lines = int(n_lines)
+        cfg.n_lead = int(n_lead)
+        n_retrace = max(n_flyback, cfg.n_lead)
+        if n_retrace > 0:
             total = (
                 float(flyback_seconds)
                 if flyback_seconds is not None
                 else utils.RFSOC_GALVO_FLYBACK_S
             )
             period_s = max(
-                total / n_flyback,
+                total / n_retrace,
                 utils.RFSOC_CONFOCAL_SETTLE_US * 1e-6,
             )
             cfg.flyback_period_treg = max(1, int(round(period_s * tproc_hz)))
@@ -156,8 +180,10 @@ class RFSoCConfocalBackend:
             plan.effective_seconds + utils.RFSOC_CONFOCAL_SETTLE_US * 1e-6
         )
         tproc_hz = float(self.session.soccfg["tprocs"][0]["f_time"]) * 1e6
-        flyback = int(cfg.n_flyback) * (int(cfg.flyback_period_treg) / tproc_hz)
-        return max(10.0, 2.0 * (imaging + flyback))
+        retrace = (int(cfg.n_flyback) * int(cfg.n_lines) + int(cfg.n_lead)) * (
+            int(cfg.flyback_period_treg) / tproc_hz
+        )
+        return max(10.0, 2.0 * (int(cfg.n_lines) * imaging + retrace))
 
     def _open_ao_task(self, ao_channels, expected, plan):
         import nidaqmx
@@ -194,45 +220,30 @@ class RFSoCConfocalBackend:
             pass
         task.close()
 
-    def _compile_line_programs(
-        self, n_imaging, n_flyback, dwell_seconds, flyback_seconds=None
+    def _compile_line_program(
+        self, n_imaging, n_flyback, window_seconds, flyback_seconds=None
     ):
-        """Compile one ConfocalLine per ADC-safe chunk of a host line."""
-        probe, plan = self._program_config(
+        """Compile the single ConfocalLine that clocks one whole host line."""
+        cfg, plan = self._program_config(
             int(n_imaging),
-            dwell_seconds,
+            window_seconds,
             int(n_flyback),
             flyback_seconds=flyback_seconds,
         )
-        programs = []
-        compiled = {}
-        for _start, n_pix, fb in iter_line_chunks(
-            n_imaging, n_flyback, plan.windows_per_pixel
-        ):
-            key = (n_pix, fb)
-            if key not in compiled:
-                if key == (int(n_imaging), int(n_flyback)):
-                    cfg = probe
-                else:
-                    cfg, _ = self._program_config(
-                        n_pix,
-                        dwell_seconds,
-                        fb,
-                        flyback_seconds=flyback_seconds,
-                    )
-                compiled[key] = ConfocalLine(cfg)
-            programs.append(compiled[key])
-        return programs, plan, probe
+        return ConfocalLine(cfg), plan, cfg
 
-    def _clock_and_count(self, task, programs, data, timeout):
+    def _clock_and_count(self, task, program, data, timeout):
+        """Arm NI, run the tProc, and return the counts it accumulated.
+
+        The NI task must be written and started before the program runs: the
+        first pixel clock arrives within microseconds of the tProc starting.
+        """
         write_data = analog_write_buffer(data)
         task.write(write_data, auto_start=False)
         task.start()
-        parts = [
-            np.array(program.acquire(progress=False), dtype=np.int64, copy=True)
-            for program in programs
-        ]
-        counts = np.concatenate(parts) if len(parts) > 1 else parts[0]
+        counts = np.array(
+            program.acquire(progress=False), dtype=np.int64, copy=True
+        )
         task.wait_until_done(timeout=timeout)
         try:
             task.stop()
@@ -240,12 +251,12 @@ class RFSoCConfocalBackend:
             pass
         return counts
 
-    def _sum_window_passes(self, task, programs, data, timeout, n_windows, n_pixels):
-        """Retrace the line once per legal ADC window and sum the counts."""
+    def _sum_window_passes(self, task, program, data, timeout, n_windows, n_pixels):
+        """Retrace the line once per ADC window and sum the counts."""
         n_windows = int(n_windows)
         total = np.zeros(int(n_pixels), dtype=np.int64)
         for _ in range(n_windows):
-            total += self._clock_and_count(task, programs, data, timeout)
+            total += self._clock_and_count(task, program, data, timeout)
         return total
 
     def acquire_line(
@@ -280,7 +291,7 @@ class RFSoCConfocalBackend:
                 int(n_flyback),
                 flyback_seconds=flyback_seconds,
             )
-            programs, window_plan, cfg = self._compile_line_programs(
+            program, window_plan, cfg = self._compile_line_program(
                 int(n_imaging_points),
                 int(n_flyback),
                 dwell_plan.window_seconds,
@@ -291,7 +302,7 @@ class RFSoCConfocalBackend:
             try:
                 counts = self._sum_window_passes(
                     task,
-                    programs,
+                    program,
                     data,
                     self._line_timeout(window_plan, n_imaging_points, cfg),
                     dwell_plan.windows_per_pixel,
@@ -330,7 +341,7 @@ class RFSoCConfocalBackend:
             _, dwell_plan = self._program_config(
                 width, dwell_seconds, n_flyback, flyback_seconds=flyback_seconds
             )
-            programs, window_plan, cfg = self._compile_line_programs(
+            program, window_plan, cfg = self._compile_line_program(
                 width,
                 n_flyback,
                 dwell_plan.window_seconds,
@@ -353,7 +364,7 @@ class RFSoCConfocalBackend:
                         )
                     line_counts = self._sum_window_passes(
                         task,
-                        programs,
+                        program,
                         line_waveform,
                         timeout,
                         dwell_plan.windows_per_pixel,
@@ -371,6 +382,108 @@ class RFSoCConfocalBackend:
             finally:
                 handle.task = None
                 self._close_ao_task(task)
+        return counts, widths
+
+    def acquire_frame(
+        self,
+        ao_channels,
+        waveform,
+        dwell_seconds,
+        *,
+        width,
+        n_lines,
+        stride,
+        n_flyback,
+        flyback_seconds=None,
+        handle: AcquisitionHandle | None = None,
+        on_line: Callable | None = None,
+        stop_check: Callable[[], bool] | None = None,
+    ):
+        """Acquire the raster as line blocks, one acquire per ADC-window pass.
+
+        A dwell within ``RFSOC_MAX_COUNTING_WINDOW_S`` is one window, so each
+        block is a single acquire and every pixel integrates its whole dwell in
+        one go.  A longer dwell falls back to several passes over the block;
+        counts and integrated widths then accumulate across passes, which keeps
+        the reconstructed rate correct while the image is still filling in.
+        """
+        from .confocal_frame import ConfocalFrame
+
+        handle = handle or AcquisitionHandle()
+        width = int(width)
+        n_lines = int(n_lines)
+        n_flyback = int(n_flyback)
+        n_lead = max(1, n_flyback)
+        counts = np.zeros(n_lines * width, dtype=np.int64)
+        widths = np.zeros(n_lines * width, dtype=np.int64)
+
+        def stopped():
+            return handle.stop_event.is_set() or bool(stop_check and stop_check())
+
+        with self.session.acquisition():
+            _, dwell_plan = self._program_config(
+                width, dwell_seconds, n_flyback, flyback_seconds=flyback_seconds
+            )
+            n_passes = int(dwell_plan.windows_per_pixel)
+            window_ps = int(round(dwell_plan.window_seconds * 1e12))
+            block_lines = lines_per_block(
+                width, n_flyback, dwell_plan.window_seconds, flyback_seconds
+            )
+            parked = np.asarray(waveform, dtype=float)
+            if parked.ndim == 1:
+                parked = parked[np.newaxis, :]
+            parked = parked[:, :1]
+            programs = {}
+
+            for first, n_block in iter_frame_blocks(n_lines, block_lines):
+                block = block_waveform(
+                    waveform, width, n_lines, stride, n_flyback, first, n_block
+                )
+                key = (n_block, n_lead)
+                if key not in programs:
+                    cfg, window_plan = self._program_config(
+                        width,
+                        dwell_plan.window_seconds,
+                        n_flyback,
+                        flyback_seconds=flyback_seconds,
+                        n_lines=n_block,
+                        n_lead=n_lead,
+                    )
+                    programs[key] = (ConfocalFrame(cfg), cfg, window_plan)
+                program, cfg, window_plan = programs[key]
+                data = np.concatenate(
+                    [lead_in_waveform(parked, block[:, :1], n_lead), block], axis=1
+                )
+                if data.shape[0] != len(ao_channels):
+                    raise ValueError(
+                        f"block waveform has {data.shape[0]} channels, expected "
+                        f"{len(ao_channels)}"
+                    )
+                task = self._open_ao_task(ao_channels, data.shape[1], window_plan)
+                handle.task = task
+                timeout = self._line_timeout(window_plan, width, cfg)
+                dest = slice(first * width, (first + n_block) * width)
+                try:
+                    for _ in range(n_passes):
+                        if stopped():
+                            raise InterruptedError("scan stopped")
+                        block_counts = self._clock_and_count(
+                            task, program, data, timeout
+                        )
+                        if block_counts.shape != (n_block * width,):
+                            raise RuntimeError(
+                                f"RFSoC returned {block_counts.shape}, expected "
+                                f"({n_block * width},)"
+                            )
+                        counts[dest] += block_counts
+                        widths[dest] += window_ps
+                        if on_line:
+                            on_line(counts.copy(), widths.copy())
+                finally:
+                    handle.task = None
+                    self._close_ao_task(task)
+                parked = data[:, -1:]
+
         return counts, widths
 
     @staticmethod
@@ -417,8 +530,24 @@ def run_lines(
     stop_check: Callable[[], bool] | None = None,
     handle: AcquisitionHandle | None = None,
 ):
-    """Acquire a flattened raster waveform one line at a time."""
+    """Acquire a flattened raster waveform, preferring the fewest acquires."""
     handle = handle or AcquisitionHandle()
+    acquire_frame = getattr(backend, "acquire_frame", None)
+    if utils.RFSOC_FRAME_ACQUIRE and acquire_frame is not None:
+        return acquire_frame(
+            ao_channels,
+            waveform,
+            dwell_seconds,
+            width=width,
+            n_lines=n_lines,
+            stride=stride,
+            n_flyback=n_flyback,
+            flyback_seconds=flyback_seconds,
+            handle=handle,
+            on_line=on_line,
+            stop_check=stop_check,
+        )
+
     acquire_raster = getattr(backend, "acquire_raster", None)
     if acquire_raster is not None:
         return acquire_raster(

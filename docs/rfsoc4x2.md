@@ -55,28 +55,41 @@ that check does not replace a spectrum-analyzer measurement.
 The NI device remains responsible for `ao0`, `ao1`, and `ao2`, including all DC
 writes. During a scan:
 
-1. The host buffers one line and arms a finite AO task using PFI8 as an external
-   rising-edge sample clock.
-2. One `ConfocalLine.acquire()` emits a PMOD edge for each imaging sample.
-3. After every edge the program waits for galvo/piezo settle, then integrates
-   one or more legal edge-counting windows.
-4. The program emits flyback clocks after the line without ADC triggers.
-5. The host inserts the completed line in napari and arms the next line.
+1. The host buffers a block of lines and arms a finite AO task using PFI8 as an
+   external rising-edge sample clock. `RFSOC_FRAME_BLOCK_SECONDS` sets how much
+   wall time one block is allowed to take.
+2. One `ConfocalFrame.acquire()` emits a PMOD edge for each sample in the block,
+   with the pixel loop nested inside a line loop.
+3. After every imaging edge the program waits for galvo/piezo settle, then
+   integrates one edge-counting window.
+4. Lead-in clocks before the block and flyback clocks after each line carry no
+   ADC trigger, so the accumulated buffer holds exactly one readout per pixel.
+5. The host adds the block to napari and arms the next one.
 
-The 16-bit readout-length register permits at most 65535 ADC samples per
-window. Longer dwell values are divided into K windows and summed. Count rates
-use the effective integrated duration, excluding settle and flyback.
+Edge counting has no 16-bit window limit. QICK warns above 65536 readout samples,
+but that warning is about summing 15-bit analog samples into a 32-bit
+accumulator, which a photon count cannot overflow. `window_linearity()` measured
+counts proportional to the window from 13 us to 2 ms, which is the value in
+`RFSOC_MAX_COUNTING_WINDOW_S`: any dwell within it is integrated in a single
+window, and only a longer dwell is divided into K windows and summed over K
+passes of the block. Count rates use the effective integrated duration,
+excluding settle and flyback.
 
-Stop is deterministic between lines. QICK 0.2.302 does not provide a safe
-cooperative cancellation of a blocked remote `acquire()`, so an RFSoC/NI line
-already in progress is allowed to finish before the next line is suppressed.
+Set `NV_RFSOC_FRAME_ACQUIRE=0` to fall back to one acquire per line, which is
+otherwise identical.
+
+Stop is deterministic between blocks. QICK 0.2.302 does not provide a safe
+cooperative cancellation of a blocked remote `acquire()`, so an RFSoC/NI block
+already in progress is allowed to finish before the next one is suppressed.
 
 ## Bench acceptance sequence
 
 1. Run `connection_report()` and compare firmware, channel map, PMOD pins and
    client/server versions.
 2. Feed conditioned calibration pulses to the ADC. Sweep high/low thresholds
-   and verify linear counts, minimum pulse width and no rollover.
+   and verify linear counts, minimum pulse width and no rollover. Run
+   `window_linearity()` against the same source to confirm
+   `RFSOC_MAX_COUNTING_WINDOW_S` before trusting a longer dwell.
 3. Observe AOM and pixel clock together on an oscilloscope. Confirm that clock
    transitions do not glitch the AOM mask.
 4. Arm a short NI AO buffer and prove that N PMOD edges produce exactly N AO
@@ -97,5 +110,5 @@ data/mmddyy/RFSoC_<Experiment>/
 ```
 
 Each measurement contains CSV, compressed NPZ metadata, and PDF output.
-Readout transient, g(2), Ramsey, Hahn echo, frame-level acquisition, removal of
-the NI DAQ, and incremental experiment plotting are outside phase 1.
+Readout transient, g(2), Ramsey, Hahn echo, removal of the NI DAQ, and
+incremental experiment plotting are outside phase 1.

@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) guidelines.
 
+## [RFSoC4x2] - 2026-09-16
+### Fixed
+- Confocal images no longer show repeated vertical stripes past the point where
+  the readouts ran out. Splitting a dwell into K ADC windows put K readouts in
+  the accumulated buffer per shot while the streamer addressed it as one, so the
+  tail of every line was read from the wrong buffer slots.
+
+### Added
+- `ConfocalFrame`, a QICK program nesting the pixel loop inside a line loop so
+  one acquire covers a whole block of lines. `RFSOC_FRAME_BLOCK_SECONDS` caps
+  the wall time of a block; `NV_RFSOC_FRAME_ACQUIRE=0` restores per-line
+  acquires. A 100x100 scan at 1 ms went from 500 acquires to 6.
+- `window_linearity()` and `acquire_overhead()` bench probes, measuring the
+  longest linear edge-counting window and the fixed cost of an acquire.
+
+### Changed
+- A dwell within `RFSOC_MAX_COUNTING_WINDOW_S` (2 ms, measured) is integrated in
+  one window, so each pixel holds the counter for its whole dwell instead of
+  being revisited once per window.
+- Scan previews refresh on a wall-time interval (`SCAN_PREVIEW_MIN_SECONDS`)
+  rather than every N lines, which no longer matches how progress arrives.
+- `window_linearity()` sweeps up to 5 s, stepping through every power of two so a
+  counter narrower than the value written would reveal itself by where it wraps.
+  Shots per window follow a wall-time budget instead of a fixed count, and the
+  gap between windows is a fixed 100 us: holding it equal to the window would
+  overrun the 31-bit tProc immediate carrying the trigger and the sync after it.
+
+### Removed
+- The 65535-sample window cap and the 128-readouts-per-acquire cap. The first
+  came from a QICK warning about summing analog samples in a 32-bit accumulator,
+  which an edge count cannot overflow; the second had no hardware basis.
+
 ## [RFSoC4x2] - 2026-09-14
 ### Added
 - Dedicated `rfsoc4x2` hardware branch using QICK-DAWG/QICK 0.2.302.

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from common import utils
-
 try:
     from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
 except ImportError:  # Allows geometry/config tests without the hardware package.
@@ -17,10 +15,10 @@ except ImportError:  # Allows geometry/config tests without the hardware package
 class ConfocalLine(NVAveragerProgram):
     """Advance NI AO once per pixel and edge-count one ADC window per pixel.
 
-    Long dwells are split on the host into repeated one-window line passes.
-    ``cfg.reps`` is the number of imaging pixels.  Flyback clocks are emitted
-    after the repetitions loop by :meth:`end`, and therefore create no ADC
-    readouts.
+    ``cfg.reps`` is the number of imaging pixels.  A dwell beyond
+    ``RFSOC_MAX_COUNTING_WINDOW_S`` is split on the host into repeated
+    one-window line passes.  Flyback clocks are emitted after the repetitions
+    loop by :meth:`end`, and therefore create no ADC readouts.
     """
 
     required_cfg = [
@@ -45,11 +43,10 @@ class ConfocalLine(NVAveragerProgram):
                 "ConfocalLine counts one ADC window per pixel; "
                 "split longer dwells on the host"
             )
-        if int(self.cfg.reps) > utils.RFSOC_MAX_ADC_READOUTS:
-            raise ValueError(
-                f"ConfocalLine requests {self.cfg.reps} ADC readouts; "
-                f"max is {utils.RFSOC_MAX_ADC_READOUTS}"
-            )
+        # The accumulated buffer is circular and QICK's streamer transfers 10%
+        # of avg_maxlen per pass, so the shot count per acquire is unbounded;
+        # only a host stall long enough to lap the buffer loses data, and QICK
+        # raises on that.
         self.setup_readout()
         pin_cfg = self.soccfg["tprocs"][0]["output_pins"]
         ports = {
@@ -108,13 +105,17 @@ class ConfocalLine(NVAveragerProgram):
         self.synci(2)
         self.append_instruction("end")
 
+    @property
+    def expected_readouts(self):
+        return int(self.cfg.reps)
+
     def acquire(self, *args, **kwargs):
         kwargs.setdefault("readouts_per_experiment", 1)
         raw = super().acquire(*args, **kwargs)
-        n_pix = int(self.cfg.reps)
+        n_readouts = self.expected_readouts
         data = np.array(raw, dtype=np.int64, copy=True).reshape(-1)
-        if data.size < n_pix:
+        if data.size < n_readouts:
             raise RuntimeError(
-                f"RFSoC returned {data.size} readouts, expected {n_pix}"
+                f"RFSoC returned {data.size} readouts, expected {n_readouts}"
             )
-        return data[:n_pix]
+        return data[:n_readouts]

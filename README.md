@@ -18,18 +18,19 @@ The branches are separate hardware products; there is no runtime backend flag.
 
 ### Confocal
 
-RFSoC is the timing master. For each raster line the PC:
+RFSoC is the timing master. For each block of raster lines the PC:
 
 1. buffers the existing µm-derived voltage waveform in the NI DAQ;
 2. arms NI AO from external sample clock `/Dev1/PFI8`;
-3. runs one `ConfocalLine.acquire()`;
+3. runs one `ConfocalFrame.acquire()`;
 4. receives one photon count per imaging pixel;
-5. updates napari and repeats for the next line.
+5. updates napari and repeats for the next block.
 
-`ConfocalLine` emits additional pixel-clock pulses during flyback without
-triggering the ADC. Long dwell times are split across legal 16-bit edge-count
-windows and summed. X/Y/Z DC writes, click-to-move, sliders, park, XY/XZ/YZ/XYZ
-geometry and canonical µm units remain on the NI path.
+The program emits additional pixel-clock pulses during lead-in and flyback
+without triggering the ADC. Each pixel integrates its whole dwell in a single
+edge-count window; only a dwell beyond `RFSOC_MAX_COUNTING_WINDOW_S` is split
+into windows and summed. X/Y/Z DC writes, click-to-move, sliders, park,
+XY/XZ/YZ/XYZ geometry and canonical µm units remain on the NI path.
 
 ### Experiments
 
