@@ -103,18 +103,16 @@ tears down the streamer, which is QICK's own cleanup path.
 
 ## Experiment runner
 
-`run_odmr_experiments.py` is a CLI with one subcommand per experiment. The
-configuration of every experiment lives in the `SETTINGS` dict at the top of
-the file and is meant to be edited as the sample changes; `--set key=value`
-overrides one entry for a single run.
+`run_odmr_experiments.py` is a file of experiment blocks. Edit the
+configuration in the block you want, uncomment it, comment the others, then:
 
 ```powershell
-python run_odmr_experiments.py list
-python run_odmr_experiments.py pl --live
-python run_odmr_experiments.py cwodmr
-python run_odmr_experiments.py rabi --set reps=20000
-python run_odmr_experiments.py cpmg -n 32
+python run_odmr_experiments.py
 ```
+
+Each block lists every parameter of that experiment. Live traces are `live_pl`
+and `live_cwodmr` in the same file: uncomment that call instead of the
+single-shot one.
 
 The pulsed experiments are the FineRes programs, whose microwave pulses land on
 DAC samples (about 0.2 ns) instead of on tProc cycles (about 3.3 ns). Each
@@ -122,22 +120,21 @@ sweep is one QICK acquire. The readout-window calibration is the exception: it
 walks a narrow counting window across the laser pulse from the host, one
 acquire per offset, under a single board claim.
 
-| Command | Program | What the fit reports |
+| Block | Program | What the fit reports |
 | --- | --- | --- |
-| `pl [--live]` | `PLIntensity` | count rate |
-| `dark` | `DarkCounts` | background rate |
-| `cwodmr [--live]` | `LockinODMR` | resonance, linewidth |
-| `podmr` | `PODMRFineRes` | resonance, linewidth |
-| `readout-window` | `CountingDurationFineRes` | `readout_ns`, `laser_on_ns`, `laser_readout_offset_ns` |
-| `rabi` | `RabiFineRes` | `mw_pi2_ns`, `mw_pi_ns` |
-| `ramsey` | `CPMGXYFineRes` (`n_cpmg=0`) | detuning, T2* |
-| `hahn` | `CPMGXYFineRes` (`n_cpmg=1`) | T2 |
-| `cpmg -n N` | `CPMGXYFineRes` (`n_cpmg=N`) | T2 |
-| `t1` | `T1FineRes` | T1 |
+| PL Intensity / `live_pl` | `PLIntensity` | count rate |
+| Dark Counts | `DarkCounts` | background rate |
+| CW ODMR / `live_cwodmr` | `LockinODMR` | resonance, linewidth |
+| Pulsed ODMR | `PODMRFineRes` | resonance, linewidth |
+| readout window | `CountingDurationFineRes` | `readout_ns`, `laser_on_ns`, `laser_readout_offset_ns` |
+| Rabi | `RabiFineRes` | `mw_pi2_ns`, `mw_pi_ns` |
+| Ramsey | `CPMGXYFineRes` (`n_cpmg=0`) | detuning, T2* |
+| Hahn Echo | `CPMGXYFineRes` (`n_cpmg=1`) | T2 |
+| CPMG-N | `CPMGXYFineRes` (`n_cpmg=N`) | T2 |
+| T1 | `T1FineRes` | T1 |
 
-Live windows (`pl --live`, `cwodmr --live`) take the board claim per update and
-skip a sample rather than wait, so a confocal scan can still start. Results are
-written under:
+Live windows take the board claim per update and skip a sample rather than
+wait, so a confocal scan can still start. Results are written under:
 
 ```text
 data/mmddyy/RFSoC_<Experiment>/
@@ -146,8 +143,8 @@ data/mmddyy/RFSoC_<Experiment>/
 Each sweep contains CSV, compressed NPZ metadata, and a PDF with the fitted
 curve annotated. Ramsey also plots the FFT of the free-precession trace.
 `get_reference=True` (the default) doubles each point with a microwave-off
-readout; set it to `False` with `--set get_reference=False` to halve the
-duration at the cost of that normalisation.
+readout; pass `get_reference=False` in the block to halve the duration at the
+cost of that normalisation.
 
 ## Sharing the board between processes
 

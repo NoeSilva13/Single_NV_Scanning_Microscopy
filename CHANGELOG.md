@@ -4,16 +4,14 @@ All notable changes to this project will be documented in this file following [K
 
 ## [RFSoC4x2] - 2026-09-17
 ### Added
-- The full FineRes experiment set behind `run_odmr_experiments.py` subcommands:
-  PL intensity (and a live trace), dark counts, CW ODMR (and a live spectrum),
-  pulsed ODMR, readout-window calibration, Rabi, Ramsey, Hahn echo, CPMG-N and
-  T1. Each pulsed sweep is one FineRes acquire; the readout window is walked
-  from the host under a single board claim. Fits report the numbers the next
-  experiment needs: resonance, pi/2 and pi lengths, detuning and T2*, T2, T1,
-  and the three readout timings.
-- `--set key=value`, `--no-save`, `--no-plot` and `--no-progress` on every
-  subcommand, so a parameter can be changed for one run without editing
-  `SETTINGS`.
+- The full FineRes experiment set as uncommentable blocks in
+  `run_odmr_experiments.py`: PL intensity (and `live_pl`), dark counts, CW ODMR
+  (and `live_cwodmr`), pulsed ODMR, readout-window calibration, Rabi, Ramsey,
+  Hahn echo, CPMG-N and T1. Each pulsed sweep is one FineRes acquire; the
+  readout window is walked from the host under a single board claim. Fits
+  report the numbers the next experiment needs: resonance, pi/2 and pi
+  lengths, detuning and T2*, T2, T1, and the three readout timings. Edit the
+  kwargs in the block; each experiment lists every parameter in its call.
 - A claim on the board that spans processes, so `run_odmr_experiments.py` can run
   next to the confocal app: each experiment holds the board for its sweep instead
   of aborting whatever the app had running, and the app's live count plot fills
@@ -26,8 +24,8 @@ All notable changes to this project will be documented in this file following [K
   indefinitely on a script is indistinguishable from a hang.
 
 ### Changed
-- `run_odmr_experiments.py` is a CLI rather than a file of commented blocks.
-  Configuration lives in `SETTINGS` at the top of the file.
+- `run_odmr_experiments.py` is again a file of commented blocks, one
+  experiment per block, rather than a CLI of subcommands.
 - The live count plot yields the board to anything that asked for it first, in
   this process or another, and leaves a gap in the trace instead of a point.
   Pausing it by hand before running experiments is no longer necessary.

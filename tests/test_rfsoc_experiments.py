@@ -1,28 +1,18 @@
 import numpy as np
 import pytest
 
-import run_odmr_experiments as cli
-
-# Imported from their modules rather than from the package, whose re-exported
-# experiment functions shadow the modules of the same name.
 from rfsoc.experiments.base import (
     CountingResult,
     ExperimentResult,
     fine_sweep,
     normalized_result,
 )
-from rfsoc.experiments.counting import counted_point
-from rfsoc.experiments.cpmg import (
-    _coherence_sweep,
-    _fit_decay,
-    _fit_ramsey,
-    ramsey_spectrum,
-)
+from rfsoc.experiments.cpmg import _fit_decay, _fit_ramsey, ramsey_spectrum
 from rfsoc.experiments.io import fitted_curve
-from rfsoc.experiments.odmr import _fit_resonance, cw_odmr, pulsed_odmr
-from rfsoc.experiments.rabi import _fit_rabi, rabi
-from rfsoc.experiments.readout_window import _fit_window, readout_window
-from rfsoc.experiments.t1 import _fit_t1, t1
+from rfsoc.experiments.odmr import _fit_resonance
+from rfsoc.experiments.rabi import _fit_rabi
+from rfsoc.experiments.readout_window import _fit_window
+from rfsoc.experiments.t1 import _fit_t1
 
 
 class FakeConfig(dict):
@@ -227,47 +217,3 @@ def test_the_fitted_curve_of_a_kind_is_drawable_through_the_registry():
     x, y, label = fitted_curve(result)
     assert x.size == y.size
     assert "mw_pi_ns" in label
-
-
-def test_the_cli_exposes_every_experiment_with_its_configuration():
-    parser = cli.build_parser()
-    assert sorted(cli.SETTINGS) == sorted(cli.HELP) == sorted(cli.RUNNERS)
-    assert len(cli.SETTINGS) == 10
-    for name in cli.SETTINGS:
-        assert parser.parse_args([name]).command == name
-    assert parser.parse_args(["list"]).command == "list"
-
-
-def test_every_configured_key_is_a_parameter_of_its_experiment():
-    import inspect
-
-    targets = {
-        "pl": counted_point,
-        "dark": counted_point,
-        "cwodmr": cw_odmr,
-        "podmr": pulsed_odmr,
-        "readout-window": readout_window,
-        "rabi": rabi,
-        "ramsey": _coherence_sweep,
-        "hahn": _coherence_sweep,
-        "cpmg": _coherence_sweep,
-        "t1": t1,
-    }
-    for name, settings in cli.SETTINGS.items():
-        accepted = set(inspect.signature(targets[name]).parameters)
-        # cpmg() consumes n_pulses itself and passes the rest through.
-        unknown = set(settings) - accepted - {"n_pulses"}
-        assert not unknown, f"{name} configures {sorted(unknown)}"
-
-
-def test_the_sweep_axis_is_linear_when_given_a_point_count():
-    np.testing.assert_allclose(cli._sweep_axis((0, 10, 3)), [0, 5, 10])
-    np.testing.assert_allclose(cli._sweep_axis((500, 2e6)), [500, 2e6])
-
-
-def test_overrides_are_parsed_as_python_literals():
-    assert cli._overrides(["reps=2000", "scaling_factor='3/2'"]) == {
-        "reps": 2000,
-        "scaling_factor": "3/2",
-    }
-    assert cli._overrides(["taus_ns=(100, 200, 3)"])["taus_ns"] == (100, 200, 3)

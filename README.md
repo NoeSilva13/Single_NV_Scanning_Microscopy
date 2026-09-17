@@ -11,8 +11,8 @@ The branches are separate hardware products; there is no runtime backend flag.
 ## Entry points
 
 - `confocal_main_control.py`: napari confocal application.
-- `run_odmr_experiments.py`: CLI for PL, dark counts, CW/pulsed ODMR, readout
-  window, Rabi, Ramsey, Hahn echo, CPMG and T1 (`python run_odmr_experiments.py list`).
+- `run_odmr_experiments.py`: edit/uncomment one block (PL, dark counts,
+  CW/pulsed ODMR, readout window, Rabi, Ramsey, Hahn echo, CPMG, T1).
 - `spectrometer_app.py`: spectrometer application, unchanged by this migration.
 
 ## Architecture
@@ -74,9 +74,8 @@ Then run:
 
 ```powershell
 python confocal_main_control.py
-# or
-python run_odmr_experiments.py list
-python run_odmr_experiments.py rabi
+# or, after uncommenting one experiment block:
+python run_odmr_experiments.py
 ```
 
 ## Configuration and safety
