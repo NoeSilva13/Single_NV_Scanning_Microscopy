@@ -12,6 +12,8 @@ from .base import (
     normalized_result,
     oscillation_spectrum,
     spin_config,
+    spin_executed,
+    spin_requested,
 )
 
 
@@ -131,17 +133,19 @@ def rabi(
         data=data,
         integration_seconds=cfg.readout_integration_tns * 1e-9,
         reps=cfg.reps,
-        requested={
-            "durations_ns": requested_x.tolist(),
-            "mw_frequency_hz": mw_frequency_hz,
-        },
-        executed={
-            "durations_ns": x_ns.tolist(),
-            "mw_frequency_hz": cfg.mw_fGHz * 1e9,
-            "readout_ns": cfg.readout_integration_tns,
-            "reps": cfg.reps,
-            "mw_gain": cfg.mw_gain,
-            "get_reference": cfg.get_reference,
-        },
+        requested=spin_requested(
+            mw_frequency_hz=mw_frequency_hz,
+            mw_gain=mw_gain,
+            laser_on_ns=laser_on_ns,
+            readout_ns=readout_ns,
+            laser_readout_offset_ns=laser_readout_offset_ns,
+            reference_start_ns=reference_start_ns,
+            mw_to_laser_delay_ns=mw_to_laser_delay_ns,
+            relax_delay_ns=relax_delay_ns,
+            reps=reps,
+            get_reference=get_reference,
+            durations_ns=requested_x.tolist(),
+        ),
+        executed=spin_executed(cfg, durations_ns=x_ns.tolist()),
     )
     return _fit_rabi(result)

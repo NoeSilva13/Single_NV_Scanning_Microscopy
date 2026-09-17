@@ -24,6 +24,11 @@ All notable changes to this project will be documented in this file following [K
   indefinitely on a script is indistinguishable from a hang.
 
 ### Changed
+- Sweep CSVs now start with the experimental configuration: `#` comment lines
+  for requested parameters, executed timings, and the fit, then the same data
+  table as before. `requested` / `executed` on each result now include the
+  laser and delay kwargs from `run_odmr_experiments.py`, not only the swept
+  axis.
 - `run_odmr_experiments.py` is again a file of commented blocks, one
   experiment per block, rather than a CLI of subcommands.
 - The live count plot yields the board to anything that asked for it first, in

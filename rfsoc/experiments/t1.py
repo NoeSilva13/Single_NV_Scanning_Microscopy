@@ -11,6 +11,8 @@ from .base import (
     fit_curve,
     normalized_result,
     spin_config,
+    spin_executed,
+    spin_requested,
 )
 
 
@@ -137,21 +139,28 @@ def t1(
         data=data,
         integration_seconds=cfg.readout_integration_tns * 1e-9,
         reps=cfg.reps,
-        requested={
-            "delays_ns": requested_x.tolist(),
-            "scaling": scaling,
-            "scaling_factor": scaling_factor,
-            "mw_pi_ns": mw_pi_ns,
-        },
-        executed={
-            "delays_ns": x_ns.tolist(),
-            "mw_pi_ns": cfg.mw_pi_ftns,
-            "mw_frequency_hz": cfg.mw_fGHz * 1e9,
-            "readout_ns": cfg.readout_integration_tns,
-            "reps": cfg.reps,
-            "mw_gain": cfg.mw_gain,
-            "get_reference": cfg.get_reference,
-        },
+        requested=spin_requested(
+            mw_frequency_hz=mw_frequency_hz,
+            mw_gain=mw_gain,
+            laser_on_ns=laser_on_ns,
+            readout_ns=readout_ns,
+            laser_readout_offset_ns=laser_readout_offset_ns,
+            reference_start_ns=reference_start_ns,
+            mw_to_laser_delay_ns=mw_to_laser_delay_ns,
+            relax_delay_ns=relax_delay_ns,
+            reps=reps,
+            get_reference=get_reference,
+            mw_pi_ns=mw_pi_ns,
+            delays_ns=requested_x.tolist(),
+            scaling=scaling,
+            scaling_factor=scaling_factor,
+        ),
+        executed=spin_executed(
+            cfg,
+            delays_ns=x_ns.tolist(),
+            scaling=scaling,
+            scaling_factor=scaling_factor,
+        ),
         t1_ratio=True,
     )
     return _fit_t1(result)

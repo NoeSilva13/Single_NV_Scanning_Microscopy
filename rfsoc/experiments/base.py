@@ -100,6 +100,86 @@ def spin_config(
     return cfg
 
 
+def spin_requested(
+    *,
+    mw_frequency_hz,
+    mw_gain,
+    laser_on_ns,
+    readout_ns,
+    laser_readout_offset_ns,
+    reference_start_ns,
+    mw_to_laser_delay_ns,
+    relax_delay_ns,
+    reps,
+    get_reference=True,
+    mw_pi2_ns=None,
+    mw_pi_ns=None,
+    n_cpmg=None,
+    **extra,
+):
+    """User-facing kwargs that went into a pulsed sweep, plus any extras."""
+    settings = {
+        "mw_frequency_hz": mw_frequency_hz,
+        "mw_gain": mw_gain,
+        "laser_on_ns": laser_on_ns,
+        "readout_ns": readout_ns,
+        "laser_readout_offset_ns": laser_readout_offset_ns,
+        "reference_start_ns": reference_start_ns,
+        "mw_to_laser_delay_ns": mw_to_laser_delay_ns,
+        "relax_delay_ns": relax_delay_ns,
+        "reps": reps,
+        "get_reference": bool(get_reference),
+    }
+    if mw_pi2_ns is not None:
+        settings["mw_pi2_ns"] = mw_pi2_ns
+    if mw_pi_ns is not None:
+        settings["mw_pi_ns"] = mw_pi_ns
+    if n_cpmg is not None:
+        settings["n_cpmg"] = n_cpmg
+    settings.update(extra)
+    return settings
+
+
+_MISSING = object()
+
+
+def _cfg_get(cfg, name, default=None):
+    value = getattr(cfg, name, _MISSING)
+    if value is not _MISSING:
+        return value
+    try:
+        return cfg[name]
+    except (KeyError, TypeError):
+        return default
+
+
+def spin_executed(cfg, **extra):
+    """What the board actually ran, in the same names as ``spin_requested``."""
+    settings = {
+        "mw_frequency_hz": float(_cfg_get(cfg, "mw_fGHz")) * 1e9,
+        "mw_gain": int(_cfg_get(cfg, "mw_gain")),
+        "laser_on_ns": _cfg_get(cfg, "laser_on_tns"),
+        "readout_ns": _cfg_get(cfg, "readout_integration_tns"),
+        "laser_readout_offset_ns": _cfg_get(cfg, "laser_readout_offset_tns"),
+        "reference_start_ns": _cfg_get(cfg, "readout_reference_start_tns"),
+        "mw_to_laser_delay_ns": _cfg_get(cfg, "mw_to_laser_delay_tns"),
+        "relax_delay_ns": _cfg_get(cfg, "relax_delay_tns"),
+        "reps": _cfg_get(cfg, "reps"),
+        "get_reference": bool(_cfg_get(cfg, "get_reference", True)),
+    }
+    mw_pi2_ns = _cfg_get(cfg, "mw_pi2_ftns")
+    if mw_pi2_ns is not None:
+        settings["mw_pi2_ns"] = mw_pi2_ns
+    mw_pi_ns = _cfg_get(cfg, "mw_pi_ftns")
+    if mw_pi_ns is not None:
+        settings["mw_pi_ns"] = mw_pi_ns
+    n_cpmg = _cfg_get(cfg, "n_cpmg")
+    if n_cpmg is not None:
+        settings["n_cpmg"] = n_cpmg
+    settings.update(extra)
+    return settings
+
+
 def fine_sweep(cfg, name, values_ns):
     """Point the fine-time sweep *name* at *values_ns*, in nanoseconds.
 

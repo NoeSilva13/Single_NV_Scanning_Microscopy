@@ -21,6 +21,48 @@ from .t1 import fitted_curve as _t1_curve
 FORMAT_VERSION = 1
 
 
+def _scalar(value):
+    if isinstance(value, np.generic):
+        return value.item()
+    return value
+
+
+def _format_csv_value(value):
+    """Render a metadata value for a ``#`` comment line.
+
+    Sweep axes are summarised as ``start to end (N points)`` so a 150-point
+    frequency list does not become a comment longer than the table it labels.
+    The executed axis is already the first data column.
+    """
+    if isinstance(value, (list, tuple, np.ndarray)):
+        arr = np.asarray(value)
+        if arr.size == 0:
+            return "[]"
+        if arr.ndim != 1 or arr.size > 4:
+            return f"{_scalar(arr.flat[0])} to {_scalar(arr.flat[-1])} ({arr.size} points)"
+        return ", ".join(str(_scalar(item)) for item in arr.tolist())
+    return _scalar(value)
+
+
+def _csv_header_lines(result):
+    lines = [
+        f"# Measurement Time: {time.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"# Kind: {result.kind}",
+    ]
+    for section, payload in (
+        ("Requested", result.requested),
+        ("Executed", result.executed),
+        ("Fit", result.fit or {}),
+    ):
+        if not payload:
+            continue
+        lines.append(f"# {section}:")
+        for key, value in payload.items():
+            lines.append(f"#   {key}: {_format_csv_value(value)}")
+    lines.append("#")
+    return lines
+
+
 def _next_stem(kind):
     day = time.strftime("%m%d%y")
     folder = os.path.join(experiment_data_root(), day, f"RFSoC_{kind}")
@@ -55,16 +97,18 @@ def save_result(result):
         metadata_json=json.dumps(metadata, default=float),
     )
     csv_path = stem + ".csv"
-    pd.DataFrame(
-        {
-            f"{result.x_name}_{result.x_unit}": result.x,
-            "Signal_counts": result.signal_counts,
-            "Reference_counts": result.reference_counts,
-            "Signal_cps": result.signal_rate_cps,
-            "Reference_cps": result.reference_rate_cps,
-            "Contrast": result.contrast,
-        }
-    ).to_csv(csv_path, index=False)
+    with open(csv_path, "w", encoding="utf-8", newline="") as handle:
+        handle.write("\n".join(_csv_header_lines(result)) + "\n")
+        pd.DataFrame(
+            {
+                f"{result.x_name}_{result.x_unit}": result.x,
+                "Signal_counts": result.signal_counts,
+                "Reference_counts": result.reference_counts,
+                "Signal_cps": result.signal_rate_cps,
+                "Reference_cps": result.reference_rate_cps,
+                "Contrast": result.contrast,
+            }
+        ).to_csv(handle, index=False)
     result.saved_files.update(npz=npz_path, csv=csv_path)
     return result
 

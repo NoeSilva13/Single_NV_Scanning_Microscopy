@@ -141,10 +141,12 @@ data/mmddyy/RFSoC_<Experiment>/
 ```
 
 Each sweep contains CSV, compressed NPZ metadata, and a PDF with the fitted
-curve annotated. Ramsey also plots the FFT of the free-precession trace.
-`get_reference=True` (the default) doubles each point with a microwave-off
-readout; pass `get_reference=False` in the block to halve the duration at the
-cost of that normalisation.
+curve annotated. The CSV starts with `#` comment lines for the requested and
+executed configuration and the fit, then the data table; read it with
+`pandas.read_csv(path, comment="#")`. Ramsey also plots the FFT of the
+free-precession trace. `get_reference=True` (the default) doubles each point
+with a microwave-off readout; pass `get_reference=False` in the block to
+halve the duration at the cost of that normalisation.
 
 ## Sharing the board between processes
 

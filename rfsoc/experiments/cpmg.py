@@ -21,6 +21,8 @@ from .base import (
     normalized_result,
     oscillation_spectrum,
     spin_config,
+    spin_executed,
+    spin_requested,
 )
 
 
@@ -204,23 +206,29 @@ def _coherence_sweep(
         data=data,
         integration_seconds=cfg.readout_integration_tns * 1e-9,
         reps=cfg.reps,
-        requested={
-            "taus_ns": requested_x.tolist(),
-            "scaling": scaling,
-            "scaling_factor": scaling_factor,
-            "n_cpmg": n_cpmg,
-            "mw_pi2_ns": mw_pi2_ns,
-        },
-        executed={
-            "taus_ns": x_ns.tolist(),
-            "n_cpmg": cfg.n_cpmg,
-            "mw_pi2_ns": cfg.mw_pi2_ftns,
-            "mw_frequency_hz": cfg.mw_fGHz * 1e9,
-            "readout_ns": cfg.readout_integration_tns,
-            "reps": cfg.reps,
-            "mw_gain": cfg.mw_gain,
-            "get_reference": cfg.get_reference,
-        },
+        requested=spin_requested(
+            mw_frequency_hz=mw_frequency_hz,
+            mw_gain=mw_gain,
+            laser_on_ns=laser_on_ns,
+            readout_ns=readout_ns,
+            laser_readout_offset_ns=laser_readout_offset_ns,
+            reference_start_ns=reference_start_ns,
+            mw_to_laser_delay_ns=mw_to_laser_delay_ns,
+            relax_delay_ns=relax_delay_ns,
+            reps=reps,
+            get_reference=get_reference,
+            mw_pi2_ns=mw_pi2_ns,
+            n_cpmg=n_cpmg,
+            taus_ns=requested_x.tolist(),
+            scaling=scaling,
+            scaling_factor=scaling_factor,
+        ),
+        executed=spin_executed(
+            cfg,
+            taus_ns=x_ns.tolist(),
+            scaling=scaling,
+            scaling_factor=scaling_factor,
+        ),
     )
     return _fit_ramsey(result) if n_cpmg == 0 else _fit_decay(result)
 

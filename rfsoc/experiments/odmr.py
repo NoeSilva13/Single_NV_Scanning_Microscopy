@@ -12,6 +12,8 @@ from .base import (
     fit_curve,
     normalized_result,
     spin_config,
+    spin_executed,
+    spin_requested,
 )
 
 
@@ -138,10 +140,17 @@ def cw_odmr(
         signal_rate_cps=signal / norm,
         reference_rate_cps=reference / norm,
         contrast=contrast,
-        requested={"frequencies_hz": requested_x.tolist(), "readout_ns": readout_ns},
+        requested={
+            "frequencies_hz": requested_x.tolist(),
+            "readout_ns": readout_ns,
+            "relax_delay_ns": relax_delay_ns,
+            "reps": reps,
+            "mw_gain": mw_gain,
+        },
         executed={
             "frequencies_hz": (x_mhz * 1e6).tolist(),
             "readout_ns": cfg.readout_integration_tns,
+            "relax_delay_ns": cfg.relax_delay_tns,
             "reps": cfg.reps,
             "mw_gain": cfg.mw_gain,
         },
@@ -237,17 +246,25 @@ def pulsed_odmr(
         data=data,
         integration_seconds=cfg.readout_integration_tns * 1e-9,
         reps=cfg.reps,
-        requested={
-            "frequencies_hz": requested_x.tolist(),
-            "mw_duration_ns": mw_duration_ns,
-        },
-        executed={
-            "frequencies_hz": x_hz.tolist(),
-            "mw_duration_ns": cfg.mw_pi_ftns,
-            "readout_ns": cfg.readout_integration_tns,
-            "reps": cfg.reps,
-            "mw_gain": cfg.mw_gain,
-            "get_reference": cfg.get_reference,
-        },
+        requested=spin_requested(
+            mw_frequency_hz=float(requested_x.mean()),
+            mw_gain=mw_gain,
+            laser_on_ns=laser_on_ns,
+            readout_ns=readout_ns,
+            laser_readout_offset_ns=laser_readout_offset_ns,
+            reference_start_ns=reference_start_ns,
+            mw_to_laser_delay_ns=mw_to_laser_delay_ns,
+            relax_delay_ns=relax_delay_ns,
+            reps=reps,
+            get_reference=get_reference,
+            mw_pi_ns=mw_duration_ns,
+            frequencies_hz=requested_x.tolist(),
+            mw_duration_ns=mw_duration_ns,
+        ),
+        executed=spin_executed(
+            cfg,
+            frequencies_hz=x_hz.tolist(),
+            mw_duration_ns=cfg.mw_pi_ftns,
+        ),
     )
     return _fit_resonance(result)

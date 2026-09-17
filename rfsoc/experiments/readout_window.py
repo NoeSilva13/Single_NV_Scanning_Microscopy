@@ -13,7 +13,14 @@ from __future__ import annotations
 
 import numpy as np
 
-from .base import ExperimentResult, _array, fit_curve, spin_config
+from .base import (
+    ExperimentResult,
+    _array,
+    fit_curve,
+    spin_config,
+    spin_executed,
+    spin_requested,
+)
 
 # Fraction of the peak photoluminescence that counts as "the laser is on".
 PL_RISE_FRACTION = 0.8
@@ -159,6 +166,28 @@ def readout_window(
     contrast = np.divide(
         rate_off - rate_on, rate_off, out=np.zeros_like(rate_off), where=rate_off != 0
     )
+    if offsets_ns is None:
+        extra = {
+            "window_ns": window_ns,
+            "offsets_ns": offsets.tolist(),
+            "mw_pi_ns": mw_pi_ns,
+            "n_offsets": int(n_offsets),
+            "offset_start_ns": offset_start_ns,
+            "offset_step_ns": float(window_ns if offset_step_ns is None else offset_step_ns),
+        }
+    else:
+        extra = {
+            "window_ns": window_ns,
+            "offsets_ns": offsets.tolist(),
+            "mw_pi_ns": mw_pi_ns,
+        }
+    executed = spin_executed(
+        cfg,
+        offsets_ns=executed_offsets.tolist(),
+        window_ns=cfg.readout_integration_tns,
+    )
+    # The offset is the swept axis, not the last value written into cfg.
+    executed.pop("laser_readout_offset_ns", None)
     result = ExperimentResult(
         kind="Readout_Window",
         x_name="Laser_readout_offset",
@@ -169,22 +198,20 @@ def readout_window(
         signal_rate_cps=rate_on,
         reference_rate_cps=rate_off,
         contrast=contrast,
-        requested={
-            "offsets_ns": offsets.tolist(),
-            "window_ns": window_ns,
-            "mw_pi_ns": mw_pi_ns,
-            "reps": reps,
-        },
-        executed={
-            "offsets_ns": executed_offsets.tolist(),
-            "window_ns": cfg.readout_integration_tns,
-            "mw_pi_ns": cfg.mw_pi_ftns,
-            "mw_frequency_hz": cfg.mw_fGHz * 1e9,
-            "laser_on_ns": cfg.laser_on_tns,
-            "reference_start_ns": cfg.readout_reference_start_tns,
-            "reps": cfg.reps,
-            "mw_gain": cfg.mw_gain,
-        },
+        requested=spin_requested(
+            mw_frequency_hz=mw_frequency_hz,
+            mw_gain=mw_gain,
+            laser_on_ns=laser_on_ns,
+            readout_ns=window_ns,
+            laser_readout_offset_ns=float(offsets[0]),
+            reference_start_ns=reference_start_ns,
+            mw_to_laser_delay_ns=mw_to_laser_delay_ns,
+            relax_delay_ns=relax_delay_ns,
+            reps=reps,
+            get_reference=True,
+            **extra,
+        ),
+        executed=executed,
     )
     result.fit = _fit_window(executed_offsets, contrast, rate_off)
     return result
