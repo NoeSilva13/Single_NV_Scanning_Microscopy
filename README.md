@@ -11,7 +11,8 @@ The branches are separate hardware products; there is no runtime backend flag.
 ## Entry points
 
 - `confocal_main_control.py`: napari confocal application.
-- `run_odmr_experiments.py`: script-driven CW ODMR, pulsed ODMR, Rabi, and T1.
+- `run_odmr_experiments.py`: CLI for PL, dark counts, CW/pulsed ODMR, readout
+  window, Rabi, Ramsey, Hahn echo, CPMG and T1 (`python run_odmr_experiments.py list`).
 - `spectrometer_app.py`: spectrometer application, unchanged by this migration.
 
 ## Architecture
@@ -36,14 +37,18 @@ remain on the NI path.
 
 ### Experiments
 
-The RFSoC package executes sweeps and repetitions in the tProc/FPGA:
+The RFSoC package executes sweeps and repetitions in the tProc/FPGA. Pulsed
+experiments use the FineRes programs (DAC-sample pulse lengths, about 0.2 ns):
 
+- PL intensity / dark counts: `PLIntensity` / `DarkCounts`
 - CW ODMR: `LockinODMR`
 - Pulsed ODMR: `PODMRFineRes`
+- Readout window: `CountingDurationFineRes`
 - Rabi: `RabiFineRes`
+- Ramsey / Hahn echo / CPMG-N: `CPMGXYFineRes` (`n_cpmg` = 0 / 1 / N)
 - T1: `T1FineRes`
 
-Each experiment performs one `acquire()` for its complete sweep. Results use a
+Each sweep performs one `acquire()` for its complete FPGA loop. Results use a
 native versioned NPZ/CSV format and PDF plots under
 `data/mmddyy/RFSoC_<Experiment>/`.
 
@@ -70,7 +75,8 @@ Then run:
 ```powershell
 python confocal_main_control.py
 # or
-python run_odmr_experiments.py
+python run_odmr_experiments.py list
+python run_odmr_experiments.py rabi
 ```
 
 ## Configuration and safety

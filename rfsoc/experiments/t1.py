@@ -3,45 +3,62 @@
 from __future__ import annotations
 
 import numpy as np
-from scipy.optimize import curve_fit
 
 from rfsoc.config import validate_linear_sweep
-from .base import _array, normalized_result, spin_config
+from .base import (
+    EXP_SCALING_FACTORS,
+    _array,
+    fit_curve,
+    normalized_result,
+    spin_config,
+)
 
 
-_EXP_FACTORS = {"17/16", "9/8", "5/4", "3/2"}
+def _t1_model(t_s, amplitude, t1_s, stretch, offset):
+    return amplitude * np.exp(-np.power(t_s / t1_s, stretch)) + offset
 
 
 def _fit_t1(result):
-    t_s = result.x * 1e-9
-    y = result.contrast
-
-    def model(t, amplitude, t1_s, stretch, offset):
-        return amplitude * np.exp(-np.power(t / t1_s, stretch)) + offset
-
-    if t_s.size < 4 or not np.all(np.isfinite(y)):
-        return result
-    p0 = [float(y[0] - y[-1]), max(float(np.median(t_s)), 1e-9), 1.0, float(y[-1])]
-    try:
-        popt, pcov = curve_fit(
-            model,
-            t_s,
-            y,
-            p0=p0,
-            bounds=([-np.inf, 1e-12, 0.1, -np.inf], [np.inf, np.inf, 1.0, np.inf]),
-            maxfev=20_000,
-        )
-        errors = np.sqrt(np.diag(pcov))
-        result.fit = {
-            "amplitude": float(popt[0]),
-            "t1_seconds": float(popt[1]),
-            "stretch": float(popt[2]),
-            "offset": float(popt[3]),
-            "t1_error_seconds": float(errors[1]),
-        }
-    except (RuntimeError, ValueError):
+    popt, errors = fit_curve(
+        _t1_model,
+        result.x * 1e-9,
+        result.contrast,
+        p0=[
+            float(result.contrast[0] - result.contrast[-1]),
+            max(float(np.median(result.x * 1e-9)), 1e-9),
+            1.0,
+            float(result.contrast[-1]),
+        ],
+        bounds=([-np.inf, 1e-12, 0.1, -np.inf], [np.inf, np.inf, 1.0, np.inf]),
+    )
+    if popt is None:
         result.fit = None
+        return result
+    result.fit = {
+        "amplitude": float(popt[0]),
+        "t1_seconds": float(popt[1]),
+        "stretch": float(popt[2]),
+        "offset": float(popt[3]),
+        "t1_error_seconds": float(errors[1]),
+    }
     return result
+
+
+def fitted_curve(result):
+    """Sample the fitted stretched exponential, and label T1."""
+    fit = result.fit
+    if not fit:
+        return None
+    x_ns = np.linspace(float(result.x[0]), float(result.x[-1]), 512)
+    y = _t1_model(
+        x_ns * 1e-9,
+        fit["amplitude"],
+        fit["t1_seconds"],
+        fit["stretch"],
+        fit["offset"],
+    )
+    label = f"T1 {fit['t1_seconds'] * 1e3:.3f} ms\nstretch {fit['stretch']:.2f}"
+    return x_ns, y, label
 
 
 def t1(
@@ -60,6 +77,7 @@ def t1(
     relax_delay_ns=2_000,
     reps=3_000,
     mw_gain=5_000,
+    get_reference=True,
     progress=True,
 ):
     requested_x = np.asarray(list(delays_ns), dtype=float)
@@ -70,7 +88,7 @@ def t1(
     elif scaling == "exponential":
         if requested_x[0] <= 0:
             raise ValueError("exponential T1 sweep must start above zero")
-        if scaling_factor not in _EXP_FACTORS:
+        if scaling_factor not in EXP_SCALING_FACTORS:
             raise ValueError(f"unsupported T1 exponential factor: {scaling_factor}")
     else:
         raise ValueError("scaling must be 'linear' or 'exponential'")
@@ -86,16 +104,15 @@ def t1(
         reference_start_ns=reference_start_ns,
         mw_to_laser_delay_ns=mw_to_laser_delay_ns,
         relax_delay_ns=relax_delay_ns,
+        # T1FineRes 4bc384f checks mw_pi2_ftsamp but reads mw_pi_ftsamp, so the
+        # pi length goes into both names until upstream settles on one.
+        mw_pi2_ns=mw_pi_ns,
+        mw_pi_ns=mw_pi_ns,
+        get_reference=get_reference,
     )
-    # T1FineRes 4bc384f checks mw_pi2_ftsamp but reads mw_pi_ftsamp.
-    # Populate both converted names until upstream resolves the inconsistency.
-    cfg.mw_pi2_ftns = int(mw_pi_ns)
-    cfg.mw_pi_ftns = int(mw_pi_ns)
     if scaling == "linear":
         # Avoid NVConfiguration.add_linear_sweep(nsweep_points=...), whose
         # pinned implementation computes a reversed delta and one extra step.
-        cfg.scaling_mode = "linear"
-        cfg.scaling_factor = ""
         cfg.delay_start_tns = float(requested_x[0])
         cfg.delay_end_tns = float(requested_x[-1])
         cfg.nsweep_points = int(requested_x.size)
@@ -128,10 +145,12 @@ def t1(
         },
         executed={
             "delays_ns": x_ns.tolist(),
-            "mw_pi_ns": cfg.mw_pi2_ftns,
+            "mw_pi_ns": cfg.mw_pi_ftns,
             "mw_frequency_hz": cfg.mw_fGHz * 1e9,
             "readout_ns": cfg.readout_integration_tns,
             "reps": cfg.reps,
+            "mw_gain": cfg.mw_gain,
+            "get_reference": cfg.get_reference,
         },
         t1_ratio=True,
     )

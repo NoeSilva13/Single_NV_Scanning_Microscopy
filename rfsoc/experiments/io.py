@@ -1,4 +1,4 @@
-"""Versioned persistence and plotting for RFSoC experiment results."""
+"""Versioned persistence, plotting and live windows for RFSoC experiments."""
 
 from __future__ import annotations
 
@@ -11,6 +11,11 @@ import numpy as np
 import pandas as pd
 
 from common.utils import experiment_data_root
+from .cpmg import fitted_curve as _cpmg_curve, ramsey_spectrum
+from .odmr import fitted_curve as _odmr_curve
+from .rabi import fitted_curve as _rabi_curve
+from .readout_window import fitted_curve as _window_curve
+from .t1 import fitted_curve as _t1_curve
 
 
 FORMAT_VERSION = 1
@@ -64,17 +69,87 @@ def save_result(result):
     return result
 
 
+def fitted_curve(result):
+    """Ask the experiment that produced *result* to sample its own fit.
+
+    Each experiment keeps its model next to its acquisition, so the plot asks
+    for the curve instead of knowing how any of them are shaped.  Returns
+    ``(x, y, label)`` or ``None`` when there is nothing fitted to draw.
+    """
+    kind = result.kind
+    if kind in ("CW_ODMR", "Pulsed_ODMR"):
+        return _odmr_curve(result)
+    if kind == "Rabi":
+        return _rabi_curve(result)
+    if kind in ("Ramsey", "Hahn_Echo") or kind.startswith("CPMG_"):
+        return _cpmg_curve(result)
+    if kind == "T1":
+        return _t1_curve(result)
+    if kind == "Readout_Window":
+        return _window_curve(result)
+    return None
+
+
+def _contrast_label(kind):
+    if kind == "T1":
+        return "Signal/reference"
+    if kind == "Readout_Window":
+        return "Spin contrast"
+    return "Contrast"
+
+
 def plot_result(result, save=True, show=True):
-    fig, axes = plt.subplots(2, 1, sharex=True, figsize=(8, 7))
-    axes[0].plot(result.x, result.reference_rate_cps, label="reference")
-    axes[0].plot(result.x, result.signal_rate_cps, label="signal")
-    axes[0].set_ylabel("Count rate (cps)")
-    axes[0].legend()
-    axes[0].grid(True, alpha=0.3)
-    axes[1].plot(result.x, result.contrast, "o-")
-    axes[1].set_xlabel(f"{result.x_name} ({result.x_unit})")
-    axes[1].set_ylabel("Signal/reference" if result.kind == "T1" else "Contrast")
-    axes[1].grid(True, alpha=0.3)
+    spectrum = None
+    if result.kind == "Ramsey":
+        frequencies_hz, amplitudes, peaks_hz = ramsey_spectrum(result)
+        if amplitudes.size:
+            spectrum = (frequencies_hz, amplitudes, peaks_hz)
+
+    fig = plt.figure(figsize=(8, 10) if spectrum else (8, 7))
+    if spectrum:
+        ax_rates, ax_y, ax_fft = fig.subplots(3, 1)
+    else:
+        ax_rates, ax_y = fig.subplots(2, 1)
+        ax_fft = None
+    ax_rates.sharex(ax_y)
+    ax_rates.tick_params(labelbottom=False)
+
+    ax_rates.plot(result.x, result.reference_rate_cps, label="reference")
+    ax_rates.plot(result.x, result.signal_rate_cps, label="signal")
+    ax_rates.set_ylabel("Count rate (cps)")
+    ax_rates.legend()
+    ax_rates.grid(True, alpha=0.3)
+
+    ax_y.plot(result.x, result.contrast, "o", markersize=3, label="measured")
+    ax_y.set_xlabel(f"{result.x_name} ({result.x_unit})")
+    ax_y.set_ylabel(_contrast_label(result.kind))
+    ax_y.grid(True, alpha=0.3)
+
+    curve = fitted_curve(result)
+    if curve is not None:
+        fit_x, fit_y, label = curve
+        ax_y.plot(fit_x, fit_y, "-", color="tab:red", label="fit")
+        ax_y.text(
+            0.02,
+            0.04,
+            label,
+            transform=ax_y.transAxes,
+            fontsize=9,
+            va="bottom",
+            ha="left",
+            bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
+        )
+    ax_y.legend(loc="upper right")
+
+    if ax_fft is not None:
+        frequencies_hz, amplitudes, peaks_hz = spectrum
+        ax_fft.plot(frequencies_hz / 1e6, amplitudes)
+        for peak_hz in peaks_hz[:3]:
+            ax_fft.axvline(peak_hz / 1e6, color="tab:red", alpha=0.4, linestyle="--")
+        ax_fft.set_xlabel("Precession frequency (MHz)")
+        ax_fft.set_ylabel("Amplitude (a.u.)")
+        ax_fft.grid(True, alpha=0.3)
+
     fig.suptitle(f"RFSoC4x2 {result.kind}")
     fig.tight_layout()
     if save:
@@ -88,3 +163,75 @@ def plot_result(result, save=True, show=True):
     else:
         plt.close(fig)
     return result
+
+
+def live_scalar(point, *, ylabel, title, interval=0.1, history=300):
+    """Trace a scalar measurement until the window is closed or Ctrl+C is hit.
+
+    *point* is called for each sample and returns ``None`` when the board is
+    busy with a scan or an experiment; those samples become gaps in the trace,
+    so the window shows that it stood down instead of quietly interpolating
+    over it.
+    """
+    plt.ion()
+    fig, ax = plt.subplots(figsize=(9, 4))
+    line, = ax.plot([], [], "-o", markersize=3)
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.grid(True, alpha=0.3)
+    times, values = [], []
+    start = time.monotonic()
+    try:
+        while plt.fignum_exists(fig.number):
+            value = point()
+            times.append(time.monotonic() - start)
+            values.append(np.nan if value is None else value)
+            line.set_data(times[-history:], values[-history:])
+            ax.relim()
+            ax.autoscale_view()
+            plt.pause(interval)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        plt.ioff()
+        plt.close(fig)
+    return np.asarray(times), np.asarray(values, dtype=float)
+
+
+def live_curve(one_pass, x, *, xlabel, ylabel, title, interval=0.05, busy_wait=0.5):
+    """Redraw a swept curve after every pass until the window is closed.
+
+    *one_pass* runs one more sweep and returns the average so far, or ``None``
+    while another process holds the board, in which case the window keeps the
+    curve it has and looks again shortly.
+    """
+    x = np.asarray(x, dtype=float)
+    plt.ion()
+    fig, ax = plt.subplots(figsize=(9, 5))
+    line, = ax.plot(x, np.full(x.size, np.nan), "-o", markersize=3)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.grid(True, alpha=0.3)
+    passes = 0
+    y = np.full(x.size, np.nan)
+    try:
+        while plt.fignum_exists(fig.number):
+            values = one_pass()
+            if values is None:
+                ax.set_title(f"{title} — {passes} passes, board busy")
+                plt.pause(busy_wait)
+                continue
+            passes += 1
+            y = np.asarray(values, dtype=float)
+            line.set_ydata(y)
+            ax.set_title(f"{title} — {passes} passes")
+            ax.relim()
+            ax.autoscale_view()
+            plt.pause(interval)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        plt.ioff()
+        plt.close(fig)
+    return x, y, passes
