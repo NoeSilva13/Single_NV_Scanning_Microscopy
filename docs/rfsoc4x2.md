@@ -114,3 +114,20 @@ data/mmddyy/RFSoC_<Experiment>/
 Each measurement contains CSV, compressed NPZ metadata, and PDF output.
 Readout transient, g(2), Ramsey, Hahn echo, removal of the NI DAQ, and
 incremental experiment plotting are outside phase 1.
+
+## Sharing the board between processes
+
+The board daemon exposes one `QickSoc`, and `start_readout()` stops whatever
+readout is already running, so two processes driving it abort each other's
+acquisitions rather than queueing. `RFSoCSession.acquisition()` therefore takes
+two locks: a thread lock inside the process, and a file claim (in the temp
+directory, one file per board IP) that spans processes. The kernel drops the
+claim if the holder is killed, so a crash cannot leave the board unusable.
+
+This is what makes the intended workflow safe: keep the confocal app open, pick
+an NV, and run `run_odmr_experiments.py` next to it. Each experiment claims the
+board for its sweep, the app's live count plot stands down for that time and
+resumes afterwards, and a scan already in flight keeps the board until it is
+done. Whoever waits longer than `RFSOC_CLAIM_WAIT_S` (30 s, override with
+`NV_RFSOC_CLAIM_WAIT_S`) gives up with a message naming the holder's PID instead
+of blocking indefinitely.

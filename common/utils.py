@@ -69,6 +69,10 @@ RFSOC_MAX_COUNTING_WINDOW_S = 5.0
 # the readout stride, so it is also how far the image can advance per update:
 # one raster line at ordinary dwells, single pixels once a dwell exceeds it.
 RFSOC_STREAM_UPDATE_SECONDS = 0.2
+# How long a scan or an experiment waits for another process on this PC to let
+# go of the board before giving up.  Bounded, so that a GUI thread waiting on an
+# experiment script reports who holds the board instead of looking hung.
+RFSOC_CLAIM_WAIT_S = float(os.environ.get("NV_RFSOC_CLAIM_WAIT_S", "30"))
 # Minimum wall time between napari preview refreshes during a scan.
 SCAN_PREVIEW_MIN_SECONDS = 0.2
 

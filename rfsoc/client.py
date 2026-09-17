@@ -5,7 +5,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 import threading
 
-from common.utils import RFSOC_IP, RFSOC_SERVER_NAME
+from common.utils import RFSOC_CLAIM_WAIT_S, RFSOC_IP, RFSOC_SERVER_NAME
+from .process_lock import RFSoCBusyError, board_claim
 
 
 class RFSoCSession:
@@ -33,13 +34,6 @@ class RFSoCSession:
     @property
     def connected(self):
         return self._connected
-
-    @property
-    def busy(self):
-        acquired = self._acquire_lock.acquire(blocking=False)
-        if acquired:
-            self._acquire_lock.release()
-        return not acquired
 
     def connect(self):
         if self._connected:
@@ -74,12 +68,25 @@ class RFSoCSession:
 
     @contextmanager
     def acquisition(self, blocking=True):
+        """Drive the board for the duration of the block.
+
+        Two locks, because there are two ways to collide over one tProc: threads
+        of this process share ``_acquire_lock``, and other Python processes on
+        this PC -- an experiment script running next to the confocal app --
+        share a file claim.  A caller that cannot wait gets ``RFSoCBusyError``
+        instead of a turn, and so does one that waits past its deadline.
+        """
         self.connect()
         acquired = self._acquire_lock.acquire(blocking=blocking)
         if not acquired:
-            raise RuntimeError("RFSoC is busy")
+            raise RFSoCBusyError("another thread of this process holds the RFSoC")
         try:
-            yield self
+            with board_claim(
+                self.host,
+                timeout=RFSOC_CLAIM_WAIT_S if blocking else 0.0,
+                yield_to_waiters=not blocking,
+            ):
+                yield self
         finally:
             self._acquire_lock.release()
 

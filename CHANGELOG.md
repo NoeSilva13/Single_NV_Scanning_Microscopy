@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file following [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) guidelines.
 
+## [RFSoC4x2] - 2026-09-17
+### Added
+- A claim on the board that spans processes, so `run_odmr_experiments.py` can run
+  next to the confocal app: each experiment holds the board for its sweep instead
+  of aborting whatever the app had running, and the app's live count plot fills
+  the gaps. `RFSoCSession.acquisition()` now takes an OS file lock (one file per
+  board IP, in the temp directory) on top of its thread lock. The kernel releases
+  it when the holder exits, killed or not.
+- `RFSOC_CLAIM_WAIT_S` (30 s, `NV_RFSOC_CLAIM_WAIT_S`): how long a scan or an
+  experiment waits for another process. Past it the caller gives up naming the
+  holder's PID and what to do about it, because a GUI scan thread blocking
+  indefinitely on a script is indistinguishable from a hang.
+
+### Changed
+- The live count plot yields the board to anything that asked for it first, in
+  this process or another, and leaves a gap in the trace instead of a point.
+  Pausing it by hand before running experiments is no longer necessary.
+- A scan cancelled by Stop or refused because another process holds the board
+  reports it in the napari notification area instead of a console traceback.
+
+### Removed
+- `RFSoCSession.busy`, which only ever reported the threads of its own process.
+
 ## [RFSoC4x2] - 2026-09-16
 ### Fixed
 - Confocal images no longer show repeated vertical stripes past the point where

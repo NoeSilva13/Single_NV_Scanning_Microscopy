@@ -16,6 +16,7 @@ from .config import (
     readout_plan,
 )
 from .confocal_frame import ConfocalFrame, stream_counts
+from .process_lock import RFSoCBusyError
 
 
 def analog_write_buffer(data):
@@ -327,17 +328,23 @@ class RFSoCConfocalBackend:
         )
 
     def live_count_rate(self, integration_seconds=0.2):
-        """Acquire a free-running PL point unless another RFSoC job is active."""
-        if self.session.busy:
+        """Acquire a free-running PL point unless another RFSoC job is active.
+
+        Stands down for any other job, in this process or in another one: a gap
+        in the live trace costs less than the scan or the experiment that this
+        point would abort.
+        """
+        try:
+            with self.session.acquisition(blocking=False):
+                qd = self.session.qd
+                cfg = base_nv_config(self.session)
+                clock = readout_clock_hz(self.session.soccfg, cfg.adc_channel)
+                plan = readout_plan(integration_seconds, clock)
+                cfg.readout_integration_treg = plan.samples
+                cfg.relax_delay_treg = 1
+                with edge_counting_warnings_muted():
+                    program = qd.PLIntensity(cfg)
+                counts = int(program.acquire(progress=False))
+                return counts / plan.seconds, False
+        except RFSoCBusyError:
             return None, False
-        with self.session.acquisition(blocking=False):
-            qd = self.session.qd
-            cfg = base_nv_config(self.session)
-            clock = readout_clock_hz(self.session.soccfg, cfg.adc_channel)
-            plan = readout_plan(integration_seconds, clock)
-            cfg.readout_integration_treg = plan.samples
-            cfg.relax_delay_treg = 1
-            with edge_counting_warnings_muted():
-                program = qd.PLIntensity(cfg)
-            counts = int(program.acquire(progress=False))
-            return counts / plan.seconds, False

@@ -46,6 +46,7 @@ from qtpy.QtWidgets import QWidget, QGridLayout
 from confocal.thread_safe_bridge import GUIBridge
 from rfsoc.client import RFSoCSession
 from rfsoc.confocal_backend import RFSoCConfocalBackend
+from rfsoc.process_lock import RFSoCBusyError
 
 # Import extracted widgets
 from widgets.scan_controls import (
@@ -295,8 +296,8 @@ except Exception as exc:
     raise RuntimeError(f"RFSoC4x2 initialization failed: {exc}") from exc
 rfsoc_confocal = RFSoCConfocalBackend(rfsoc_session)
 
-# Live PL uses short QICK PLIntensity acquisitions and pauses while a scan owns
-# the process-wide RFSoC acquisition lock.
+# Live PL uses short QICK PLIntensity acquisitions and pauses while anything else
+# holds the board: a scan in this process, or an experiment script in another one.
 binwidth = BINWIDTH
 
 # --------------------- CLICK HANDLER FOR SCANNER POSITIONING ---------------------
@@ -720,6 +721,12 @@ def _run_raster_scan(mode, axis_names, axes_list, points_list, dwell, z_dwell, s
                 daemon=True,
             ).start()
 
+    except InterruptedError:
+        bridge.notify("🛑 Scan stopped by user")
+        return None
+    except RFSoCBusyError as exc:
+        bridge.notify(f"⚠️ Scan cancelled: {exc}")
+        return None
     finally:
         # Restore the persistent on-demand galvo task. Only the galvo axes that
         # were actually scanned return to zero; a galvo axis left free (e.g. Y in
