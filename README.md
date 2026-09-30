@@ -5,6 +5,9 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 A Python toolkit developed at the **[Burke Lab](https://www.burkelab.com/)** for high-precision optical, microwave and timing control of single Nitrogen-Vacancy (NV) centers in diamond.
+The RFSoC4x2 instrument (QICK-DAWG photon counting, laser gating, and microwave
+generation, with the same NI USB-6453 galvo and piezo stage) lives in
+[Single_NV_RFSoC4x2](https://github.com/NoeSilva13/Single_NV_RFSoC4x2).
 It bundles two graphical applications plus a script-driven ODMR experiment suite that share common infrastructure (data management, calibration constants, reusable Qt/napari widgets):
 
 1. **Confocal Scan GUI** ([confocal_main_control.py](confocal_main_control.py)) - real-time galvo raster scanning, live photon counting, click-to-move positioning, region zoom, auto-focus and single-axis line scans, built on a [napari](https://napari.org/) viewer.
